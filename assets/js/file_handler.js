@@ -3,22 +3,28 @@ export class FileHandler {
     constructor(canvas, ctx) {
         this.canvas = canvas;
         this.ctx = ctx;
-        
+
         this.img = new Image();
         this.isPDF = false;
         this.pdfImage = null;
         this.currentPDF = null;
         this.naturalWidth = 0;
         this.naturalHeight = 0;
-        
+
         this.onImageLoaded = null; // Callback for when image is loaded
-        
+
         this.initializeFileLoader();
     }
 
     initializeFileLoader() {
         const fileLoader = document.getElementById('fileLoader');
-        fileLoader.addEventListener('change', (e) => this.handleFile(e), false);
+        fileLoader.addEventListener('change', (e) => {
+            // Set flag for new file load
+            if (window.imageAnalyzerApp) {
+                window.imageAnalyzerApp.isNewFileLoad = true;
+            }
+            this.handleFile(e);
+        }, false);
     }
 
     handleFile(e) {
@@ -31,7 +37,7 @@ export class FileHandler {
             this.isPDF = true;
             reader.onload = (event) => {
                 const typedarray = new Uint8Array(event.target.result);
-                
+
                 pdfjsLib.getDocument({ data: typedarray }).promise.then((pdf) => {
                     this.currentPDF = pdf;
                     this.setupPDFControls();
@@ -73,7 +79,7 @@ export class FileHandler {
 
         const pdfThumbnails = document.getElementById('pdfThumbnails');
         pdfThumbnails.style.display = 'flex';
-        
+
         const thumbnailsGrid = pdfThumbnails.querySelector('.thumbnails-grid');
         thumbnailsGrid.innerHTML = '';
 
@@ -140,11 +146,11 @@ export class FileHandler {
             this.canvas.height = this.naturalHeight;
 
             const renderContext = { canvasContext: this.ctx, viewport: viewport };
-            
+
             page.render(renderContext).promise.then(() => {
                 this.pdfImage = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
                 this.updateThumbnailActiveState();
-                
+
                 if (this.onImageLoaded) {
                     this.onImageLoaded(null, true, this.pdfImage);
                 }

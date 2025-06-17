@@ -3,14 +3,14 @@ export class OverviewController {
     constructor(canvas, zoomPanController) {
         this.canvas = canvas;
         this.zoomPanController = zoomPanController;
-        
+
         this.overviewCanvas = document.getElementById('overviewCanvas');
         this.overviewCtx = this.overviewCanvas.getContext('2d');
-        
+
         this.isDraggingBox = false;
         this.dragStart = { x: 0, y: 0 };
         this.viewportBox = { x: 0, y: 0, w: 0, h: 0 };
-        
+
         this.setupEventListeners();
     }
 
@@ -46,46 +46,49 @@ export class OverviewController {
     }
 
     handleMouseMove(e) {
-        const rect = this.overviewCanvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+    const rect = this.overviewCanvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-        if (this.isDraggingBox) {
-            const dx = mouseX - this.dragStart.x;
-            const dy = mouseY - this.dragStart.y;
+    if (this.isDraggingBox) {
+        const dx = mouseX - this.dragStart.x;
+        const dy = mouseY - this.dragStart.y;
 
-            const overviewScale = Math.min(
-                this.overviewCanvas.width / this.canvas.width, 
-                this.overviewCanvas.height / this.canvas.height
-            );
+        const overviewScale = Math.min(
+            this.overviewCanvas.width / this.canvas.width,
+            this.overviewCanvas.height / this.canvas.height
+        );
 
-            // Convert movement to canvas coordinates and apply
-            const canvasDx = dx / overviewScale;
-            const canvasDy = dy / overviewScale;
+        // Convert movement to canvas coordinates and apply
+        const canvasDx = dx / overviewScale;
+        const canvasDy = dy / overviewScale;
 
-            const panOffset = this.zoomPanController.getPanOffset();
-            const zoomScale = this.zoomPanController.getZoomScale();
-            
-            panOffset.x -= canvasDx * zoomScale;
-            panOffset.y -= canvasDy * zoomScale;
+        const panOffset = this.zoomPanController.getPanOffset();
+        const zoomScale = this.zoomPanController.getZoomScale();
 
-            this.dragStart = { x: mouseX, y: mouseY };
-            this.zoomPanController.updateTransform();
+        panOffset.x -= canvasDx * zoomScale;
+        panOffset.y -= canvasDy * zoomScale;
+
+        // Add this method call to actually apply the changes:
+        this.zoomPanController.setPanOffset(panOffset.x, panOffset.y);
+
+        this.dragStart = { x: mouseX, y: mouseY };
+        this.zoomPanController.updateTransform();
+    } else {
+        // Update cursor based on hover - also use expanded area for hover detection
+        const padding = 10;
+        if (
+            mouseX >= this.viewportBox.x - padding &&
+            mouseX <= this.viewportBox.x + this.viewportBox.w + padding &&
+            mouseY >= this.viewportBox.y - padding &&
+            mouseY <= this.viewportBox.y + this.viewportBox.h + padding
+        ) {
+            this.overviewCanvas.style.cursor = 'grab';
         } else {
-            // Update cursor based on hover - also use expanded area for hover detection
-            const padding = 10;
-            if (
-                mouseX >= this.viewportBox.x - padding &&
-                mouseX <= this.viewportBox.x + this.viewportBox.w + padding &&
-                mouseY >= this.viewportBox.y - padding &&
-                mouseY <= this.viewportBox.y + this.viewportBox.h + padding
-            ) {
-                this.overviewCanvas.style.cursor = 'grab';
-            } else {
-                this.overviewCanvas.style.cursor = 'default';
-            }
+            this.overviewCanvas.style.cursor = 'default';
         }
     }
+}
 
     handleMouseUp() {
         if (this.isDraggingBox) {
@@ -96,7 +99,7 @@ export class OverviewController {
 
     centerViewportAt(overviewX, overviewY) {
         const overviewScale = Math.min(
-            this.overviewCanvas.width / this.canvas.width, 
+            this.overviewCanvas.width / this.canvas.width,
             this.overviewCanvas.height / this.canvas.height
         );
 
@@ -116,7 +119,7 @@ export class OverviewController {
         // Get the current image from canvas renderer
         const canvasRenderer = this.zoomPanController.canvasRenderer;
         const source = canvasRenderer.getCurrentImageSource();
-        
+
         if (!source || !this.canvas.width || !this.canvas.height) return;
 
         const ow = this.overviewCanvas.width;

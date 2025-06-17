@@ -3,17 +3,17 @@ export class ZoomPanController {
     constructor(canvas, canvasRenderer) {
         this.canvas = canvas;
         this.canvasRenderer = canvasRenderer;
-        
+
         this.zoomScale = 1;
         this.minZoom = 0.01;
         this.maxZoom = 10;
-        
+
         this.isPanning = false;
         this.panStart = { x: 0, y: 0 };
         this.panOffset = { x: 0, y: 0 };
-        
+
         this.onTransformUpdate = null; // Callback for transform updates
-        
+
         this.initializeControls();
         this.setupEventListeners();
     }
@@ -29,12 +29,12 @@ export class ZoomPanController {
         // Zoom buttons
         this.zoomInBtn.addEventListener('click', () => this.zoomIn());
         this.zoomOutBtn.addEventListener('click', () => this.zoomOut());
-        
+
         // Mouse wheel zoom
         [this.mainCanvasWrapper, document.getElementById('overviewCanvas')].forEach(element => {
             element.addEventListener('wheel', (event) => this.handleWheel(event), { passive: false });
         });
-        
+
         // Pan controls
         this.canvas.addEventListener('mousedown', (e) => this.startPan(e));
         window.addEventListener('mouseup', () => this.endPan());
@@ -149,7 +149,7 @@ export class ZoomPanController {
     updateTransform() {
         this.canvas.style.transform = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${this.zoomScale})`;
         this.zoomLevelDisplay.textContent = `Zoom: ${Math.round(this.zoomScale * 100)}%`;
-        
+
         if (this.onTransformUpdate) {
             this.onTransformUpdate();
         }
@@ -167,7 +167,12 @@ export class ZoomPanController {
     }
 
     getPanOffset() {
-        return { ...this.panOffset };
+        return this.panOffset;
+    }
+
+    setPanOffset(x, y) {
+        this.panOffset.x = x;
+        this.panOffset.y = y;
     }
 
     getMainCanvasWrapper() {

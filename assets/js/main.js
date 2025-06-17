@@ -1,5 +1,3 @@
-print('a')
-
 // main.js - Main application controller and initialization
 import { FileHandler } from './file_handler.js';
 import { CanvasRenderer } from './canvas_renderer.js';
@@ -14,6 +12,7 @@ if (typeof pdfjsLib !== 'undefined') {
 
 class ImageAnalyzerApp {
     constructor() {
+        this.isNewFileLoad = true;
         this.initializeComponents();
         this.setupEventListeners();
         this.initialize();
@@ -38,7 +37,11 @@ class ImageAnalyzerApp {
         // File loading
         this.fileHandler.onImageLoaded = (img, isPDF, pdfImage) => {
             this.canvasRenderer.setImage(img, isPDF, pdfImage);
-            this.zoomPanController.reset();
+            // FIX: Only reset zoom/pan for new files, not PDF page changes
+            if (!isPDF || !this.fileHandler.currentPDF || this.isNewFileLoad) {
+                this.zoomPanController.reset();
+                this.isNewFileLoad = false; // Reset flag after use
+            }
             this.canvasRenderer.draw();
         };
 
@@ -164,5 +167,5 @@ class ImageAnalyzerApp {
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new ImageAnalyzerApp();
+    window.imageAnalyzerApp = new ImageAnalyzerApp(); // Make it globally accessible
 });
