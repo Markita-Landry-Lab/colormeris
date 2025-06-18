@@ -3,16 +3,16 @@ export class CanvasRenderer {
     constructor(canvas, ctx) {
         this.canvas = canvas;
         this.ctx = ctx;
-        
+
         this.img = null;
         this.isPDF = false;
         this.pdfImage = null;
-        
+
         this.lastCrossX = -1;
         this.lastCrossY = -1;
-        
+
         this.calibrationManager = null;
-        
+
         this.crossColorSelect = document.getElementById('crossColor');
     }
 
@@ -35,7 +35,7 @@ export class CanvasRenderer {
         this.clearCanvas();
         this.drawImage();
         this.drawCrosshair(crossX, crossY);
-        
+
         if (this.calibrationManager) {
             this.drawCalibrationPoints();
             this.drawDataPoints();
@@ -58,11 +58,11 @@ export class CanvasRenderer {
         // Use provided coordinates or fall back to last known position
         const x = crossX >= 0 ? crossX : this.lastCrossX;
         const y = crossY >= 0 ? crossY : this.lastCrossY;
-        
+
         if (x >= 0 && y >= 0) {
             this.ctx.save();
             this.ctx.strokeStyle = this.crossColorSelect.value;
-            this.ctx.lineWidth = 1;
+            this.ctx.lineWidth = 2;
 
             this.ctx.beginPath();
             this.ctx.moveTo(0, y);
@@ -76,9 +76,9 @@ export class CanvasRenderer {
 
     drawCalibrationPoints() {
         if (!this.calibrationManager) return;
-        
+
         const calibrationPoints = this.calibrationManager.getCalibrationPoints();
-        
+
         this.ctx.save();
         this.ctx.lineWidth = 2;
 
@@ -111,9 +111,9 @@ export class CanvasRenderer {
 
     drawDataPoints() {
         if (!this.calibrationManager) return;
-        
+
         const dataPoints = this.calibrationManager.getDataPoints();
-        
+
         this.ctx.save();
         this.ctx.lineWidth = 2;
 
