@@ -34,8 +34,8 @@ export const VIRIDISH = [
 ];
 
 // Paint a heatmap of `matrix` (values s in [0,1]) inside a quadrilateral,
-// with 1px dark grid lines between cells.
-export function paintHeatmap(img, corners, matrix, stops) {
+// with 1px dark grid lines between cells unless `lines` is false.
+export function paintHeatmap(img, corners, matrix, stops, { lines = true } = {}) {
   const rows = matrix.length;
   const cols = matrix[0].length;
   const cellW = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) / cols;
@@ -46,7 +46,7 @@ export function paintHeatmap(img, corners, matrix, stops) {
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
       const fu = u * cols;
       const fv = v * rows;
-      const edge = Math.min(fu % 1, 1 - (fu % 1)) * cellW < 0.5 || Math.min(fv % 1, 1 - (fv % 1)) * cellH < 0.5;
+      const edge = lines && (Math.min(fu % 1, 1 - (fu % 1)) * cellW < 0.5 || Math.min(fv % 1, 1 - (fv % 1)) * cellH < 0.5);
       const color = edge ? [30, 30, 30] : cmap(stops, matrix[Math.floor(fv)][Math.floor(fu)]);
       setPixel(img, x, y, color);
     }

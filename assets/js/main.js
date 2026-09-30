@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, effectiveLabels, parseLabelText, ticksWithT, rescalePanel, rectCorners, bilinear, cellAt, cellSamplePolygon, readPixel, projectT, pointAtT, colorAtT, extractPanel, panelProblem, toWideCsv, toLongCsv, buildProjectZip, readProjectZip, safeFileName, formatNumber, rgbToHex } = CM;
+  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, effectiveLabels, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, cellSamplePolygon, readPixel, projectT, pointAtT, colorAtT, extractPanel, panelProblem, toWideCsv, toLongCsv, buildProjectZip, readProjectZip, safeFileName, formatNumber, rgbToHex } = CM;
 
   // Application wiring: state, UI, canvas interaction and import/export.
 
@@ -87,8 +87,11 @@
     onClick,
     hitTest,
     onHandleDrag,
-    onHandleDrop: () => {
+    onHandleDrop: (handle) => {
       app.drag = null;
+      // Re-detect the cell count after moving a corner unless the user set it by hand.
+      const panel = activePanel();
+      if (handle.kind === 'corner' && panel.grid.autoSize) applyDetectedSize(panel, { onlyIfChanged: true });
       changed();
     },
     onHover,
@@ -111,7 +114,10 @@
           return;
         }
         setMode(null);
-        commit((panel) => (panel.grid.corners = rectCorners(a, b)));
+        commit((panel) => {
+          panel.grid.corners = rectCorners(a, b);
+          applyDetectedSize(panel);
+        });
       } else updateModebar();
     } else if (mode.type === 'colorbar') {
       const q = mode.points.length === 1 && !e.altKey ? snapAxis(mode.points[0], p) : p;
@@ -143,6 +149,23 @@
       commit((pn) => pn.colorbar.ticks.push({ id, ...pointAtT(start, end, t), value: NaN }));
       focusTick(id);
     }
+  }
+
+  // Prefill rows/columns from the colors inside the grid.
+  function applyDetectedSize(panel, { onlyIfChanged = false } = {}) {
+    if (!panel.grid.corners || !app.imageData) return;
+    const d = detectGridSize(app.imageData, panel.grid.corners);
+    const changedSize = d.rows !== panel.grid.rows || d.cols !== panel.grid.cols;
+    panel.grid.rows = d.rows;
+    panel.grid.cols = d.cols;
+    panel.grid.autoSize = true;
+    if (onlyIfChanged && !changedSize) return;
+    const uncertain = Math.min(d.rowConfidence, d.colConfidence) < 1.3 || d.rows === 1 || d.cols === 1;
+    toast(
+      uncertain
+        ? `Detected ${d.rows} × ${d.cols} cells, but not confidently. Please check Rows and Columns.`
+        : `Detected ${d.rows} × ${d.cols} cells. Edit Rows and Columns if that's wrong.`,
+    );
   }
 
   function snapAxis(a, b) {
@@ -514,6 +537,7 @@
     setValue($('grid-col-labels'), g.colLabels.join('\n'));
     setBadge($('grid-state'), g.corners ? `${g.rows} × ${g.cols}` : 'not placed', !!g.corners);
     $('grid-zoom').disabled = !g.corners;
+    $('grid-detect').disabled = !g.corners;
 
     // Colorbar
     const cb = panel.colorbar;
@@ -1062,8 +1086,15 @@
   // Grid
   $('grid-place').addEventListener('click', () => setMode(app.mode?.type === 'grid' ? null : 'grid'));
   $('grid-zoom').addEventListener('click', () => activePanel().grid.corners && zoomToPoints(activePanel().grid.corners));
-  bindNumber('grid-rows', (p, v) => (p.grid.rows = Math.min(1000, Math.max(1, Math.round(v)))));
-  bindNumber('grid-cols', (p, v) => (p.grid.cols = Math.min(1000, Math.max(1, Math.round(v)))));
+  bindNumber('grid-rows', (p, v) => {
+    p.grid.rows = Math.min(1000, Math.max(1, Math.round(v)));
+    p.grid.autoSize = false;
+  });
+  bindNumber('grid-cols', (p, v) => {
+    p.grid.cols = Math.min(1000, Math.max(1, Math.round(v)));
+    p.grid.autoSize = false;
+  });
+  $('grid-detect').addEventListener('click', () => commit((p) => applyDetectedSize(p)));
   bindNumber('grid-fraction', (p, v) => (p.grid.sampleFraction = v));
   bindText('grid-row-labels', (p, v) => (p.grid.rowLabels = parseLabelText(v)));
   bindText('grid-col-labels', (p, v) => (p.grid.colLabels = parseLabelText(v)));
