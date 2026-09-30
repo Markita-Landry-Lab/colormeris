@@ -615,9 +615,10 @@
         btn.className = `btn small${p === active ? ' active' : ''}`;
         const dot = document.createElement('span');
         const problem = toolFor(p).panelProblem(p);
-        dot.className = `status-dot${problem ? '' : ' done'}`;
+        const review = !problem && ws.reviewStatus?.(p);
+        dot.className = `status-dot${problem ? '' : review === 'rejected' ? ' rejected' : ' done'}`;
         btn.append(dot, document.createTextNode(p.name || '(unnamed)'));
-        btn.title = problem || 'Calibrated';
+        btn.title = problem || (review === 'rejected' ? `Rejected in review${p.review.note ? `: ${p.review.note}` : ''}` : review === 'accepted' ? 'Calibrated and accepted' : 'Calibrated');
         btn.addEventListener('click', () => {
           if (p.id === app.project.activePanelId) return;
           setMode(null);
@@ -1339,6 +1340,7 @@
     newTickId,
     zipExtras: [], // functions returning [{path, content}] added to project zips
     onChange: (fn) => changeListeners.push(fn),
+    reviewStatus: null, // (panel) → 'accepted' | 'rejected' | 'stale' | null, set by agent.js
   };
   return ws;
   }

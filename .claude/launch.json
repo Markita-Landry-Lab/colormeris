@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8000", "--bind", "127.0.0.1"],
       "port": 8000
+    },
+    {
+      "name": "openrouter-proxy",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/openrouter-proxy.mjs"],
+      "port": 8787
     }
   ]
 }

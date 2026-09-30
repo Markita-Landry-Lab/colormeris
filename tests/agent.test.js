@@ -63,3 +63,43 @@ test('state snapshot is plain JSON with readiness', () => {
   assert.equal(s.panels[0].grid, null);
   assert.deepEqual(JSON.parse(JSON.stringify(s)), s);
 });
+
+test('flagged cells: one question each when few, one panel question when many', () => {
+  const project = createProject();
+  const p = project.panels[0];
+  const res = (n) => ({
+    values: [[1, 2, 3, 4, 5]],
+    rowLabels: ['R1'],
+    colLabels: ['C1', 'C2', 'C3', 'C4', 'C5'],
+    maxDeltaE: 10,
+    flagged: Array.from({ length: n }, (_, i) => ({ row: 0, col: i, deltaE: 20 + i, rgb: [0, 0, 0] })),
+  });
+  const few = openQuestions({ panels: [p], results: { [p.id]: res(2) }, detections: {}, decisions: [] });
+  assert.equal(few.filter((q) => q.type === 'classify_flagged').length, 2);
+  const many = openQuestions({ panels: [p], results: { [p.id]: res(5) }, detections: {}, decisions: [] });
+  assert.equal(many.filter((q) => q.type === 'classify_flagged').length, 0);
+  const one = many.find((q) => q.type === 'classify_flagged_cells');
+  assert.equal(one.evidence.count, 5);
+  assert.equal(one.evidence.medianDeltaE, 22);
+});
+
+test('a reviewed panel gets no acceptance question until its values change', () => {
+  const project = createProject();
+  const p = project.panels[0];
+  const res = { values: [[1, 2]], rowLabels: ['R1'], colLabels: ['C1', 'C2'], maxDeltaE: 10, flagged: [] };
+  const ask = () => openQuestions({ panels: [p], results: { [p.id]: res }, detections: {}, decisions: [] }).filter((q) => q.type === 'confirm_extraction');
+  const [q] = ask();
+  p.review = { status: 'rejected', resultHash: q.resultHash };
+  assert.equal(ask().length, 0);
+  res.values = [[1, 3]];
+  assert.equal(ask().length, 1);
+});
+
+test('panel reviews survive a project round trip', () => {
+  const project = createProject();
+  project.panels[0].review = { status: 'rejected', by: 'human', confidence: 1, note: 'grid shifted', resultHash: 'abc', time: 't' };
+  const back = CM.parseProject(JSON.parse(JSON.stringify(CM.serializeProject(project))));
+  assert.deepEqual(back.panels[0].review, project.panels[0].review);
+  project.panels[0].review = null;
+  assert.equal(CM.parseProject(JSON.parse(JSON.stringify(CM.serializeProject(project)))).panels[0].review, null);
+});

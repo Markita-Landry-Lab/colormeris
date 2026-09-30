@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, fromDecisionAnswer, pruneImages, toolResultText,
+    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, fromDecisionAnswer, decisionAdvice, pruneImages, toolResultText,
     bilinear, cellSamplePolygon, colorAtT, rgbToHex, ticksWithT, renderPdfPage,
   } = CM;
 
@@ -13,7 +13,11 @@
   // alpha.decisions.create).
 
   const MAX_VIEW = 1024; // longest side of images sent to the LLM
-  const RULER = { left: 46, top: 22 };
+  // Rulers sit outside the picture on the right and bottom, so image pixel
+  // (0, 0) is exactly the top-left corner of the region shown. (With rulers on
+  // the left and top, models that measure from the image corner were off by
+  // the ruler width divided by the zoom.)
+  const RULER = { right: 50, bottom: 24 };
 
   function createAgentRunner(ws, api) {
     const { app } = ws;
@@ -39,45 +43,53 @@
       const h = y1 - y0;
       if (w < 4 || h < 4) throw new Error('Region is too small or outside the page.');
       const scale = Math.min(6, MAX_VIEW / Math.max(w, h));
+      const W = Math.round(w * scale);
+      const H = Math.round(h * scale);
       const out = document.createElement('canvas');
-      out.width = Math.round(w * scale) + RULER.left;
-      out.height = Math.round(h * scale) + RULER.top;
+      out.width = W + RULER.right;
+      out.height = H + RULER.bottom;
       const ctx = out.getContext('2d');
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, out.width, out.height);
       ctx.imageSmoothingEnabled = scale < 1;
-      ctx.drawImage(src, x0, y0, w, h, RULER.left, RULER.top, w * scale, h * scale);
-      const toView = (p) => ({ x: RULER.left + (p.x - x0) * scale, y: RULER.top + (p.y - y0) * scale });
+      ctx.drawImage(src, x0, y0, w, h, 0, 0, W, H);
+      const toView = (p) => ({ x: (p.x - x0) * scale, y: (p.y - y0) * scale });
 
       if (overlay !== 'none') drawPanels(ctx, toView, scale, overlay);
 
-      // Rulers with faint guide lines.
+      // Rulers (bottom and right) with faint guide lines across the picture.
       const step = niceStep(scale);
       ctx.font = '11px sans-serif';
       ctx.fillStyle = '#000';
       ctx.strokeStyle = 'rgba(0, 170, 255, 0.35)';
       ctx.lineWidth = 1;
       ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
       for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) {
         const vx = Math.round(toView({ x, y: 0 }).x) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(vx, RULER.top - 5);
-        ctx.lineTo(vx, out.height);
+        ctx.moveTo(vx, 0);
+        ctx.lineTo(vx, H + 5);
         ctx.stroke();
-        ctx.fillText(String(Math.round(x)), vx, RULER.top - 8);
+        ctx.fillText(String(Math.round(x)), Math.min(Math.max(vx, 12), W - 12), H + 8);
       }
-      ctx.textAlign = 'right';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) {
         const vy = Math.round(toView({ x: 0, y }).y) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(RULER.left - 5, vy);
-        ctx.lineTo(out.width, vy);
+        ctx.moveTo(0, vy);
+        ctx.lineTo(W + 5, vy);
         ctx.stroke();
-        ctx.fillText(String(Math.round(y)), RULER.left - 7, vy);
+        ctx.fillText(String(Math.round(y)), W + 8, Math.min(Math.max(vy, 7), H - 7));
       }
       ws.zoomToPoints([{ x: x0, y: y0 }, { x: x1, y: y1 }]);
-      return { dataUrl: out.toDataURL('image/jpeg', 0.9), note: `Page ${ws.currentPage()}, x ${Math.round(x0)}–${Math.round(x1)}, y ${Math.round(y0)}–${Math.round(y1)} px, shown at ${scale.toFixed(2)}× with rulers in page pixels.` };
+      const r = (v) => Math.round(v * 100) / 100;
+      return {
+        dataUrl: out.toDataURL('image/jpeg', 0.9),
+        note: `Page ${ws.currentPage()}, region x ${r(x0)}–${r(x1)}, y ${r(y0)}–${r(y1)}, drawn at ${r(scale)}× (${W} × ${H} image pixels plus rulers). Image pixel (0, 0) is page point (${r(x0)}, ${r(y0)}): page x = ${r(x0)} + image x / ${r(scale)}, page y = ${r(y0)} + image y / ${r(scale)}. The rulers on the bottom and right edges show the same page pixels.`,
+        region: { x0, y0, scale },
+      };
     }
 
     function drawPanels(ctx, toView, scale, overlay) {
@@ -195,9 +207,10 @@
     // ------------------------------------------------------------ run
 
     // settings: {client, llmModel, decisionModel, pages: [n], maxSteps,
-    // decisionServerURL, signal, onEvent(type, data)}
+    // decisionServerURL, signal, onEvent(type, data), focus}. `focus`
+    // ({panelId, note}) asks the agent to fix one rejected panel.
     async function run(settings) {
-      const { client, llmModel, decisionModel, pages, maxSteps = 60, signal, onEvent = () => {}, decisionServerURL } = settings;
+      const { client, llmModel, decisionModel, pages, maxSteps = 60, signal, onEvent = () => {}, decisionServerURL, focus } = settings;
       const usage = { llmCost: 0, decisionCost: 0, promptTokens: 0, completionTokens: 0, steps: 0, decisions: 0 };
       const emit = (type, data) => onEvent(type, { ...data, usage: { ...usage } });
 
@@ -235,7 +248,9 @@
           results.push(item);
           emit('decision', item);
         }
-        return { ok: true, result: { decisions: results, stillOpen: (await api.run('get_questions', panelId ? { panelId } : {})).result?.length ?? 0 } };
+        const panelName = (id) => app.project.panels.find((p) => p.id === id)?.name || id;
+        const advice = decisionAdvice(results, panelName);
+        return { ok: true, result: { decisions: results, advice, stillOpen: (await api.run('get_questions', panelId ? { panelId } : {})).result?.length ?? 0 } };
       }
 
       async function callTool(name, args) {
@@ -267,6 +282,11 @@
 
       const s = app.project.source;
       const first = await api.run('go_to_page', { page: pages[0] });
+      const panelsNow = (await api.run('get_state')).result.panels;
+      const target = focus && panelsNow.find((p) => p.id === focus.panelId);
+      const focusText = target
+        ? `\n\nThis is a redo. A reviewer rejected panel "${target.name}" (id ${target.id})${focus.note ? ` with the note: "${focus.note}"` : ''}. Its current calibration: ${JSON.stringify({ grid: target.grid, colorbar: target.colorbar })}. Do not add panels. select_panel it, find what is wrong (grid corners, grid size, colorbar ends, ticks or scale), fix it, check with overlays, then resolve_questions and finish.`
+        : '';
       if (!first.ok) throw new Error(first.error);
       const opening = pages.length > 1 && app.pdfDoc ? await renderOverview(pages[0], pages[Math.min(pages.length, 12) - 1]) : renderView();
       const messages = [
@@ -276,7 +296,7 @@
           content: [
             {
               type: 'text',
-              text: `File: ${s.fileName} (${s.pageCount} page${s.pageCount === 1 ? '' : 's'}). Process page${pages.length === 1 ? '' : 's'} ${pages.join(', ')}. Page images are ${s.width} × ${s.height} px. Existing panels: ${JSON.stringify((await api.run('get_state')).result.panels.map((p) => ({ id: p.id, name: p.name, page: p.page, ready: p.ready })))}.\n${opening.note}`,
+              text: `File: ${s.fileName} (${s.pageCount} page${s.pageCount === 1 ? '' : 's'}). Process page${pages.length === 1 ? '' : 's'} ${pages.join(', ')}. Page images are ${s.width} × ${s.height} px. Existing panels: ${JSON.stringify(panelsNow.map((p) => ({ id: p.id, name: p.name, page: p.page, ready: p.ready, review: p.review?.status })))}.${focusText}\n${opening.note}`,
             },
             { type: 'image_url', imageUrl: { url: opening.dataUrl } },
           ],

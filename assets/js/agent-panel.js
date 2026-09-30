@@ -55,6 +55,7 @@
       });
     }
     $('agent-key').addEventListener('input', updateButtons);
+    $('agent-base').addEventListener('input', updateButtons);
     $('agent-pages').addEventListener('change', () => ($('agent-range').hidden = $('agent-pages').value !== 'range'));
 
     // ------------------------------------------------------------ SDK
@@ -78,7 +79,8 @@
     function makeClient(sdk, key) {
       const base = $('agent-base').value.trim();
       return new sdk.OpenRouter({
-        apiKey: key,
+        // Behind a proxy the key can be empty; the proxy replaces this header.
+        apiKey: key || 'proxy',
         appTitle: 'Colormeris',
         ...(location.protocol.startsWith('http') ? { httpReferer: location.origin } : {}),
         ...(base ? { serverURL: base } : {}),
@@ -120,19 +122,22 @@
 
     function updateButtons() {
       const running = !!abort;
-      $('agent-run').disabled = running || !app.sourceCanvas || !$('agent-key').value.trim();
+      $('agent-run').disabled = running || !app.sourceCanvas || !hasKeyOrProxy();
       $('agent-run').hidden = running;
       $('agent-stop').hidden = !running;
       $('agent-badge').textContent = running ? 'running' : 'off';
       $('agent-badge').className = `badge${running ? ' todo' : ''}`;
       if (!running) {
-        const why = !app.sourceCanvas ? 'Open a file first.' : !$('agent-key').value.trim() ? 'Enter your OpenRouter key.' : '';
+        const why = !app.sourceCanvas ? 'Open a file first.' : !hasKeyOrProxy() ? 'Enter your OpenRouter key.' : '';
         if (why || $('agent-status').dataset.idle !== 'done') {
           $('agent-status').textContent = why;
           $('agent-status').dataset.idle = '';
         }
       }
     }
+
+    // A key, or a base URL (a local proxy such as scripts/openrouter-proxy.mjs adds the key itself).
+    const hasKeyOrProxy = () => !!($('agent-key').value.trim() || $('agent-base').value.trim());
 
     function selectedPages() {
       const n = app.project.source.pageCount;
@@ -175,11 +180,13 @@
 
     const panelName = (id) => app.project.panels.find((p) => p.id === id)?.name || id;
 
-    async function start() {
+    // focus: {panelId, note} to redo one rejected panel on its own page.
+    async function start(focus = null) {
+      if (abort) return;
       const key = $('agent-key').value.trim();
       let pages;
       try {
-        pages = selectedPages();
+        pages = focus ? [app.project.panels.find((p) => p.id === focus.panelId).page] : selectedPages();
       } catch (err) {
         ws.toast(err.message, true);
         return;
@@ -195,7 +202,7 @@
       $('agent-log').replaceChildren();
       $('agent-status').dataset.idle = '';
       updateButtons();
-      log('tool', `Running ${$('agent-llm').value.trim()} with ${$('agent-jev').value.trim()} on page${pages.length === 1 ? '' : 's'} ${pages.join(', ')}.`);
+      log('tool', `${focus ? `Redoing ${panelName(focus.panelId)}` : 'Running'} with ${$('agent-llm').value.trim()} and ${$('agent-jev').value.trim()} on page${pages.length === 1 ? '' : 's'} ${pages.join(', ')}.`);
       try {
         const sdk = await loadSdk();
         const base = $('agent-base').value.trim();
@@ -208,6 +215,7 @@
           maxSteps: Number($('agent-steps').value) || 80,
           signal: abort.signal,
           onEvent,
+          focus,
         });
         $('agent-status').textContent = `Done: ${out.usage.steps} steps, ${out.usage.decisions} decisions, ${money(out.usage.llmCost + out.usage.decisionCost)}.`;
       } catch (err) {
@@ -236,19 +244,27 @@
       return err.message || String(err);
     }
 
-    $('agent-run').addEventListener('click', start);
+    $('agent-run').addEventListener('click', () => start());
     $('agent-stop').addEventListener('click', () => abort?.abort());
 
     // ------------------------------------------------------------ review
 
-    // Checks the decision model was not sure enough about. A human answer
-    // is applied and logged with source "human".
+    // Needs review: checks the decision model was not sure enough about, and
+    // panels whose extraction was rejected. Human answers apply at once and
+    // are logged with source "human".
+    let reviewTimer = null;
+    const scheduleReview = () => {
+      clearTimeout(reviewTimer);
+      reviewTimer = setTimeout(renderReview, 300);
+    };
+
     async function renderReview() {
       if (!app.sourceCanvas) return;
       const r = await api.run('get_questions');
-      const items = (r.ok ? r.result : []).filter((q) => q.escalated);
-      $('agent-review').hidden = !items.length;
-      $('agent-review-list').replaceChildren(...items.map(reviewItem));
+      const questions = (r.ok ? r.result : []).filter((q) => q.escalated);
+      const rejected = app.project.panels.filter((p) => ws.reviewStatus?.(p) === 'rejected');
+      $('agent-review').hidden = !questions.length && !rejected.length;
+      $('agent-review-list').replaceChildren(...rejected.map(rejectedItem), ...questions.map(reviewItem));
     }
 
     function reviewItem(q) {
@@ -257,20 +273,43 @@
       head.textContent = `${panelName(q.panelId)}: ${q.prompt}`;
       const hint = document.createElement('div');
       hint.className = 'muted';
-      hint.textContent = `${q.escalated.source}${q.escalated.source ? ' suggested' : ''} ${answerText(q.escalated.answer)} (${pct(q.escalated.confidence)})`;
+      hint.textContent = `${q.escalated.source || 'The model'} suggested ${answerText(q.escalated.answer)} (${pct(q.escalated.confidence)} sure)`;
       const row = document.createElement('div');
       row.className = 'row tight';
-      const show = button('Show', 'ghost', () => showQuestion(q));
-      row.append(show);
+      row.append(button('Show', 'ghost', () => showPanel(q.panelId, q)));
       if (q.type === 'confirm_grid_size') {
         const init = q.escalated.answer || q.suggested;
         const rows = Object.assign(document.createElement('input'), { type: 'number', min: 1, value: init.rows, className: 'num', title: 'Rows' });
         const cols = Object.assign(document.createElement('input'), { type: 'number', min: 1, value: init.cols, className: 'num', title: 'Columns' });
         row.append(rows, '×', cols, button('Apply', '', () => answer(q, { rows: Number(rows.value), cols: Number(cols.value) })));
+      } else if (q.type === 'confirm_extraction') {
+        // A review of the panel as it is now, so it also works after the
+        // values changed since the question was asked.
+        row.append(
+          button('Accept', q.escalated.answer === 'accept' ? 'active' : '', () => review(q.panelId, 'accepted')),
+          button('Reject', `danger${q.escalated.answer === 'reject' ? ' active' : ''}`, () => review(q.panelId, 'rejected')),
+        );
       } else {
         for (const opt of q.answerSchema.enum) row.append(button(opt.replaceAll('_', ' '), opt === q.escalated.answer ? 'active' : '', () => answer(q, opt)));
       }
       li.append(head, hint, row);
+      return li;
+    }
+
+    function rejectedItem(panel) {
+      const li = document.createElement('li');
+      li.className = 'rejected';
+      const head = document.createElement('div');
+      const rv = panel.review;
+      head.textContent = `${panel.name} was rejected${rv.by ? ` by ${rv.by}` : ''}${rv.by !== 'human' && Number.isFinite(rv.confidence) ? ` (${pct(rv.confidence)} sure)` : ''}. Fix it by hand, or let the agent redo it.`;
+      const note = Object.assign(document.createElement('input'), { type: 'text', value: rv.note || '', placeholder: 'What is wrong? (optional, passed to the agent)', spellcheck: false });
+      note.addEventListener('change', () => (panel.review.note = note.value.trim()));
+      const row = document.createElement('div');
+      row.className = 'row tight';
+      const redo = button('Redo with agent', 'primary', () => start({ panelId: panel.id, note: note.value.trim() }));
+      redo.disabled = !!abort || !hasKeyOrProxy();
+      row.append(button('Show', 'ghost', () => showPanel(panel.id)), redo, button('Accept anyway', '', () => review(panel.id, 'accepted')));
+      li.append(head, note, row);
       return li;
     }
 
@@ -280,10 +319,10 @@
       return b;
     }
 
-    async function showQuestion(q) {
-      await api.run('select_panel', { panelId: q.panelId });
-      const panel = app.project.panels.find((p) => p.id === q.panelId);
-      if (q.type === 'classify_flagged' && panel?.grid.corners) ws.zoomToPoints(cellSamplePolygon(panel.grid, q.evidence.row, q.evidence.col));
+    async function showPanel(panelId, q = null) {
+      await api.run('select_panel', { panelId });
+      const panel = app.project.panels.find((p) => p.id === panelId);
+      if (q?.type === 'classify_flagged' && panel?.grid.corners) ws.zoomToPoints(cellSamplePolygon(panel.grid, q.evidence.row, q.evidence.col));
       else if (panel?.grid.corners) ws.zoomToPoints(panel.grid.corners);
     }
 
@@ -293,7 +332,17 @@
       renderReview();
     }
 
-    ws.onChange(updateButtons);
+    async function review(panelId, status) {
+      const r = await api.run('set_review', { panelId, status, source: 'human' });
+      if (!r.ok) ws.toast(r.error, true);
+      else ws.toast(status === 'rejected' ? `${panelName(panelId)} rejected. Fix it or use Redo with agent.` : `${panelName(panelId)} accepted.`);
+      renderReview();
+    }
+
+    ws.onChange(() => {
+      updateButtons();
+      if (!abort) scheduleReview();
+    });
     updateButtons();
     return { runner };
   }

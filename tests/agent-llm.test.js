@@ -61,3 +61,26 @@ test('LLM tools have unique names; decide questions are checked', () => {
   assert.match(validateRunnerTool('decide', { state: 'x', questions: {} })[0], /at least one/);
   assert.match(toolResultText('x'.repeat(20), 5), /cut 15 characters/);
 });
+
+test('many flagged cells map to one panel-level decision', () => {
+  const q = { type: 'classify_flagged_cells', evidence: { count: 90, total: 99, medianDeltaE: 30, maxDeltaE: 50, threshold: 10, sampleColors: [[0, 0, 0]], cells: [] } };
+  const req = CM.toDecisionRequest(q);
+  assert.deepEqual(Object.keys(req.questions.answer.criteria), ['keep_all', 'exclude_all', 'recheck_colorbar']);
+  assert.deepEqual(req.state.sampleColors, ['#000000']);
+  assert.deepEqual(CM.fromDecisionAnswer(q, req, { type: 'choice', choice: 'recheck_colorbar', confidence: 0.94 }), { answer: 'recheck_colorbar', confidence: 0.94 });
+});
+
+test('decisionAdvice tells the LLM what to fix', () => {
+  const advice = CM.decisionAdvice(
+    [
+      { type: 'confirm_extraction', panelId: 'p1', answer: 'reject', applied: true },
+      { type: 'classify_flagged_cells', panelId: 'p1', answer: 'recheck_colorbar', applied: true },
+      { type: 'classify_flagged', panelId: 'p1', answer: 'recheck_colorbar', applied: true },
+      { type: 'confirm_extraction', panelId: 'p2', answer: 'accept', applied: true },
+    ],
+    (id) => ({ p1: 'Fig 2f', p2: 'Fig 3a' })[id],
+  );
+  assert.equal(advice.length, 2);
+  assert.match(advice[0], /^Fig 2f: the extraction was rejected/);
+  assert.match(advice[1], /recheck the colorbar/);
+});

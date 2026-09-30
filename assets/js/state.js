@@ -34,6 +34,10 @@
       settings: { distance: 'de2000', maxDeltaE: 10, grayChroma: 10 },
       rois: [],
       scale: null,
+      // Review of the extraction: {status: 'accepted' | 'rejected', by,
+      // confidence, note, resultHash, time}. It applies while the values
+      // still hash to resultHash (see agent-schema.js).
+      review: null,
     };
     // IVIS photos carry JPEG color noise up to about chroma 20 (measured on
     // Fig. 1k of the example paper), and blended overlay edges sit further from
@@ -122,6 +126,7 @@
           })),
         },
         settings: { ...p.settings },
+        ...(p.review ? { review: { ...p.review } } : {}),
         ...(p.tool === 'ivis'
           ? {
               rois: p.rois.map((r) => ({
@@ -216,6 +221,17 @@
       p.settings.distance = s.distance === 'de76' ? 'de76' : 'de2000';
       if (Number.isFinite(s.maxDeltaE)) p.settings.maxDeltaE = s.maxDeltaE;
       if (Number.isFinite(s.grayChroma)) p.settings.grayChroma = Math.max(0, s.grayChroma);
+      const rv = raw.review;
+      if (rv && typeof rv === 'object' && ['accepted', 'rejected'].includes(rv.status) && typeof rv.resultHash === 'string') {
+        p.review = {
+          status: rv.status,
+          by: typeof rv.by === 'string' ? rv.by : null,
+          confidence: Number.isFinite(rv.confidence) ? rv.confidence : null,
+          note: typeof rv.note === 'string' ? rv.note : '',
+          resultHash: rv.resultHash,
+          time: typeof rv.time === 'string' ? rv.time : null,
+        };
+      }
       if (tool === 'ivis') {
         p.rois = (Array.isArray(raw.rois) ? raw.rois : []).map((r, j) => readRoi(r, `panel ${i + 1} region ${j + 1}`));
         const sc = raw.scale;

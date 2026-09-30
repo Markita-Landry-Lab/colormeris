@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, toolDefinitions, stateSnapshot, heatmapResultJson, ivisResultJson, openQuestions,
+    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, toolDefinitions, stateSnapshot, heatmapResultJson, ivisResultJson, openQuestions, resultKeyHash,
     createPanel, createRoi, rectCorners, detectGridSize, projectT, pointAtT, readPixel, rgbToLab, sampleColorbar, labToT, makeValueFn, ticksWithT, tickProblem,
     cellAt, centroid, geomToBox, boxLabel, fileKind,
   } = CM;
@@ -45,15 +45,39 @@
 
     const problems = () => Object.fromEntries(app.project.panels.map((p) => [p.id, ws.resultFor(p).error || null]));
 
-    function resultsJson(panel) {
+    function rawResultsJson(panel) {
       const res = ws.resultFor(panel);
+      return panel.tool === 'heatmap' ? heatmapResultJson(panel, res) : ivisResultJson(panel, res, (r, c) => boxLabel(panel.grid, r, c));
+    }
+
+    // Hash of the panel's current values, or null while it has no result.
+    function currentHash(panel) {
+      const out = rawResultsJson(panel);
+      return out.error ? null : resultKeyHash(out);
+    }
+
+    // 'accepted' | 'rejected' while the values are unchanged since the
+    // review, 'stale' after they changed, null when never reviewed.
+    function reviewStatus(panel) {
+      if (!panel.review) return null;
+      return currentHash(panel) === panel.review.resultHash ? panel.review.status : 'stale';
+    }
+    ws.reviewStatus = reviewStatus;
+
+    function resultsJson(panel) {
+      const out = rawResultsJson(panel);
+      if (out.error) return out;
       if (panel.tool === 'heatmap') {
-        const out = heatmapResultJson(panel, res);
-        const excluded = decisions.filter((d) => d.applied && d.type === 'classify_flagged' && d.panelId === panel.id && d.answer === 'exclude');
-        if (!out.error) out.excluded = excluded.map((d) => ({ row: d.evidence.row, col: d.evidence.col }));
-        return out;
+        const hash = resultKeyHash(out);
+        const mine = decisions.filter((d) => d.applied && d.panelId === panel.id);
+        out.excluded = [
+          ...mine.filter((d) => d.type === 'classify_flagged' && d.answer === 'exclude').map((d) => ({ row: d.evidence.row, col: d.evidence.col })),
+          // Panel-wide exclusions apply to the values they were made on.
+          ...mine.filter((d) => d.type === 'classify_flagged_cells' && d.answer === 'exclude_all' && d.questionId.endsWith(`:${hash}`)).flatMap((d) => d.evidence.cells),
+        ];
       }
-      return ivisResultJson(panel, res, (r, c) => boxLabel(panel.grid, r, c));
+      out.review = panel.review ? { status: reviewStatus(panel), by: panel.review.by, confidence: panel.review.confidence, note: panel.review.note || null } : null;
+      return out;
     }
 
     function questions(panelId) {
@@ -78,6 +102,7 @@
         mode: app.mode,
         activePanelId: app.sourceCanvas ? ws.activePanel().id : null,
         problems: problems(),
+        reviews: Object.fromEntries(app.project.panels.filter((p) => p.review).map((p) => [p.id, reviewStatus(p)])),
         canUndo: ws.canUndo(),
         canRedo: ws.canRedo(),
         openQuestions: app.sourceCanvas ? questions().length : 0,
@@ -99,12 +124,14 @@
       return d;
     }
 
-    function applyAnswer(q, answer) {
+    function applyAnswer(q, answer, d) {
       if (q.type === 'confirm_grid_size') {
         ws.commit((p) => applyGridSize(p, answer.rows, answer.cols));
+      } else if (q.type === 'confirm_extraction') {
+        ws.commit((p) => (p.review = { status: answer === 'accept' ? 'accepted' : 'rejected', by: d.source, confidence: d.confidence, note: '', resultHash: q.resultHash, time: d.time }));
       }
-      // classify_flagged, confirm_tick_order and confirm_extraction are
-      // recorded decisions; results report excluded cells from the log.
+      // classify_flagged(_cells) and confirm_tick_order are recorded
+      // decisions; results report excluded cells from the log.
     }
 
     const handlers = {
@@ -124,7 +151,7 @@
         decisions.push(d);
         if (applied) {
           await usePanel(q.panelId);
-          applyAnswer(q, answer);
+          applyAnswer(q, answer, d);
         } else ws.toast(`Needs review: ${q.prompt} (${source} ${confidence === null ? 'gave no confidence' : `was ${Math.round(confidence * 100)}% sure`})`);
         return { applied, escalated: !applied };
       },
@@ -330,6 +357,16 @@
         if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 3) throw new Error('Scale bar is too short.');
         ws.commit((p) => (p.scale = { p1: { ...p1 }, p2: { ...p2 }, length, unit }));
         return null;
+      },
+
+      set_review: async ({ panelId, status, note = '', source = 'agent' }) => {
+        const panel = await usePanel(panelId);
+        const hash = currentHash(panel);
+        if (status && !hash) throw new Error(`Nothing to review yet: ${ws.resultFor(panel).error}`);
+        const time = new Date().toISOString();
+        ws.commit((p) => (p.review = status ? { status, by: source, confidence: 1, note, resultHash: hash, time } : null));
+        decisions.push({ questionId: null, type: 'set_review', panelId: panel.id, evidence: { resultHash: hash }, answer: status, note, confidence: 1, source, model: null, applied: true, time });
+        return { status };
       },
 
       undo: () => (ws.undo(), null),

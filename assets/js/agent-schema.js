@@ -124,6 +124,15 @@
       args: { type: 'object', properties: { panelId, p1: point, p2: point, length: { type: 'number', exclusiveMinimum: 0 }, unit: { enum: ['cm', 'mm'] } }, required: ['p1', 'p2', 'length'] },
     },
 
+    set_review: {
+      description: 'Record a review of a panel\'s current extraction: accepted or rejected (with an optional note on what is wrong), or null to clear it. A rejected panel stays marked until it is accepted or its values change.',
+      mutates: true,
+      args: {
+        type: 'object',
+        properties: { panelId, status: { enum: ['accepted', 'rejected', null] }, note: { type: 'string' }, source: { type: 'string' } },
+        required: ['status'],
+      },
+    },
     undo: { description: 'Undo the last change.', mutates: true, args: { type: 'object', properties: {} } },
     redo: { description: 'Redo.', mutates: true, args: { type: 'object', properties: {} } },
     export_project: { description: 'Download the project zip (includes agent/decisions.json).', args: { type: 'object', properties: {} } },
@@ -203,7 +212,9 @@
 
   // Plain JSON view of the workspace. `results` maps panel id → result (or
   // {error}); `problems` maps panel id → what is missing, or null.
-  function stateSnapshot({ project, tool, mode, activePanelId, problems, canUndo, canRedo, openQuestions }) {
+  // `reviews` maps panel id → 'accepted' | 'rejected' | 'stale' (reviewed,
+  // then changed) for panels with a review.
+  function stateSnapshot({ project, tool, mode, activePanelId, problems, reviews = {}, canUndo, canRedo, openQuestions }) {
     const s = project.source;
     return {
       schema: AGENT_SCHEMA,
@@ -212,13 +223,13 @@
       mode: mode ? { type: mode.type, points: mode.points.map(pt) } : null,
       source: s ? { fileName: s.fileName, page: s.page, pageCount: s.pageCount, width: s.width, height: s.height, dpi: Math.round(72 * s.renderScale) } : null,
       activePanelId,
-      panels: project.panels.map((p) => panelSnapshot(p, problems[p.id])),
+      panels: project.panels.map((p) => panelSnapshot(p, problems[p.id], reviews[p.id])),
       history: { canUndo, canRedo },
       openQuestions,
     };
   }
 
-  function panelSnapshot(p, problem) {
+  function panelSnapshot(p, problem, reviewStatus) {
     const g = p.grid;
     const cb = p.colorbar;
     const out = {
@@ -248,6 +259,7 @@
         ticks: ticksWithT(cb).map((k) => ({ id: k.id, t: Number.isFinite(k.t) ? Math.round(k.t * 1e4) / 1e4 : null, value: Number.isFinite(k.value) ? k.value : null })),
       },
       settings: { ...p.settings },
+      review: p.review ? { status: reviewStatus || p.review.status, by: p.review.by, confidence: p.review.confidence, note: p.review.note || null } : null,
     };
     if (p.tool === 'ivis') {
       out.regions = p.rois.map((r) => ({ id: r.id, name: r.name, shape: r.shape, replicate: r.replicate, nudged: Object.keys(r.offsets).length }));
@@ -301,9 +313,13 @@
   //   confirm_grid_size    after detection: {rows, cols}
   //   classify_flagged     heatmap cell far from every colorbar color:
   //                        'keep' | 'exclude' | 'recheck_colorbar'
+  //   classify_flagged_cells  the same for all flagged cells of a panel at
+  //                        once, when there are more than MAX_CELL_QUESTIONS:
+  //                        'keep_all' | 'exclude_all' | 'recheck_colorbar'
   //   confirm_tick_order   ticks whose values do not increase along the bar:
   //                        'as_placed' | 'fix_needed'
-  //   confirm_extraction   ready panel: 'accept' | 'reject'
+  //   confirm_extraction   ready panel: 'accept' | 'reject'; applied, it sets
+  //                        panel.review for the values as they are
   //
   // `detections` maps panel id → detectGridSize output (or undefined).
   function openQuestions({ panels, results, detections, decisions }) {
@@ -345,7 +361,28 @@
       }
       const res = results[p.id];
       if (!res || res.error) continue;
-      if (p.tool === 'heatmap') {
+      const hash = resultKeyHash(res);
+      if (p.tool === 'heatmap' && res.flagged.length > MAX_CELL_QUESTIONS) {
+        // Many flagged cells usually mean one cause (often the colorbar), so
+        // they get one question instead of one per cell.
+        const des = res.flagged.map((f) => f.deltaE).sort((a, b) => a - b);
+        push({
+          id: `flags:${p.id}:${hash}`,
+          type: 'classify_flagged_cells',
+          panelId: p.id,
+          prompt: `${res.flagged.length} of ${res.values.length * res.values[0].length} cells have colors far from every colorbar color. Keep them, exclude them, or recheck the colorbar?`,
+          evidence: {
+            count: res.flagged.length,
+            total: res.values.length * res.values[0].length,
+            medianDeltaE: des[Math.floor(des.length / 2)],
+            maxDeltaE: des[des.length - 1],
+            threshold: res.maxDeltaE,
+            sampleColors: res.flagged.slice(0, 8).map((f) => f.rgb),
+            cells: res.flagged.map((f) => ({ row: f.row, col: f.col })),
+          },
+          answerSchema: { enum: ['keep_all', 'exclude_all', 'recheck_colorbar'] },
+        });
+      } else if (p.tool === 'heatmap') {
         for (const f of res.flagged) {
           push({
             id: `flag:${p.id}:${f.row},${f.col}:${f.deltaE}`,
@@ -357,10 +394,12 @@
           });
         }
       }
+      if (p.review?.resultHash === hash) continue; // already accepted or rejected as it is
       push({
-        id: `accept:${p.id}:${resultKeyHash(res)}`,
+        id: `accept:${p.id}:${hash}`,
         type: 'confirm_extraction',
         panelId: p.id,
+        resultHash: hash,
         prompt: 'Does the extraction look right (compare the reconstruction with the figure)?',
         evidence: p.tool === 'heatmap' ? { rows: res.values.length, cols: res.values[0].length, flaggedCount: res.flagged.length } : { regions: res.regions.length, flaggedPx: res.regions.reduce((s, x) => s + x.flaggedPx, 0) },
         answerSchema: { enum: ['accept', 'reject'] },
@@ -369,6 +408,7 @@
     return qs;
   }
 
+  const MAX_CELL_QUESTIONS = 3;
   const nonEmpty = (labels) => labels.filter((l) => String(l).trim() !== '').length;
   const cornerKey = (cs) => cs.map((c) => `${Math.round(c.x)},${Math.round(c.y)}`).join(';');
 
@@ -391,5 +431,6 @@
     heatmapResultJson,
     ivisResultJson,
     openQuestions,
+    resultKeyHash,
   });
 })((globalThis.Colormeris ??= {}));

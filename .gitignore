@@ -12,3 +12,5 @@ __pycache__
 assets/img
 
 .env
+.env.*
+!.env.example

@@ -219,6 +219,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .panel-list button { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 .panel-list .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .panel-list .status-dot.done { background: #2aa15a; }
+.panel-list .status-dot.rejected { background: var(--danger); }
 .other-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 #panel-page-note { text-transform: none; letter-spacing: 0; font-weight: 400; }
 
@@ -481,6 +482,7 @@ a.brand { color: inherit; text-decoration: none; }
 .agent-review ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .agent-review li { font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
 .agent-review .row { flex-wrap: wrap; align-items: center; }
+.agent-review li.rejected > div:first-child { color: var(--danger); font-weight: 600; }
 .agent-log {
   margin: 0;
   padding: 6px 8px 6px 26px;

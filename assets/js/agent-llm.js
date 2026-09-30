@@ -12,7 +12,7 @@
 
   const SYSTEM_PROMPT = `You are the extraction agent of Colormeris, a tool that turns colors in scientific figures back into numbers. Your job: find every gridded heatmap on the pages you are given and calibrate one panel per heatmap so its values can be extracted. You act only through tools.
 
-Coordinates are pixels of the current page image (its width and height are in get_state). Every image you receive has rulers labelled in those pixels. Read positions off the rulers; zoom in (view_page with a region) before placing anything precisely.
+Coordinates are pixels of the current page image (its width and height are in get_state). Each image you receive shows a region of the page: image pixel (0, 0) is the region's top-left corner, and its note gives the conversion page x = x0 + image x / scale (same for y). Rulers on the bottom and right edges are labelled in page pixels; use them to check your conversion. Zoom in (view_page with a region) before placing anything precisely.
 
 For each page:
 1. go_to_page, then view_page to see the whole page. A heatmap here is a grid of colored cells with a colorbar. Skip photos, IVIS/luminescence images, contour or scatter plots and tables with colored text; mention them in finish.
@@ -20,7 +20,7 @@ For each page:
 3. Grid: zoom on the heatmap's top-left and bottom-right corners. set_grid with the outer corners of the cell area only (not labels, axes, dendrograms or the colorbar), without rows/cols: the size is detected automatically. Read the row labels (top to bottom) and column labels (left to right) and set_labels.
 4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its centre line. Add at least two ticks with add_tick using "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Prefer the outermost labelled ticks. If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
 5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the bar), then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
-6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. If a check is rejected or left for review, look again and fix what you can, then resolve again (at most twice per panel).
+6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again (at most twice per panel).
 
 Use decide when a judgment is a clean choice you are unsure of (e.g. which of two readings of a label fits the other ticks). Do not guess silently.
 When every page is done, call finish with one line per panel and anything a human should check. Keep your messages short.`;
@@ -163,6 +163,31 @@ When every page is done, call finish with one line per panel and anything a huma
         },
       };
     }
+    if (q.type === 'classify_flagged_cells') {
+      return {
+        state: {
+          task: 'Many cells of a heatmap have colors far from every color of its calibrated colorbar (CIEDE2000 ΔE above the threshold). Decide what to do with them.',
+          flaggedCells: ev.count,
+          totalCells: ev.total,
+          medianDeltaE: ev.medianDeltaE,
+          maxDeltaE: ev.maxDeltaE,
+          threshold: ev.threshold,
+          sampleColors: ev.sampleColors.map(hex),
+          note: 'When most cells are flagged, the colorbar was usually sampled off the bar (wrong position) rather than the cells being non-data colors.',
+        },
+        questions: {
+          answer: {
+            type: 'choice',
+            instructions: 'How should the flagged cells be treated?',
+            criteria: {
+              keep_all: 'They are colormap colors distorted by compression, anti-aliasing or blending; the matched values are usable.',
+              exclude_all: 'They are not data colors: text, markers, grid lines, or missing-data colors (white, gray, black) outside the colormap.',
+              recheck_colorbar: 'The colorbar calibration is probably wrong (the bar was sampled off its colors, or the ends or ticks are misplaced).',
+            },
+          },
+        },
+      };
+    }
     if (q.type === 'confirm_tick_order') {
       return {
         state: { task: 'Tick values entered for a heatmap colorbar, in order along the bar. Colorbars almost always have monotonic labels.', ticks: ev.ticks.map((k) => ({ position: k.t, value: k.value })) },
@@ -205,6 +230,22 @@ When every page is done, call finish with one line per panel and anything a huma
       return a.noul >= 0.5 ? { answer: 'accept', confidence: a.noul } : { answer: 'reject', confidence: 1 - a.noul };
     }
     return { answer: a.choice, confidence: choiceConf() };
+  }
+
+  // What the LLM should do after decisions ({type, panelId, answer, applied}).
+  function decisionAdvice(decisions, panelName = (id) => id) {
+    const out = [];
+    for (const d of decisions) {
+      const name = panelName(d.panelId);
+      if (d.type === 'confirm_extraction' && d.answer === 'reject') {
+        out.push(`${name}: the extraction was ${d.applied ? 'rejected' : 'probably wrong (left for a human)'}. Look again at the grid corners, the colorbar line and the ticks with overlays, fix what is off, then resolve_questions again.`);
+      } else if ((d.type === 'classify_flagged' || d.type === 'classify_flagged_cells') && d.answer === 'recheck_colorbar') {
+        out.push(`${name}: recheck the colorbar. Zoom on it with overlay "calibration": the line must run along the middle of the colored strip from end to end, and the ticks must sit on their marks.`);
+      } else if (d.type === 'confirm_grid_size' && !d.applied) {
+        out.push(`${name}: the grid size is uncertain. Count the rows and columns on a zoomed view and set_grid_size.`);
+      }
+    }
+    return [...new Set(out)];
   }
 
   // ---------------------------------------------------------------- messages
@@ -258,6 +299,7 @@ When every page is done, call finish with one line per panel and anything a huma
     llmTools,
     toDecisionRequest,
     fromDecisionAnswer,
+    decisionAdvice,
     pruneImages,
     toolResultText,
     parsePages,
