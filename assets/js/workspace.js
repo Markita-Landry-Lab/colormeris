@@ -714,8 +714,25 @@
           input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') input.blur();
           });
+          // Position as % along the bar (0 at start, 100 at end), editable for
+          // ticks whose mark is hard to click, e.g. at the very ends.
           const pos = document.createElement('td');
           pos.className = 'pos';
+          const at = Object.assign(document.createElement('input'), { type: 'number', step: 'any', min: -10, max: 110, className: 'num', title: 'Position along the colorbar: 0% at the start, 100% at the end' });
+          at.setAttribute('aria-label', 'Position in % along the colorbar');
+          at.addEventListener('focus', () => pushHistory());
+          at.addEventListener('change', () => {
+            const cb = activePanel().colorbar;
+            const tick = cb.ticks.find((x) => x.id === k.id);
+            const v = Number(at.value);
+            if (!tick || !cb.start || !cb.end || at.value === '' || !Number.isFinite(v)) return changed();
+            Object.assign(tick, pointAtT(cb.start, cb.end, Math.min(110, Math.max(-10, v)) / 100));
+            changed();
+          });
+          at.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') at.blur();
+          });
+          pos.append(at, '%');
           const del = document.createElement('button');
           del.className = 'btn icon small';
           del.textContent = '×';
@@ -739,7 +756,7 @@
       const input = tr.querySelector('input');
       setValue(input, Number.isFinite(k.value) ? k.value : '');
       tr.classList.toggle('invalid', !Number.isFinite(k.value));
-      tr.querySelector('.pos').textContent = `${(k.t * 100).toFixed(1)}% along`;
+      setValue(tr.querySelector('.pos input'), Number.isFinite(k.t) ? Math.round(k.t * 1000) / 10 : '');
     }
   }
 

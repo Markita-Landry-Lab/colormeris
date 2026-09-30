@@ -236,6 +236,8 @@ table.ticks th { text-align: left; font-weight: 500; font-size: 12px; color: var
 table.ticks td { padding: 3px 4px; }
 table.ticks td.pos { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 table.ticks input { width: 110px; }
+table.ticks td.pos { white-space: nowrap; }
+table.ticks td.pos input { width: 76px; margin-right: 3px; }
 table.ticks tr.invalid input { border-color: var(--danger); }
 table.ticks[hidden] { display: none; }
 
