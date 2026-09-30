@@ -319,7 +319,14 @@
           type: 'confirm_grid_size',
           panelId: p.id,
           prompt: 'How many rows and columns of cells does this heatmap grid have?',
-          evidence: { detected: { rows: d.rows, cols: d.cols }, rowConfidence: r2(d.rowConfidence), colConfidence: r2(d.colConfidence), uncertain: conf < 1.3 || d.rows === 1 || d.cols === 1 },
+          evidence: {
+            detected: { rows: d.rows, cols: d.cols },
+            rowConfidence: r2(d.rowConfidence),
+            colConfidence: r2(d.colConfidence),
+            uncertain: conf < 1.3 || d.rows === 1 || d.cols === 1,
+            // Labels typed so far (e.g. read off the figure); 0 when none.
+            labelCounts: { rows: nonEmpty(p.grid.rowLabels), cols: nonEmpty(p.grid.colLabels) },
+          },
           answerSchema: { type: 'object', properties: { rows: { type: 'integer', minimum: 1, maximum: 1000 }, cols: { type: 'integer', minimum: 1, maximum: 1000 } }, required: ['rows', 'cols'] },
           suggested: { rows: d.rows, cols: d.cols },
         });
@@ -362,6 +369,7 @@
     return qs;
   }
 
+  const nonEmpty = (labels) => labels.filter((l) => String(l).trim() !== '').length;
   const cornerKey = (cs) => cs.map((c) => `${Math.round(c.x)},${Math.round(c.y)}`).join(';');
 
   // Short, stable hash of a result's numbers (FNV-1a over its JSON).

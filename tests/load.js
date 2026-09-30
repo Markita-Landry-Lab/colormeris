@@ -9,5 +9,6 @@ import '../assets/js/export.js';
 import '../assets/js/roi.js';
 import '../assets/js/quantify.js';
 import '../assets/js/agent-schema.js';
+import '../assets/js/agent-llm.js';
 
 export default globalThis.Colormeris;

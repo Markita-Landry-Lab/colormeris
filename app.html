@@ -24,6 +24,9 @@
   <script src="assets/js/ivis.js" defer></script>
   <script src="assets/js/agent-schema.js" defer></script>
   <script src="assets/js/agent.js" defer></script>
+  <script src="assets/js/agent-llm.js" defer></script>
+  <script src="assets/js/agent-runner.js" defer></script>
+  <script src="assets/js/agent-panel.js" defer></script>
   <script src="assets/js/app.js" defer></script>
 </head>
 <body>
@@ -65,8 +68,55 @@
           <li><b>Regions</b>: draw ellipses (Shift = circle), rectangles (Shift = square) or polygons. A region drawn in one box is copied into every box; drag a copy to nudge it in that box only.</li>
           <li>Grayscale pixels (the photo) count as no signal. Read the results table, download the CSV, or export the project zip.</li>
         </ol>
-        <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes. Everything runs in your browser; files are never uploaded.</p>
+        <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes. Everything runs in your browser; files are never uploaded, except page images sent to OpenRouter when you run the agent.</p>
       </details>
+
+      <section class="card agent" id="sec-agent" data-tool="heatmap">
+        <div class="card-head">
+          <h2>Agent</h2>
+          <span id="agent-badge" class="badge">off</span>
+        </div>
+        <p class="muted small agent-note">An LLM finds the heatmaps and calibrates them; a decision model (Jev) checks each step. It uses your own OpenRouter key and runs in this browser. <b>Page images and extracted values are sent to OpenRouter and the model providers you pick.</b></p>
+        <details class="settings" id="agent-settings" open>
+          <summary>Models and key</summary>
+          <label class="field">OpenRouter API key
+            <input id="agent-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-…">
+          </label>
+          <label class="check small"><input id="agent-remember" type="checkbox"> Remember the key in this browser</label>
+          <label class="field">LLM (vision and tools)
+            <input id="agent-llm" type="text" list="agent-llm-list" spellcheck="false">
+            <datalist id="agent-llm-list"></datalist>
+          </label>
+          <label class="field">Decision model
+            <input id="agent-jev" type="text" list="agent-jev-list" spellcheck="false">
+            <datalist id="agent-jev-list"></datalist>
+          </label>
+          <div class="row">
+            <label class="field">Min. confidence <input id="agent-minconf" type="number" min="0.5" max="1" step="0.01" value="0.9" class="num"></label>
+            <label class="field">Max. steps <input id="agent-steps" type="number" min="5" max="400" value="80" class="num"></label>
+          </div>
+          <label class="field">API base URL <input id="agent-base" type="url" spellcheck="false" placeholder="https://openrouter.ai/api/v1"></label>
+          <p class="muted small">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. The base URL is for OpenRouter-compatible proxies; leave it empty otherwise.</p>
+        </details>
+        <label class="field">Pages
+          <select id="agent-pages">
+            <option value="current">Current page</option>
+            <option value="all">All pages</option>
+            <option value="range">Pages…</option>
+          </select>
+        </label>
+        <input id="agent-range" type="text" placeholder="e.g. 2-4, 7" spellcheck="false" hidden>
+        <div class="row tight">
+          <button class="btn primary" id="agent-run" disabled>Run agent</button>
+          <button class="btn" id="agent-stop" hidden>Stop</button>
+          <span id="agent-status" class="muted small"></span>
+        </div>
+        <div id="agent-review" class="agent-review" hidden>
+          <h3>Needs review</h3>
+          <ul id="agent-review-list"></ul>
+        </div>
+        <ol id="agent-log" class="agent-log" hidden></ol>
+      </section>
 
       <section class="card" id="sec-source" hidden>
         <h2>Source</h2>

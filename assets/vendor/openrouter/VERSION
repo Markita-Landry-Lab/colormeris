@@ -1,0 +1,1 @@
+@openrouter/sdk 1.4.10 (zod 4.6.5), bundled with esbuild 0.28.2 as an IIFE exposing OpenRouterSDK.OpenRouter. Regenerate with: node scripts/bundle-openrouter.mjs

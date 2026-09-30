@@ -469,3 +469,32 @@ a.brand { color: inherit; text-decoration: none; }
 .tool-card .go { margin-top: auto; color: var(--accent); font-weight: 600; }
 .tool-card svg { width: 100%; height: auto; border-radius: 8px; background: var(--surface-2); }
 .landing .fineprint { color: var(--muted); font-size: 13px; }
+
+/* Agent */
+.agent .agent-note { margin: 0; }
+.agent .settings { display: flex; flex-direction: column; gap: 8px; }
+.agent .settings[open] { gap: 8px; }
+.agent .settings > :not(summary) { margin-top: 8px; }
+.agent .settings p { margin: 0; }
+.agent h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
+.agent-review { border: 1px solid var(--bar-color); border-radius: 6px; padding: 8px; }
+.agent-review ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.agent-review li { font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.agent-review .row { flex-wrap: wrap; align-items: center; }
+.agent-log {
+  margin: 0;
+  padding: 6px 8px 6px 26px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+.agent-log li { margin: 2px 0; }
+.agent-log .tool { font-family: var(--mono); color: var(--muted); }
+.agent-log .decision { color: var(--text); }
+.agent-log .escalated { color: var(--warn-text); }
+.agent-log .error { color: var(--danger); }
+.agent-log .done { font-weight: 600; }

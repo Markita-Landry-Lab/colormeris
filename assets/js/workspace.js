@@ -545,9 +545,11 @@
     if (document.activeElement !== el && el.value !== String(value)) el.value = value;
   }
 
+  const changeListeners = [];
   function changed({ light = false } = {}) {
     viewer.requestDraw();
     renderSidebar(light);
+    for (const fn of changeListeners) fn();
   }
 
   function renderSidebar(light = false) {
@@ -1336,6 +1338,7 @@
     exportZip,
     newTickId,
     zipExtras: [], // functions returning [{path, content}] added to project zips
+    onChange: (fn) => changeListeners.push(fn),
   };
   return ws;
   }

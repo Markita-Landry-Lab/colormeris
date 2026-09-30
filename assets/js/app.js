@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { createWorkspace, setupHeatmapTool, setupIvisTool, createAgentApi } = CM;
+  const { createWorkspace, setupHeatmapTool, setupIvisTool, createAgentApi, setupAgentPanel } = CM;
 
   // One page, two tools sharing one workspace: the loaded file, pages and
   // project (with every tool's panels) persist when switching tools. The tool
@@ -17,4 +17,6 @@
 
   // Typed API for software agents (agent.js).
   window.colormeris = createAgentApi(ws);
+  // LLM + decision-model agent for heatmaps (agent-panel.js, agent-runner.js).
+  setupAgentPanel(ws, window.colormeris);
 })((globalThis.Colormeris ??= {}));

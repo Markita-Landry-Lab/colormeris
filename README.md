@@ -9,7 +9,7 @@ Colormeris is a set of static web pages that turn colors in scientific figures b
 
 Switch tools at any time with the Heatmap | IVIS control in the top bar. The file, the PDF page and each tool's panels stay. One project zip holds the work of both tools. `heatmap.html` and `ivis.html` redirect to the matching tool, so older links keep working.
 
-Everything runs in the browser. Files are never uploaded anywhere.
+Everything runs in the browser. Files are never uploaded anywhere, except when you run the heatmap agent: it sends page images and extracted values to OpenRouter and the models you pick.
 
 ## Heatmap tool
 
@@ -76,6 +76,16 @@ await colormeris.run('get_results');   // → { ok, result } or { ok: false, err
 
 The action catalogue, validator, state snapshot and questions are in `assets/js/agent-schema.js`; `assets/js/agent.js` binds them to the page.
 
+### Heatmap agent
+
+The *Agent* card in the heatmap tool extracts every heatmap on the chosen pages by itself, using your own [OpenRouter](https://openrouter.ai/keys) key:
+
+- An **LLM** (any OpenRouter model with image input and tool calling; `anthropic/claude-sonnet-5.5` by default) looks at page images with pixel rulers, finds the heatmaps, and calibrates one panel per heatmap through the agent API. It zooms in to place corners and ticks, and checks its work with *calibration* and *reconstruction* overlays.
+- A **decision model** (`typesafe/jev-1.13` by default, or any OpenRouter model with decision output) answers the typed questions: grid size, flagged cells, tick order and final acceptance. The LLM can also ask it its own `decide` questions.
+- An answer below *Min. confidence* is not applied. It is listed under *Needs review*, where you can answer it yourself.
+
+The key stays in memory unless you tick *Remember the key*; then it is kept in this browser's local storage. *API base URL* points the agent at an OpenRouter-compatible proxy. Page images and extracted values go to OpenRouter and the model providers. The log shows every step, decision and the cost so far. *Stop* ends the run.
+
 ## How heatmap values are computed
 
 - **Cell color**: each channel's median over the central part of the cell. The *Sampled area* setting controls how much, 50% by default. Using the center avoids grid lines, anti-aliased edges and JPEG noise.
@@ -99,7 +109,7 @@ Each panel records its `page`. Its coordinates are pixels in that page's `source
 
 ## Development
 
-There is no build step. The pages are plain HTML, CSS and classic scripts that register on a shared `Colormeris` namespace. Each tool page loads them in order. pdf.js 6.3.289 and JSZip 3.10.2 are vendored in `assets/vendor/`.
+There is no build step. The pages are plain HTML, CSS and classic scripts that register on a shared `Colormeris` namespace. Each tool page loads them in order. pdf.js 6.3.289, JSZip 3.10.2 and a browser bundle of the OpenRouter TypeScript SDK (loaded only when the agent runs; rebuild with `node scripts/bundle-openrouter.mjs`) are vendored in `assets/vendor/`.
 
 You can open `index.html` directly from disk or serve the folder:
 
@@ -129,4 +139,7 @@ To deploy, publish the repository root with GitHub Pages or any static host. `.n
 | `assets/js/ivis.js` | IVIS tool |
 | `assets/js/agent-schema.js` | agent action catalogue (JSON Schema), validation, state snapshot, typed questions |
 | `assets/js/agent.js` | binds the agent API to the workspace as `window.colormeris` |
+| `assets/js/agent-llm.js` | agent system prompt, LLM tool list, typed question ↔ decision-model mapping |
+| `assets/js/agent-runner.js` | agent loop: page images with rulers and overlays, OpenRouter chat and decisions calls |
+| `assets/js/agent-panel.js` | Agent card: key, model pickers, run/stop, log, review of low-confidence decisions |
 | `assets/js/app.js` | starts the workspace with both tools; `#heatmap` / `#ivis` picks the tool |
