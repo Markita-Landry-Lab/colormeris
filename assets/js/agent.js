@@ -236,7 +236,7 @@
         return null;
       },
 
-      set_grid: async ({ panelId, topLeft, bottomRight, corners, rows, cols }) => {
+      set_grid: async ({ panelId, topLeft, bottomRight, corners }) => {
         await usePanel(panelId);
         const cs = corners || rectCorners(topLeft, bottomRight);
         const w = Math.hypot(cs[1].x - cs[0].x, cs[1].y - cs[0].y);
@@ -245,9 +245,10 @@
         let detected = null;
         ws.commit((p) => {
           p.grid.corners = cs;
-          detected = applyGridSize(p, rows, cols);
+          // Always detect: the LLM's own count would skip the grid-size check.
+          detected = applyGridSize(p);
         });
-        return detected && { detected: { rows: detected.rows, cols: detected.cols, rowConfidence: detected.rowConfidence, colConfidence: detected.colConfidence } };
+        return { detected: { rows: detected.rows, cols: detected.cols, rowConfidence: detected.rowConfidence, colConfidence: detected.colConfidence } };
       },
 
       detect_grid_size: async ({ panelId }) => {

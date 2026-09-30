@@ -63,7 +63,7 @@
     rename_panel: { description: 'Rename a panel.', mutates: true, args: { type: 'object', properties: { panelId, name: { type: 'string', minLength: 1 } }, required: ['name'] } },
 
     set_grid: {
-      description: 'Place the grid by its outer top-left and bottom-right corners, or by 4 corners (TL, TR, BR, BL) for skewed scans. Without rows/cols the size is detected and a confirm_grid_size question opens.',
+      description: 'Place the grid by its outer top-left and bottom-right corners, or by 4 corners (TL, TR, BR, BL) for skewed scans. Rows and columns are filled in automatically from the colors inside the grid, and a confirm_grid_size question opens. Precision matters: a few pixels off shifts every cell.',
       mutates: true,
       args: {
         type: 'object',
@@ -72,8 +72,6 @@
           topLeft: pointOf('Outer top-left corner of the top-left cell. Give with bottomRight.'),
           bottomRight: pointOf('Outer bottom-right corner of the bottom-right cell. Give with topLeft.'),
           corners: { type: 'array', items: point, minItems: 4, maxItems: 4, description: 'Instead of topLeft/bottomRight: all 4 outer corners, in order top-left, top-right, bottom-right, bottom-left.' },
-          rows: count('Number of cell rows. Omit to detect it.'),
-          cols: count('Number of cell columns. Omit to detect it.'),
         },
       },
     },
@@ -95,14 +93,14 @@
     remove_grid: { description: 'Remove the grid.', mutates: true, args: { type: 'object', properties: { panelId } } },
 
     set_colorbar: {
-      description: 'Place the colorbar ends along its middle. Existing ticks keep their t.',
+      description: 'Place the colorbar ends along its middle. Existing ticks keep their t. Put both ends inside the colored strip, on the first and last color pixel, not on its black or grey outline.',
       mutates: true,
       args: {
         type: 'object',
         properties: {
           panelId,
-          start: pointOf('One end of the colored strip, on its centre line.'),
-          end: pointOf('The other end, on the centre line.'),
+          start: pointOf('One end of the colored strip, on its centre line. Just inside the border: the first pixel that shows the color, not the outline.'),
+          end: pointOf('The other end, on the centre line, just inside the border (not on the outline).'),
           halfWidth: { type: 'number', minimum: 0, maximum: 50, description: 'Pixels averaged on each side of the line. Default 2; keep it inside the strip.' },
         },
         required: ['start', 'end'],

@@ -119,7 +119,7 @@ Rename a panel. _Changes the project; undoable._ _Available to the heatmap agent
 
 ### `set_grid`
 
-Place the grid by its outer top-left and bottom-right corners, or by 4 corners (TL, TR, BR, BL) for skewed scans. Without rows/cols the size is detected and a confirm_grid_size question opens. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
+Place the grid by its outer top-left and bottom-right corners, or by 4 corners (TL, TR, BR, BL) for skewed scans. Rows and columns are filled in automatically from the colors inside the grid, and a confirm_grid_size question opens. Precision matters: a few pixels off shifts every cell. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -127,8 +127,6 @@ Place the grid by its outer top-left and bottom-right corners, or by 4 corners (
 | `topLeft` | {x, y} |  | Outer top-left corner of the top-left cell. Give with bottomRight. |
 | `bottomRight` | {x, y} |  | Outer bottom-right corner of the bottom-right cell. Give with topLeft. |
 | `corners` | {x, y}[] |  | Instead of topLeft/bottomRight: all 4 outer corners, in order top-left, top-right, bottom-right, bottom-left. |
-| `rows` | integer (≥ 1, ≤ 1000) |  | Number of cell rows. Omit to detect it. |
-| `cols` | integer (≥ 1, ≤ 1000) |  | Number of cell columns. Omit to detect it. |
 
 ### `detect_grid_size`
 
@@ -171,13 +169,13 @@ Remove the grid. _Changes the project; undoable._ _Available to the heatmap agen
 
 ### `set_colorbar`
 
-Place the colorbar ends along its middle. Existing ticks keep their t. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
+Place the colorbar ends along its middle. Existing ticks keep their t. Put both ends inside the colored strip, on the first and last color pixel, not on its black or grey outline. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `panelId` | string |  | Panel to act on. Defaults to the active panel; another panel is selected first (switching tool and page if needed). |
-| `start` | {x, y} | yes | One end of the colored strip, on its centre line. |
-| `end` | {x, y} | yes | The other end, on the centre line. |
+| `start` | {x, y} | yes | One end of the colored strip, on its centre line. Just inside the border: the first pixel that shows the color, not the outline. |
+| `end` | {x, y} | yes | The other end, on the centre line, just inside the border (not on the outline). |
 | `halfWidth` | number (≥ 0, ≤ 50) |  | Pixels averaged on each side of the line. Default 2; keep it inside the strip. |
 
 ### `add_tick`
@@ -409,13 +407,13 @@ To keep the key out of the browser entirely, put `OPENROUTER_API_KEY=…` in `.e
 ```text
 You are the extraction agent of Colormeris, a tool that turns colors in scientific figures back into numbers. Your job: find every gridded heatmap on the pages you are given and calibrate one panel per heatmap so its values can be extracted. You act only through tools.
 
-Coordinates are pixels of the current page image (its width and height are in get_state). Each image you receive shows a region of the page: image pixel (0, 0) is the region's top-left corner, and its note gives the conversion page x = x0 + image x / scale (same for y). Rulers on the bottom and right edges are labelled in page pixels; use them to check your conversion. Zoom in (view_page with a region) before placing anything precisely.
+Coordinates are pixels of the current page image (its width and height are in get_state). Each image you receive shows a region of the page: image pixel (0, 0) is the region's top-left corner, and its note gives the conversion page x = x0 + image x / scale (same for y). Rulers on the bottom and right edges are labelled in page pixels; use them to check your conversion. Precision matters: a few pixels of error shift every cell or every tick value. Always zoom in (view_page with a small region, so the scale is high) before placing anything, read the coordinates off the rulers, and check the conversion twice. After placing, look again at a zoomed view and correct any offset of more than 1–2 pixels.
 
 For each page:
 1. go_to_page, then view_page to see the whole page. A heatmap here is a grid of colored cells with a colorbar. Skip photos, IVIS/luminescence images, contour or scatter plots and tables with colored text; mention them in finish.
 2. For each heatmap, use one panel. A new page starts with one empty panel; use add_panel for more. Name it after the figure label (e.g. "Fig 2b") with rename_panel.
-3. Grid: zoom on the heatmap's top-left and bottom-right corners. set_grid with the outer corners of the cell area only (not labels, axes, dendrograms or the colorbar), without rows/cols: the size is detected automatically. Read the row labels (top to bottom) and column labels (left to right) and set_labels.
-4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its centre line. Add at least two ticks with add_tick using "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Prefer the outermost labelled ticks. If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
+3. Grid: zoom on the heatmap's top-left and bottom-right corners. set_grid with the outer corners of the cell area only (not labels, axes, dendrograms or the colorbar). Put each corner exactly on the outer edge of the first/last cell, not on a border line, axis or tick outside it. Rows and columns are counted and filled in automatically; do not give them. Read the row labels (top to bottom) and column labels (left to right) and set_labels. Axis labels do not always match the cell count: one label can cover several replicate rows or columns (or only some cells are labelled). Never resize the grid to match the label count; trust the cell structure you see and the detected size.
+4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its centre line, placed just inside the strip: on the first and last pixel that shows the color, NOT on the colorbar's black or grey border/outline, which would sample the border color. Keep halfWidth small enough that the sampled band stays off the border too. Add at least two ticks with add_tick using "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Prefer the outermost labelled ticks. If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
 5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the bar), then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
 6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again. Call resolve_questions at most 3 times per panel.
 
