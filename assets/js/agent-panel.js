@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { createAgentRunner, parsePages, cellSamplePolygon, DEFAULT_LLM, DEFAULT_DECISION_MODEL } = CM;
+  const { createAgentRunner, parsePages, cellSamplePolygon, DEFAULT_LLM, DEFAULT_REVIEWER } = CM;
 
   // Agent card of the heatmap tool: OpenRouter key and model choice, running
   // and stopping the agent, its log, and the checks left for a human.
@@ -25,7 +25,7 @@
     };
     const saved = load();
     $('agent-llm').value = saved.llm || DEFAULT_LLM;
-    $('agent-jev').value = saved.jev || DEFAULT_DECISION_MODEL;
+    $('agent-reviewer').value = saved.reviewer || DEFAULT_REVIEWER;
     $('agent-minconf').value = saved.minConfidence ?? 0.9;
     $('agent-steps').value = saved.maxSteps ?? 80;
     $('agent-base').value = saved.base || '';
@@ -36,7 +36,7 @@
     function save() {
       const s = {
         llm: $('agent-llm').value.trim(),
-        jev: $('agent-jev').value.trim(),
+        reviewer: $('agent-reviewer').value.trim(),
         minConfidence: Number($('agent-minconf').value),
         maxSteps: Number($('agent-steps').value),
         base: $('agent-base').value.trim(),
@@ -48,7 +48,7 @@
         // Storage can be unavailable (private windows, file://); settings then last for this visit.
       }
     }
-    for (const id of ['agent-llm', 'agent-jev', 'agent-minconf', 'agent-steps', 'agent-base', 'agent-key', 'agent-remember']) {
+    for (const id of ['agent-llm', 'agent-reviewer', 'agent-minconf', 'agent-steps', 'agent-base', 'agent-key', 'agent-remember']) {
       $(id).addEventListener('change', () => {
         save();
         updateButtons();
@@ -99,12 +99,9 @@
           for await (const page of await client.models.list(req)) out.push(...page.result.data);
           return out;
         };
-        const [llms, deciders] = await Promise.all([
-          collect({ inputModalities: 'image', supportedParameters: 'tools' }),
-          collect({ outputModalities: 'decisions' }),
-        ]);
+        // One list serves both pickers: the reviewer also needs images and tools.
+        const llms = await collect({ inputModalities: 'image', supportedParameters: 'tools' });
         fill('agent-llm-list', llms.filter((m) => !m.id.endsWith(':batch')));
-        fill('agent-jev-list', deciders);
       } catch (err) {
         modelsLoaded = false;
         console.warn('Could not list OpenRouter models', err);
@@ -116,7 +113,7 @@
       );
     }
     $('agent-llm').addEventListener('focus', loadModels);
-    $('agent-jev').addEventListener('focus', loadModels);
+    $('agent-reviewer').addEventListener('focus', loadModels);
 
     // ------------------------------------------------------------ run
 
@@ -165,16 +162,14 @@
 
     function onEvent(type, data) {
       const u = data.usage;
-      $('agent-status').textContent = `Step ${u.steps} · ${u.decisions} decisions · ${money(u.llmCost + u.decisionCost)}`;
+      $('agent-status').textContent = `Step ${u.steps} · ${u.reviews} reviews · ${money(u.llmCost + u.reviewCost)}`;
       if (type === 'assistant') log('assistant', data.text);
       else if (type === 'tool') log('tool', `${data.name}(${data.args && Object.keys(data.args).length ? JSON.stringify(data.args) : ''})`);
       else if (type === 'tool-error') log('error', `${data.name}: ${data.error}`);
-      else if (type === 'decision') {
+      else if (type === 'review') {
         const name = panelName(data.panelId);
-        log(data.applied ? 'decision' : 'escalated', `${name} · ${data.type.replaceAll('_', ' ')}: ${answerText(data.answer)} (${pct(data.confidence)})${data.applied ? '' : ' → needs review'}${data.error ? ` · ${data.error}` : ''}`);
+        log(data.applied ? 'review' : 'escalated', `${name} · ${data.type.replaceAll('_', ' ')}: ${answerText(data.answer)} (${pct(data.confidence)})${data.applied ? '' : ' → needs review'}${data.reason ? ` · ${data.reason}` : ''}${data.error ? ` · ${data.error}` : ''}`);
         renderReview();
-      } else if (type === 'decide') {
-        log('decision', `decide: ${Object.entries(data.answers || {}).map(([k, a]) => `${k} = ${a.type === 'noul' ? pct(a.noul) : `${a.choice ?? a.score} (${pct(a.confidence)})`}`).join('; ')}`);
       } else if (type === 'done') log('done', data.summary);
     }
 
@@ -202,22 +197,20 @@
       $('agent-log').replaceChildren();
       $('agent-status').dataset.idle = '';
       updateButtons();
-      log('tool', `${focus ? `Redoing ${panelName(focus.panelId)}` : 'Running'} with ${$('agent-llm').value.trim()} and ${$('agent-jev').value.trim()} on page${pages.length === 1 ? '' : 's'} ${pages.join(', ')}.`);
+      log('tool', `${focus ? `Redoing ${panelName(focus.panelId)}` : 'Running'} with ${$('agent-llm').value.trim()} and ${$('agent-reviewer').value.trim()} on page${pages.length === 1 ? '' : 's'} ${pages.join(', ')}.`);
       try {
         const sdk = await loadSdk();
-        const base = $('agent-base').value.trim();
         const out = await runner.run({
           client: makeClient(sdk, key),
           llmModel: $('agent-llm').value.trim() || DEFAULT_LLM,
-          decisionModel: $('agent-jev').value.trim() || DEFAULT_DECISION_MODEL,
-          decisionServerURL: base ? new URL(base).origin : undefined,
+          reviewModel: $('agent-reviewer').value.trim() || DEFAULT_REVIEWER,
           pages,
           maxSteps: Number($('agent-steps').value) || 80,
           signal: abort.signal,
           onEvent,
           focus,
         });
-        $('agent-status').textContent = `Done: ${out.usage.steps} steps, ${out.usage.decisions} decisions, ${money(out.usage.llmCost + out.usage.decisionCost)}.`;
+        $('agent-status').textContent = `Done: ${out.usage.steps} steps, ${out.usage.reviews} reviews, ${money(out.usage.llmCost + out.usage.reviewCost)}.`;
       } catch (err) {
         if (err.name === 'AbortError' || abort?.signal.aborted) {
           log('error', 'Stopped.');
@@ -249,7 +242,7 @@
 
     // ------------------------------------------------------------ review
 
-    // Needs review: checks the decision model was not sure enough about, and
+    // Needs review: checks the reviewer was not sure enough about, and
     // panels whose extraction was rejected. Human answers apply at once and
     // are logged with source "human".
     let reviewTimer = null;

@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PROXY_PORT) || 8787;
 const UPSTREAM = 'https://openrouter.ai';
-const ALLOWED_PATHS = /^\/api\/(v1|alpha)\//;
+const ALLOWED_PATHS = /^\/api\/v1\//;
 const ALLOWED_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 function readKey() {
@@ -51,7 +51,7 @@ createServer(async (req, res) => {
   if (!/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(req.headers.host || '')) return end(res, 403, 'Host not allowed.');
   if (req.method === 'OPTIONS') return end(res, 204);
   const path = new URL(req.url, 'http://x').pathname;
-  if (!ALLOWED_PATHS.test(path)) return end(res, 404, 'Only /api/v1/ and /api/alpha/ are forwarded.');
+  if (!ALLOWED_PATHS.test(path)) return end(res, 404, 'Only /api/v1/ is forwarded.');
   try {
     const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await readBody(req);
     const headers = { authorization: `Bearer ${KEY}`, 'content-type': req.headers['content-type'] || 'application/json' };

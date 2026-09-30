@@ -76,7 +76,7 @@
           <h2>Agent</h2>
           <span id="agent-badge" class="badge">off</span>
         </div>
-        <p class="muted small agent-note">An LLM finds the heatmaps and calibrates them; a decision model (Jev) checks each step. It uses your own OpenRouter key and runs in this browser. <b>Page images and extracted values are sent to OpenRouter and the model providers you pick.</b></p>
+        <p class="muted small agent-note">An LLM finds the heatmaps and calibrates them; a smaller vision model reviews each panel. It uses your own OpenRouter key and runs in this browser. <b>Page images and extracted values are sent to OpenRouter and the model providers you pick.</b></p>
         <details class="settings" id="agent-settings" open>
           <summary>Models and key</summary>
           <label class="field">OpenRouter API key
@@ -87,9 +87,8 @@
             <input id="agent-llm" type="text" list="agent-llm-list" spellcheck="false">
             <datalist id="agent-llm-list"></datalist>
           </label>
-          <label class="field">Decision model
-            <input id="agent-jev" type="text" list="agent-jev-list" spellcheck="false">
-            <datalist id="agent-jev-list"></datalist>
+          <label class="field">Reviewer (vision and tools)
+            <input id="agent-reviewer" type="text" list="agent-llm-list" spellcheck="false">
           </label>
           <div class="row">
             <label class="field">Min. confidence <input id="agent-minconf" type="number" min="0.5" max="1" step="0.01" value="0.9" class="num"></label>

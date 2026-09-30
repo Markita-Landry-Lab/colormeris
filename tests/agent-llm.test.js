@@ -2,38 +2,69 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import CM from './load.js';
 
-const { batchDecisionRequests, toDecisionRequest, fromDecisionAnswer, pruneImages, parsePages, llmTools, validateRunnerTool, toolResultText } = CM;
+const { toReviewItem, reviewContent, reviewTool, parseReviewAnswers, fromReviewAnswer, panelRegion, colorbarRegion, pruneImages, parsePages, llmTools, validateRunnerTool, toolResultText } = CM;
 
 const gridQ = (labelCounts) => ({
   type: 'confirm_grid_size',
   evidence: { detected: { rows: 4, cols: 5 }, rowConfidence: 2.1, colConfidence: 1.1, uncertain: true, labelCounts },
 });
 
-test('grid size: noul when labels agree or are missing, choice when they differ', () => {
-  const same = toDecisionRequest(gridQ({ rows: 0, cols: 0 }));
-  assert.equal(same.questions.answer.type, 'noul');
-  assert.deepEqual(fromDecisionAnswer(gridQ({ rows: 0, cols: 0 }), same, { type: 'noul', noul: 0.8 }), { answer: { rows: 4, cols: 5 }, confidence: 0.8 });
+test('grid size: a labels option only when the label count differs', () => {
+  const sq = gridQ({ rows: 0, cols: 0 });
+  const same = toReviewItem(sq);
+  assert.deepEqual(Object.keys(same.options), ['detected', 'neither']);
+  assert.deepEqual(fromReviewAnswer(sq, same, { answer: 'detected', confidence: 0.8, reason: 'ok' }), { answer: { rows: 4, cols: 5 }, confidence: 0.8, reason: 'ok' });
+  // "neither" keeps the detected size with little confidence, so a human decides.
+  const n = fromReviewAnswer(sq, same, { answer: 'neither', confidence: 0.9, reason: 'one column short' });
+  assert.deepEqual(n.answer, { rows: 4, cols: 5 });
+  assert.ok(Math.abs(n.confidence - 0.1) < 1e-9);
 
   const q = gridQ({ rows: 4, cols: 6 });
-  const req = toDecisionRequest(q);
-  assert.equal(req.questions.answer.type, 'choice');
-  assert.deepEqual(req.alt, { rows: 4, cols: 6 });
-  assert.deepEqual(fromDecisionAnswer(q, req, { type: 'choice', choice: 'labels', confidence: 0.95 }), { answer: { rows: 4, cols: 6 }, confidence: 0.95 });
-  assert.deepEqual(fromDecisionAnswer(q, req, { type: 'choice', choice: 'detected', probabilities: { detected: 0.7, labels: 0.3 } }), { answer: { rows: 4, cols: 5 }, confidence: 0.7 });
+  const item = toReviewItem(q);
+  assert.deepEqual(Object.keys(item.options), ['detected', 'labels', 'neither']);
+  assert.deepEqual(fromReviewAnswer(q, item, { answer: 'labels', confidence: 0.95 }).answer, { rows: 4, cols: 6 });
 });
 
 test('flagged cells and final acceptance map to the answer schema', () => {
   const flag = { type: 'classify_flagged', evidence: { row: 1, col: 2, rowLabel: 'R2', colLabel: 'C3', rgb: [255, 0, 0], deltaE: 47, maxDeltaE: 10, value: 23 } };
-  const req = toDecisionRequest(flag, { flaggedCount: 1, cellCount: 20 });
-  assert.equal(req.state.cell.color, '#ff0000');
-  assert.deepEqual(Object.keys(req.questions.answer.criteria), ['keep', 'exclude', 'recheck_colorbar']);
-  assert.deepEqual(fromDecisionAnswer(flag, req, { type: 'choice', choice: 'exclude', confidence: 0.9 }), { answer: 'exclude', confidence: 0.9 });
+  const item = toReviewItem(flag, { flaggedCount: 1, cellCount: 20 });
+  assert.equal(item.evidence.color, '#ff0000');
+  assert.match(item.instructions, /row 2, column 3/);
+  assert.deepEqual(Object.keys(item.options), ['keep', 'exclude', 'recheck_colorbar']);
+  assert.deepEqual(fromReviewAnswer(flag, item, { answer: 'exclude', confidence: 1.4, reason: 'an asterisk' }), { answer: 'exclude', confidence: 1, reason: 'an asterisk' });
 
   const acc = { type: 'confirm_extraction', evidence: { rows: 4, cols: 5, flaggedCount: 0 } };
-  const r2 = toDecisionRequest(acc, { valueRange: [0, 100], tickRange: [0, 100] });
-  assert.deepEqual(fromDecisionAnswer(acc, r2, { type: 'noul', noul: 0.97 }), { answer: 'accept', confidence: 0.97 });
-  assert.deepEqual(fromDecisionAnswer(acc, r2, { type: 'noul', noul: 0.2 }), { answer: 'reject', confidence: 0.8 });
-  assert.throws(() => fromDecisionAnswer(acc, r2, undefined), /no answer/);
+  const r2 = toReviewItem(acc, { valueRange: [0, 100], tickRange: [0, 100] });
+  assert.deepEqual(fromReviewAnswer(acc, r2, { answer: 'reject', confidence: 0.7, reason: 'x' }), { answer: 'reject', confidence: 0.7, reason: 'x' });
+  assert.equal(fromReviewAnswer(acc, r2, { answer: 'accept' }).confidence, null);
+  assert.throws(() => fromReviewAnswer(acc, r2, undefined), /no valid answer/);
+  assert.throws(() => fromReviewAnswer(acc, r2, { answer: 'maybe' }), /"maybe"/);
+});
+
+test('one reviewer request per panel: checks as text, images, a forced answer tool', () => {
+  const acc = { type: 'confirm_extraction', evidence: { rows: 4, cols: 5, flaggedCount: 0 } };
+  const tick = { type: 'confirm_tick_order', evidence: { ticks: [{ t: 0, value: 1 }, { t: 1, value: 0 }] } };
+  const items = [acc, tick].map((q) => ({ q, item: toReviewItem(q, { fit: { medianDeltaE: 1.2 } }) }));
+  const images = [{ label: 'Figure', note: 'n', dataUrl: 'data:a' }, { label: 'Reconstruction', note: 'n', dataUrl: 'data:b' }];
+  const { content, keys } = reviewContent({ panelName: 'Fig 2f', items, images });
+  assert.deepEqual(keys, ['q0', 'q1']);
+  assert.match(content[0].text, /Panel "Fig 2f"[\s\S]*medianDeltaE[\s\S]*"q1"/);
+  assert.equal(content.filter((c) => c.type === 'image_url').length, 2);
+  const tool = reviewTool(items, keys);
+  assert.deepEqual(tool.function.parameters.properties.answers.properties.q0.properties.answer.enum, ['accept', 'reject']);
+  assert.deepEqual(tool.function.parameters.properties.answers.required, ['q0', 'q1']);
+
+  const call = { toolCalls: [{ function: { name: 'answer', arguments: '{"answers":{"q0":{"answer":"accept","confidence":0.9,"reason":"ok"}}}' } }] };
+  assert.equal(parseReviewAnswers(call).q0.answer, 'accept');
+  assert.equal(parseReviewAnswers({ content: 'Here: {"q0": {"answer": "reject"}}' }).q0.answer, 'reject');
+  assert.throws(() => parseReviewAnswers({ content: 'no idea' }), /no answers/);
+});
+
+test('review regions cover the grid and colorbar, clamped to the page', () => {
+  const panel = { grid: { corners: [{ x: 20, y: 30 }, { x: 200, y: 30 }, { x: 200, y: 150 }, { x: 20, y: 150 }] }, colorbar: { start: { x: 260, y: 40 }, end: { x: 260, y: 140 }, halfWidth: 6 } };
+  assert.deepEqual(panelRegion(panel, { width: 300, height: 400 }), { x0: 0, y0: 0, x1: 300, y1: 210 });
+  assert.deepEqual(colorbarRegion(panel, { width: 1000, height: 1000 }), { x0: 190, y0: 0, x1: 330, y1: 210 });
+  assert.equal(panelRegion({ grid: {}, colorbar: {} }, { width: 1, height: 1 }), null);
 });
 
 test('pruneImages keeps only the newest images', () => {
@@ -52,28 +83,27 @@ test('parsePages reads ranges and clamps to the page count', () => {
   assert.throws(() => parsePages('a', 10), /Cannot read/);
 });
 
-test('LLM tools have unique names; decide questions are checked', () => {
+test('LLM tools have unique names; runner tool arguments are checked', () => {
   const names = llmTools().map((t) => t.function.name);
   assert.equal(new Set(names).size, names.length);
-  assert.ok(names.includes('view_page') && names.includes('set_grid') && !names.includes('answer_question'));
-  assert.deepEqual(validateRunnerTool('decide', { state: 'x', questions: { a: { type: 'noul', instructions: 'Is it?' } } }), []);
-  assert.match(validateRunnerTool('decide', { state: 'x', questions: { a: { type: 'choice', instructions: 'Which?', criteria: { only: '1' } } } })[0], /at least two options/);
-  assert.match(validateRunnerTool('decide', { state: 'x', questions: {} })[0], /at least one/);
+  assert.ok(names.includes('view_page') && names.includes('set_grid') && !names.includes('answer_question') && !names.includes('decide'));
+  assert.deepEqual(validateRunnerTool('view_pages_overview', { from: 1, to: 3 }), []);
+  assert.ok(validateRunnerTool('view_pages_overview', { from: 1 }).length);
   assert.match(toolResultText('x'.repeat(20), 5), /cut 15 characters/);
 });
 
-test('many flagged cells map to one panel-level decision', () => {
+test('many flagged cells map to one panel-level check', () => {
   const q = { type: 'classify_flagged_cells', evidence: { count: 90, total: 99, medianDeltaE: 30, maxDeltaE: 50, threshold: 10, sampleColors: [[0, 0, 0]], cells: [] } };
-  const req = CM.toDecisionRequest(q);
-  assert.deepEqual(Object.keys(req.questions.answer.criteria), ['keep_all', 'exclude_all', 'recheck_colorbar']);
-  assert.deepEqual(req.state.sampleColors, ['#000000']);
-  assert.deepEqual(CM.fromDecisionAnswer(q, req, { type: 'choice', choice: 'recheck_colorbar', confidence: 0.94 }), { answer: 'recheck_colorbar', confidence: 0.94 });
+  const item = toReviewItem(q);
+  assert.deepEqual(Object.keys(item.options), ['keep_all', 'exclude_all', 'recheck_colorbar']);
+  assert.deepEqual(item.evidence.sampleColors, ['#000000']);
+  assert.equal(fromReviewAnswer(q, item, { answer: 'recheck_colorbar', confidence: 0.94 }).answer, 'recheck_colorbar');
 });
 
-test('decisionAdvice tells the LLM what to fix', () => {
-  const advice = CM.decisionAdvice(
+test('reviewAdvice tells the LLM what to fix, with the reviewer\'s reason', () => {
+  const advice = CM.reviewAdvice(
     [
-      { type: 'confirm_extraction', panelId: 'p1', answer: 'reject', applied: true },
+      { type: 'confirm_extraction', panelId: 'p1', answer: 'reject', applied: true, reason: 'grid is one row short' },
       { type: 'classify_flagged_cells', panelId: 'p1', answer: 'recheck_colorbar', applied: true },
       { type: 'classify_flagged', panelId: 'p1', answer: 'recheck_colorbar', applied: true },
       { type: 'confirm_extraction', panelId: 'p2', answer: 'accept', applied: true },
@@ -81,7 +111,7 @@ test('decisionAdvice tells the LLM what to fix', () => {
     (id) => ({ p1: 'Fig 2f', p2: 'Fig 3a' })[id],
   );
   assert.equal(advice.length, 2);
-  assert.match(advice[0], /^Fig 2f: the extraction was rejected/);
+  assert.match(advice[0], /^Fig 2f: the extraction was rejected\. The reviewer said: "grid is one row short"/);
   assert.match(advice[1], /recheck the colorbar/);
 });
 
@@ -110,18 +140,6 @@ test('normalizeArgs forgives nulls and at+t on add_tick', () => {
   assert.deepEqual(CM.validateAction('add_tick', r.args), []);
   assert.match(CM.validateAction('add_tick', { value: 3 })[0], /"at": \{"x": 606/);
   assert.deepEqual(CM.normalizeArgs('set_review', { status: null }).args, { status: null }, 'null kept where it is a value');
-});
-
-test('batchDecisionRequests puts several questions in one request', () => {
-  const acc = { type: 'confirm_extraction', evidence: { rows: 4, cols: 5, flaggedCount: 0 } };
-  const tick = { type: 'confirm_tick_order', evidence: { ticks: [{ t: 0, value: 1 }, { t: 1, value: 0 }] } };
-  const items = [acc, tick].map((q) => ({ q, req: toDecisionRequest(q, { fit: { medianDeltaE: 1.2 } }) }));
-  const b = batchDecisionRequests(items);
-  assert.deepEqual(b.keys, ['q0', 'q1']);
-  assert.deepEqual(Object.keys(b.questions), ['q0', 'q1']);
-  assert.equal(b.questions.q0.type, 'noul');
-  assert.equal(b.state.cases.q0.fit.medianDeltaE, 1.2);
-  assert.ok(b.state.cases.q1.ticks);
 });
 
 test('finishCheck refuses to stop after the first heatmap', () => {

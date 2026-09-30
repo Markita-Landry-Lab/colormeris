@@ -7,7 +7,7 @@
   } = CM;
 
   // Agent API: binds the typed actions of agent-schema.js to a live workspace
-  // and exposes them as window.colormeris, so an LLM or decision model can
+  // and exposes them as window.colormeris, so an LLM or a script can
   // drive the page without clicking pixels:
   //
   //   await colormeris.run('set_grid', {topLeft: {x: 40, y: 60}, bottomRight: {x: 520, y: 400}})

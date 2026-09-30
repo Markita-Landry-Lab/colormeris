@@ -1,6 +1,6 @@
 # Colormeris: notes for Claude sessions
 
-Colormeris is a static web app (Landry lab, UC Berkeley) that turns colors in scientific figures back into numbers. It has two tools: **heatmap** (one value per grid cell) and **IVIS** (signal inside regions on in vivo luminescence images). It also has an **agent layer**: a typed API plus an LLM + decision-model (Jev) agent that calibrates heatmaps by itself. Start with [README.md](README.md) for users and [docs/agent.md](docs/agent.md) for the agent. [docs/research.md](docs/research.md) has the literature, novelty and experiment plan.
+Colormeris is a static web app (Landry lab, UC Berkeley) that turns colors in scientific figures back into numbers. It has two tools: **heatmap** (one value per grid cell) and **IVIS** (signal inside regions on in vivo luminescence images). It also has an **agent layer**: a typed API plus an LLM agent that calibrates heatmaps by itself, checked by a smaller vision LLM (the reviewer). Start with [README.md](README.md) for users and [docs/agent.md](docs/agent.md) for the agent. [docs/research.md](docs/research.md) has the literature, novelty and experiment plan.
 
 ## Commands
 
@@ -34,7 +34,7 @@ There is no build step. Pages load plain classic scripts (not modules, so `file:
 | UI shell | `workspace.js` (pages, panels, grid/colorbar placement, undo, zip, tool switching; `ws` object with hooks), `viewer.js`, `loader.js` (pdf.js) |
 | Tools | `heatmap.js`, `ivis.js`, registered with `ws.addTool` (see TOOL_HOOKS at the top of `workspace.js`) |
 | Agent API | `agent-schema.js` (pure: action catalogue as JSON Schema, `validate`, `normalizeArgs`, state snapshot, typed questions `openQuestions`, `resultKeyHash`) and `agent.js` (binds it to the workspace as `window.colormeris`: `run`, `batch`, `tools`, `policy`, `log`) |
-| Heatmap agent | `agent-llm.js` (pure: system prompt, LLM tool list, question ↔ decision-model mapping, `decisionAdvice`, `createRetryGuard`, limits), `agent-runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, Jev calls), `agent-panel.js` (Agent card UI, Needs review) |
+| Heatmap agent | `agent-llm.js` (pure: system prompt, LLM tool list, question ↔ reviewer mapping (`toReviewItem`, `reviewTool`, `fromReviewAnswer`), `reviewAdvice`, `createRetryGuard`, limits), `agent-runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, one reviewer call per panel), `agent-panel.js` (Agent card UI, Needs review) |
 | Entry | `app.js` creates the workspace, both tools, `window.colormeris` and the agent panel |
 
 Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter SDK 1.4.10 as an IIFE bundle (`OpenRouterSDK.OpenRouter`, 834 KB, loaded lazily by the Agent card). `assets/img/` (which holds `example.pdf`, a 26-page paper on ionizable lipids for mRNA delivery, with heatmaps on pages 3 and 5) is git-ignored.
@@ -42,7 +42,7 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 ### Agent design decisions (and why)
 
 - **Coordinates** are always page pixels of the rendered page image. The LLM gets images of regions with rulers on the **bottom and right**, so image pixel (0, 0) is the region's top-left corner, and each note states `page = x0 + image / scale`. Rulers on the left and top shifted every placement by the ruler width divided by the zoom; this was measured as (+18, +8) px at 2.56×.
-- **Decisions**: `get_questions` produces typed questions (`confirm_grid_size`, `classify_flagged` for ≤ 3 flagged cells, `classify_flagged_cells` for more, `confirm_tick_order`, `confirm_extraction`). The runner sends each to the decision model (`/api/alpha/decisions`, `typesafe/jev-1.13`: choice, noul and score question types). `policy.minConfidence` (0.9) gates applying; lower answers are "escalated" to *Needs review*. `source: "human"` always applies.
+- **Reviewer**: `get_questions` produces typed questions (`confirm_grid_size`, `classify_flagged` for ≤ 3 flagged cells, `classify_flagged_cells` for more, `confirm_tick_order`, `confirm_extraction`). The runner sends each panel's open questions to the reviewer (`anthropic/claude-haiku-4.5` by default, via `chat.send`) in one request, with four images (figure, calibration overlay, reconstruction, colorbar zoom). Each question becomes a choice between named options; the reviewer must answer through a forced `answer` tool call with option, confidence and reason. The reason is passed on to the LLM in `reviewAdvice`. Jev (`/api/alpha/decisions`) was removed on 2026-09-30: it saw no images and was unsure on `confirm_extraction`. `policy.minConfidence` (0.9) gates applying; lower answers are "escalated" to *Needs review*. `source: "human"` always applies. The reviewer's confidence is self-reported, not calibrated.
 - **Reviews** (`panel.review`) are stored with the `resultHash` of the values they judged. They are `stale` once the values change; rejected panels get a red dot and Redo / Accept anyway in *Needs review*.
 - **Forgiving arguments**: `normalizeArgs` drops `null` optionals, and `add_tick` with both `at` and `t` uses `at`. Models did send both, which caused endless "give exactly one of t or at" loops.
 - **Snapping**: `set_colorbar` and `add_tick` (agent API only, `snap: false` to skip) move the LLM's rough points onto the colored strip and the tick marks (`refineColorbar`, `snapTick` in `colormap.js`). Measured on `example.pdf` page 5, Fig h: ends and ticks within 1 px. Ticks keep their page positions when the colorbar moves.
@@ -62,21 +62,21 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 - When the Browser pane is hidden, `requestAnimationFrame` is paused, so pdf.js page rendering (`open_url` of a PDF, `go_to_page`) stalls. Start the call without awaiting it, then take a `screenshot` (which advances frames) and poll.
 - `javascript_tool` calls time out after 45 s. Start long agent runs with a click and poll in separate calls.
 - Opening a file over an existing project calls `confirm()`; set `window.confirm = () => true` first.
-- The agent can be exercised without cost by assigning a mock `globalThis.OpenRouterSDK = { OpenRouter: class { get chat() {…} get alpha() {…} get models() {…} } }` before pressing *Run agent* (scripted `toolCalls` and decision answers).
+- The agent can be exercised without cost by assigning a mock `globalThis.OpenRouterSDK = { OpenRouter: class { get chat() {…} get models() {…} } }` before pressing *Run agent*. Both the LLM and the reviewer go through `chat.send`; tell them apart by `chatRequest.model` (the reviewer's request has `toolChoice` forced to `answer`).
 - Synthetic test figure with known truth: draw a viridis grid on a canvas (e.g. cells from (237,143) to (887,663), colorbar at x 960–985, y 150–650, ticks 0/50/100), pass `canvas.toDataURL()` to `open_url`, and compare the agent's `set_grid` / `set_colorbar` against it.
 
 ## Status (2026-09-30)
 
 Done and committed (latest first): `e11c195` (forgiving `add_tick`, retry caps, generated docs), `3842612` (ruler offset fix, persistent reviews, proxy), `d5a8c89` (OpenRouter agent), `00b009b` (typed agent API), then the IVIS tool and earlier heatmap work.
 
-Verified with real runs on `example.pdf` page 5 (Fig 2f, "Oxidative stress", 9 × 12): the grid and colorbar land on the figure at the first try; no `add_tick` errors. Jev answered `confirm_extraction` with only 56–64% confidence, so it went to *Needs review*.
+Verified with real runs on `example.pdf` page 5 (Fig 2f, "Oxidative stress", 9 × 12): the grid and colorbar land on the figure at the first try; no `add_tick` errors. Jev (since removed) answered `confirm_extraction` with only 56–64% confidence. The vision reviewer that replaced it has not been run for real yet.
 
 ### Open issues and next steps
 
 1. *Redo with agent* (rejected panel → focused rerun) is implemented but not yet run for real.
-2. Jev is unsure on `confirm_extraction`. It could get more evidence, e.g. reconstruction ΔE statistics, label/grid count agreement, or tick coverage of the value range.
-3. The LLM can set rows/cols directly (`set_grid` with rows/cols, `set_grid_size`), which skips the Jev grid-size check.
+2. The vision reviewer is only tested with mocks. Run it on `example.pdf` page 5 and check that its answers and reasons are sensible, and whether its self-reported confidence is too high to gate on 0.9.
+3. The LLM can set rows/cols directly (`set_grid` with rows/cols, `set_grid_size`), which skips the reviewer's grid-size check.
 4. Exclusions (`excluded` in results) are not applied to the CSV exports, and `agent/*.json` logs are not reloaded from a zip.
 5. No typed questions yet for tick-label reading or colorbar direction (would need OCR/vision evidence).
 6. The agent only handles heatmaps, not IVIS.
-7. The research plan in [docs/research.md](docs/research.md) (synthetic benchmark, VLM baselines, IVIS validation, Jev calibration curves) has not been started.
+7. The research plan in [docs/research.md](docs/research.md) (synthetic benchmark, VLM baselines, IVIS validation, reviewer calibration curves) has not been started.

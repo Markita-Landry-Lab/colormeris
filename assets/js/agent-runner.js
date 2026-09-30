@@ -1,18 +1,19 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, batchDecisionRequests, fromDecisionAnswer, decisionAdvice, createRetryGuard, progressNote, finishCheck, pruneImages, toolResultText,
+    AGENT_SYSTEM_PROMPT, REVIEWER_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toReviewItem, reviewContent, reviewTool, parseReviewAnswers, fromReviewAnswer, panelRegion, colorbarRegion, reviewAdvice,
+    createRetryGuard, progressNote, finishCheck, pruneImages, toolResultText,
     bilinear, cellSamplePolygon, colorAtT, rgbToHex, ticksWithT, renderPdfPage,
   } = CM;
 
   // Runs the extraction agent: an LLM (any OpenRouter chat model with vision
   // and tools) drives the page through the typed agent API and looks at it
-  // through rendered page images with pixel rulers; a decision model (Jev or
-  // another OpenRouter decisions model) answers the typed checks. `client` is
-  // an OpenRouter SDK client (or anything with chat.send and
-  // alpha.decisions.create).
+  // through rendered page images with pixel rulers; a reviewer (a smaller
+  // vision model) looks at each panel with overlays and answers the typed
+  // checks. `client` is an OpenRouter SDK client (or anything with chat.send).
 
   const MAX_VIEW = 1024; // longest side of images sent to the LLM
+  const REVIEW_VIEW = 768; // and to the reviewer, which gets several per panel
   // Rulers sit outside the picture on the right and bottom, so image pixel
   // (0, 0) is exactly the top-left corner of the region shown. (With rulers on
   // the left and top, models that measure from the image corner were off by
@@ -32,7 +33,7 @@
     }
 
     // Page (or region) image with rulers in page pixels and optional overlay.
-    function renderView({ region, overlay = 'none' } = {}) {
+    function renderView({ region, overlay = 'none', maxSide = MAX_VIEW } = {}) {
       const page = app.pages.get(ws.currentPage());
       if (!page) throw new Error('No page is shown.');
       const src = page.canvas;
@@ -42,7 +43,7 @@
       const w = x1 - x0;
       const h = y1 - y0;
       if (w < 4 || h < 4) throw new Error('Region is too small or outside the page.');
-      const scale = Math.min(6, MAX_VIEW / Math.max(w, h));
+      const scale = Math.min(6, maxSide / Math.max(w, h));
       const W = Math.round(w * scale);
       const H = Math.round(h * scale);
       const out = document.createElement('canvas');
@@ -180,11 +181,24 @@
       return { dataUrl: out.toDataURL('image/jpeg', 0.85), note: `Pages ${from}–${to} of ${n}.` };
     }
 
-    // ------------------------------------------------------------ decisions
+    // ------------------------------------------------------------ review
 
-    async function decide(client, model, body, signal, serverURL) {
-      const res = await client.alpha.decisions.create({ decisionsRequest: { model, ...body } }, { signal, ...(serverURL ? { serverURL } : {}) });
-      return res;
+    // Images the reviewer judges a panel from: the figure, both overlays, and
+    // a zoom on the colorbar. The panel's page must be the current one.
+    function reviewImages(panel) {
+      const { canvas } = app.pages.get(ws.currentPage());
+      const size = { width: canvas.width, height: canvas.height };
+      const region = panelRegion(panel, size);
+      if (!region) return [];
+      const view = (label, args) => ({ label, ...renderView({ ...args, maxSide: REVIEW_VIEW }) });
+      const out = [
+        view('Figure', { region }),
+        view('Calibration overlay', { region, overlay: 'calibration' }),
+        view('Reconstruction', { region, overlay: 'reconstruction' }),
+      ];
+      const bar = colorbarRegion(panel, size);
+      if (bar) out.push(view('Colorbar zoom with calibration overlay', { region: bar, overlay: 'calibration' }));
+      return out;
     }
 
     // Context a question needs beyond its own evidence.
@@ -211,13 +225,15 @@
 
     // ------------------------------------------------------------ run
 
-    // settings: {client, llmModel, decisionModel, pages: [n], maxSteps,
-    // decisionServerURL, signal, onEvent(type, data), focus}. `focus`
+    // settings: {client, llmModel, reviewModel, pages: [n], maxSteps,
+    // signal, onEvent(type, data), focus}. `focus`
     // ({panelId, note}) asks the agent to fix one rejected panel.
     async function run(settings) {
-      const { client, llmModel, decisionModel, pages, maxSteps = 60, signal, onEvent = () => {}, decisionServerURL, focus } = settings;
-      let decisionCache = null;
-      const usage = { llmCost: 0, decisionCost: 0, decisionMs: 0, promptTokens: 0, completionTokens: 0, steps: 0, decisions: 0 };
+      const { client, llmModel, reviewModel, pages, maxSteps = 60, signal, onEvent = () => {}, focus } = settings;
+      // Same evidence, same answer: a question id contains the hash of what
+      // it judges, so repeated resolves never pay twice for it.
+      const reviewCache = new Map();
+      const usage = { llmCost: 0, reviewCost: 0, reviewMs: 0, promptTokens: 0, completionTokens: 0, steps: 0, reviews: 0 };
       const emit = (type, data) => onEvent(type, { ...data, usage: { ...usage } });
       // What the model has looked at and built, so it cannot stop after the
       // first heatmap (see finishCheck).
@@ -229,72 +245,78 @@
           .map((p) => ({ id: p.id, name: p.name, page: p.page, ready: !ws.resultFor(p).error, started: !!(p.grid.corners || p.colorbar.start || p.grid.rowLabels.length || p.grid.colLabels.length) }));
       const progress = () => progressNote({ pages, viewedPages, panels: runPanels(), currentPage: ws.currentPage() });
 
+      // One reviewer call per panel: its images and all its open checks.
+      async function reviewPanel(pid, group) {
+        await api.run('select_panel', { panelId: pid });
+        const panel = app.project.panels.find((p) => p.id === pid);
+        const context = await panelContext(pid);
+        const items = group.map((q) => ({ q, item: toReviewItem(q, context) }));
+        const images = reviewImages(panel);
+        const { content, keys } = reviewContent({ panelName: panel.name, items, images });
+        const t0 = performance.now();
+        const res = await client.chat.send(
+          {
+            chatRequest: {
+              model: reviewModel,
+              messages: [{ role: 'system', content: REVIEWER_PROMPT }, { role: 'user', content }],
+              tools: [reviewTool(items, keys)],
+              toolChoice: { type: 'function', function: { name: 'answer' } },
+              maxTokens: 2048,
+              temperature: 0,
+            },
+          },
+          { signal },
+        );
+        usage.reviewCost += res.usage?.cost || 0;
+        usage.reviewMs += performance.now() - t0;
+        usage.reviews++;
+        const answers = parseReviewAnswers(res.choices?.[0]?.message);
+        return items.map(({ q, item }, i) => {
+          const raw = answers[keys[i]];
+          fromReviewAnswer(q, item, raw); // throws on an invalid answer, so it is not cached
+          reviewCache.set(q.id, { item, raw });
+          return q.id;
+        });
+      }
+
       async function resolveQuestions(panelId) {
         const qr = await api.run('get_questions', panelId ? { panelId } : {});
         if (!qr.ok) return qr;
         // Skip questions already sent to a human in this run.
         const open = qr.result.filter((q) => !q.escalated);
-        const contexts = new Map();
-        // Same evidence, same answer: a question id contains the hash of what
-        // it judges, so repeated resolves never pay twice for it.
-        const cache = (decisionCache ??= new Map());
-        const ready = [];
-        for (const q of open) {
+        const errors = new Map(); // q.id → message
+        const byPanel = new Map();
+        for (const q of open.filter((x) => !reviewCache.has(x.id))) byPanel.set(q.panelId, [...(byPanel.get(q.panelId) || []), q]);
+        const back = ws.activePanel()?.id;
+        for (const [pid, group] of byPanel) {
           try {
-            if (!contexts.has(q.panelId)) contexts.set(q.panelId, panelContext(q.panelId));
-            ready.push({ q, req: toDecisionRequest(q, await contexts.get(q.panelId)) });
+            await reviewPanel(pid, group);
           } catch (err) {
             if (signal?.aborted) throw err;
-            ready.push({ q, error: err.message });
+            for (const q of group) errors.set(q.id, err.message);
           }
         }
-        const pending = ready.filter((x) => !x.error && !cache.has(x.q.id));
-        const answers = new Map(); // q.id → raw answer
-        const call = async (group) => {
-          const t0 = performance.now();
-          const b = batchDecisionRequests(group);
-          const res = await decide(client, decisionModel, { state: b.state, questions: b.questions }, signal, decisionServerURL);
-          usage.decisionCost += res.usage?.cost || 0;
-          usage.decisionMs += performance.now() - t0;
-          usage.decisions++;
-          group.forEach((x, i) => answers.set(x.q.id, res.answers?.[b.keys[i]]));
-        };
-        if (pending.length) {
-          try {
-            await call(pending);
-          } catch (err) {
-            if (signal?.aborted) throw err;
-            // The batch failed as a whole (or one question was malformed): ask one by one.
-            if (pending.length > 1) await Promise.all(pending.map((x) => call([x]).catch((e) => { if (signal?.aborted) throw e; x.error = e.message; })));
-            else pending[0].error = err.message;
-          }
-        }
-        const outcomes = ready.map((x) => {
-          if (x.error) return { q: x.q, error: x.error };
-          try {
-            const raw = cache.has(x.q.id) ? cache.get(x.q.id) : answers.get(x.q.id);
-            const { answer, confidence } = fromDecisionAnswer(x.q, x.req, raw);
-            if (!cache.has(x.q.id)) cache.set(x.q.id, raw);
-            return { q: x.q, answer, confidence };
-          } catch (err) {
-            return { q: x.q, error: err.message };
-          }
-        });
+        if (back && byPanel.size) await api.run('select_panel', { panelId: back });
         const results = [];
-        // Answer one by one: applying one decision can change the others.
-        for (const o of outcomes) {
-          if (o.error) {
-            results.push({ type: o.q.type, panelId: o.q.panelId, error: o.error });
+        // Answer one by one: applying one answer can change the others.
+        for (const q of open) {
+          let out;
+          try {
+            if (errors.has(q.id)) throw new Error(errors.get(q.id));
+            const { item, raw } = reviewCache.get(q.id);
+            out = fromReviewAnswer(q, item, raw);
+          } catch (err) {
+            results.push({ type: q.type, panelId: q.panelId, error: err.message });
             continue;
           }
-          const r = await api.run('answer_question', { questionId: o.q.id, answer: o.answer, confidence: o.confidence ?? 0, source: 'decision-model', model: decisionModel });
-          const item = { type: o.q.type, panelId: o.q.panelId, evidence: o.q.evidence, answer: o.answer, confidence: o.confidence, applied: r.ok ? r.result.applied : false, ...(r.ok ? {} : { error: r.error }) };
+          const r = await api.run('answer_question', { questionId: q.id, answer: out.answer, confidence: out.confidence ?? 0, source: 'reviewer', model: reviewModel });
+          const item = { type: q.type, panelId: q.panelId, evidence: q.evidence, answer: out.answer, confidence: out.confidence, reason: out.reason, applied: r.ok ? r.result.applied : false, ...(r.ok ? {} : { error: r.error }) };
           results.push(item);
-          emit('decision', item);
+          emit('review', item);
         }
         const panelName = (id) => app.project.panels.find((p) => p.id === id)?.name || id;
-        const advice = decisionAdvice(results, panelName);
-        return { ok: true, result: { decisions: results, advice, stillOpen: (await api.run('get_questions', panelId ? { panelId } : {})).result?.length ?? 0, next: progress() } };
+        const advice = reviewAdvice(results, panelName);
+        return { ok: true, result: { reviews: results, advice, stillOpen: (await api.run('get_questions', panelId ? { panelId } : {})).result?.length ?? 0, next: progress() } };
       }
 
       async function callTool(name, args) {
@@ -318,13 +340,6 @@
         }
         if (name === 'view_pages_overview') return { ok: true, image: await renderOverview(args.from, args.to) };
         if (name === 'resolve_questions') return resolveQuestions(args.panelId);
-        if (name === 'decide') {
-          const res = await decide(client, decisionModel, { state: args.state, questions: args.questions }, signal, decisionServerURL);
-          usage.decisionCost += res.usage?.cost || 0;
-          usage.decisions++;
-          emit('decide', { questions: args.questions, answers: res.answers });
-          return { ok: true, result: res.answers };
-        }
         if (name === 'finish' && !focus) {
           const why = finishCheck({ pages, viewedPages, panels: runPanels(), ...finishState });
           if (why) {

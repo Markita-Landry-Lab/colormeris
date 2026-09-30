@@ -28,6 +28,9 @@ Working notes from the 2026-09 planning sessions. Items marked † were recalled
 
 ### Decision models (Jev and similar)
 
+Colormeris first used Jev for its typed checks. It has been replaced by a smaller vision LLM as reviewer (default `anthropic/claude-haiku-4.5`), because Jev saw only numbers, never the figure, and was unsure on the final check (56–64% on `confirm_extraction`). The reviewer sees the figure, the overlays and a colorbar zoom, and gives a reason with each answer. Its confidence is self-reported, so it must be calibrated before it can gate anything.
+
+
 - **Jev** (TypeSafe AI, released 2026-09-15): a non-autoregressive "System 1" model that returns typed, calibrated decisions (choice with probabilities, noul = probability a statement is true, score) instead of text. On OpenRouter it is served at `POST /api/alpha/decisions` with `{model, state, questions}` → `{answers, usage}`; the SDK call is `client.alpha.decisions.create({ decisionsRequest })`. Models: `typesafe/jev-1.13`, `~typesafe/jev-latest`. [OpenRouter tutorial](https://openrouter.ai/blog/tutorials/how-to-use-jev/), [TypeSafe docs](https://docs.typesafe.ai/introduction)
 - Other OpenRouter decision models (`output_modalities=decisions`): `upstage/solar-decide`, `respan/span-01(-lite)`, `jaredpalmer/kev-4b`.
 
@@ -40,7 +43,7 @@ Likely novel or underserved:
 1. **Quantifying published IVIS (bioluminescence) figures**: separating the overlay from the photo by CIELAB chroma, ROI totals like total flux and radiance, regions copied into every animal box, and a scale bar. Chart work covers statistical charts, not luminescence overlays. Before claiming "first", run a targeted prior-art search ("IVIS figure re-quantification", "bioluminescence image digitization").
 2. **Verifiable extraction**: a CIEDE2000 ΔE and flag for every cell, a reconstruction overlay, and the sampled RGB kept with each value. This contrasts with VLM extraction, which gives no per-value confidence.
 3. **Reproducible project archives**: source, page images, calibration, data, and now the agent's action and decision logs.
-4. **Agent contribution**: calibrated, typed decisions (Jev) decide when the agent acts on its own and when it hands off to a human, with an audit trail. This is a human-in-the-loop design where people review only the uncertain steps. Pair it with a typed action API rather than pixel clicking, and keep the decision layer model-agnostic (Jev is one backend) to avoid tying the paper to a new commercial model.
+4. **Agent contribution**: typed checks answered by a separate, smaller vision reviewer decide when the agent acts on its own and when it hands off to a human, with an audit trail. This is a human-in-the-loop design where people review only the uncertain steps. Pair it with a typed action API rather than pixel clicking, and keep the reviewer model-agnostic (any OpenRouter vision model).
 
 Suggested framing: "a human-in-the-loop, auditable tool for recovering quantitative data from color-encoded figures in the biomedical literature, including (to our knowledge) the first workflow for ROI quantification of published IVIS images."
 
@@ -51,9 +54,9 @@ Suggested framing: "a human-in-the-loop, auditable tool for recovering quantitat
 3. **IVIS validation**: raw Living Image data against figure extraction (total flux and radiance correlation, Bland–Altman plots, preservation of group ranking and fold-change), after JPEG, downsampling and PDF degradation.
 4. **Reproducibility across users**: 3–5 users, measuring ICC and time.
 5. **Agent-specific**:
-   - A reliability diagram of Jev confidence against actual error.
+   - A reliability diagram of the reviewer's confidence against actual error (self-reported confidence needs calibration).
    - A curve of human effort against accuracy as the escalation threshold varies.
-   - A four-way comparison: VLM computer use, LLM + typed API, LLM + Jev, and a human.
+   - A four-way comparison: VLM computer use, LLM + typed API, LLM + reviewer, and a human.
    - Success rate on the first attempt.
 6. **Scientific use case**: a meta-analysis that pools IVIS data or heatmap values across published delivery studies (LNP, AAV and so on).
 

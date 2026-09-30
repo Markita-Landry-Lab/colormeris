@@ -4,11 +4,11 @@
 
   // Pure parts of the extraction agent (agent-runner.js runs it): the system
   // prompt, the tools the LLM sees, how typed questions become requests to a
-  // decision model (Jev) and back, and trimming old images from the
-  // conversation. Messages use the OpenRouter SDK's camelCase shapes.
+  // reviewer (a smaller vision LLM) and back, and trimming old images from
+  // the conversation. Messages use the OpenRouter SDK's camelCase shapes.
 
   const DEFAULT_LLM = 'anthropic/claude-sonnet-5.5';
-  const DEFAULT_DECISION_MODEL = 'typesafe/jev-1.13';
+  const DEFAULT_REVIEWER = 'anthropic/claude-haiku-4.5';
 
   const SYSTEM_PROMPT = `You are the extraction agent of Colormeris, a tool that turns colors in scientific figures back into numbers. Your job: find every gridded heatmap on the pages you are given and calibrate one panel per heatmap so its values can be extracted. You act only through tools.
 
@@ -21,7 +21,7 @@ For each page:
 4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its middle. It snaps the line to the strip's centre line and each end to the first and last colored pixel (off the outline), and sets halfWidth from the strip width; read the note it returns. If it says no strip or no edge was found, place those points yourself on a zoomed view: on the centre line, just inside the colored strip, never on the black or grey outline and never short of the last color.
    Ticks: add at least two with add_tick, "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Use the outermost labelled ticks, and a middle one when there is one. add_tick snaps to the nearest tick mark; if its note says no mark was found (bars without marks), put "at" level with the middle of the label text. Read each label carefully (signs, decimals, exponents). If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
 5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the middle of the bar from end to end), then zoom on the colorbar alone with overlay "calibration": each orange tick dot must be level with its printed label and show the same number. Then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
-6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again. Call resolve_questions at most 3 times per panel.
+6. resolve_questions: a reviewer model looks at each panel with its overlays and answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with a confidence and a reason. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again. Call resolve_questions at most 3 times per panel.
 
 Errors and retries:
 - When a tool returns ok: false, read the error and change the arguments before calling again. Never repeat an identical call.
@@ -29,7 +29,6 @@ Errors and retries:
 - If a panel still fails its checks after two rounds of fixes, stop working on it. Leave it for the human and say so in finish.
 - Give each argument once, in the form its description asks for (e.g. add_tick takes either "at" or "t", never both).
 
-Use decide when a judgment is a clean choice you are unsure of (e.g. which of two readings of a label fits the other ticks). Do not guess silently.
 When every heatmap on every page is done, call finish with one line per panel and anything a human should check. The first finish is answered with a checklist: look at each page once more, calibrate any heatmap still missing, then call finish again. Keep your messages short.`;
 
   // Agent actions the LLM may call (see agent-schema.js). File, tool, IVIS
@@ -47,16 +46,6 @@ When every heatmap on every page is done, call finish with one line per panel an
     required: ['x0', 'y0', 'x1', 'y1'],
   };
 
-  const decisionQuestion = {
-    type: 'object',
-    properties: {
-      type: { enum: ['choice', 'noul', 'score'] },
-      instructions: { type: 'string' },
-      criteria: { description: 'choice: {option: description}; noul: optional {true: ..., false: ...}; score: array of 2–10 level descriptions, lowest first.' },
-    },
-    required: ['type', 'instructions'],
-  };
-
   // Tools handled by the runner itself.
   const RUNNER_TOOLS = {
     view_page: {
@@ -68,16 +57,8 @@ When every heatmap on every page is done, call finish with one line per panel an
       args: { type: 'object', properties: { from: { type: 'integer', minimum: 1 }, to: { type: 'integer', minimum: 1 } }, required: ['from', 'to'] },
     },
     resolve_questions: {
-      description: 'Send the open checks of a panel (or of all panels) to the decision model. Returns each decision, its confidence and whether it was applied or left for a human.',
+      description: 'Send the open checks of a panel (or of all panels) to the reviewer, a vision model that looks at the panel with overlays. Returns each answer, its confidence, the reviewer\'s reason and whether it was applied or left for a human.',
       args: { type: 'object', properties: { panelId: { type: 'string' } } },
-    },
-    decide: {
-      description: 'Ask the decision model your own typed questions about a state (text or JSON). Returns, per question key, the choice and probabilities (choice), the probability of true (noul) or the level (score).',
-      args: {
-        type: 'object',
-        properties: { state: { description: 'What the questions are about: a string or JSON.' }, questions: { type: 'object', description: 'Map of your key → question.' } },
-        required: ['state', 'questions'],
-      },
     },
     finish: {
       description: 'End the run with a short summary for the user.',
@@ -85,23 +66,9 @@ When every heatmap on every page is done, call finish with one line per panel an
     },
   };
 
-  function validateDecide(args) {
-    const errs = [];
-    const qs = args.questions;
-    if (!qs || typeof qs !== 'object' || Array.isArray(qs) || !Object.keys(qs).length) return ['args.questions: give at least one question'];
-    for (const [k, q] of Object.entries(qs)) {
-      errs.push(...validate(decisionQuestion, q, `args.questions.${k}`));
-      if (q?.type === 'choice' && (!q.criteria || typeof q.criteria !== 'object' || Array.isArray(q.criteria) || Object.keys(q.criteria).length < 2)) errs.push(`args.questions.${k}.criteria: a choice needs at least two options`);
-      if (q?.type === 'score' && (!Array.isArray(q.criteria) || q.criteria.length < 2 || q.criteria.length > 10)) errs.push(`args.questions.${k}.criteria: a score needs 2–10 levels`);
-    }
-    return errs;
-  }
-
   function validateRunnerTool(name, args) {
     const spec = RUNNER_TOOLS[name];
-    const errs = validate(spec.args, args);
-    if (!errs.length && name === 'decide') errs.push(...validateDecide(args));
-    return errs;
+    return validate(spec.args, args);
   }
 
   // Tool definitions in the SDK's chat format.
@@ -113,160 +80,193 @@ When every heatmap on every page is done, call finish with one line per panel an
     ];
   }
 
-  // ---------------------------------------------------------------- decisions
+  // ---------------------------------------------------------------- review
 
   const hex = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   const sizeText = (s) => `${s.rows} rows × ${s.cols} columns`;
 
-  // A typed question (agent-schema.js openQuestions) → decision request body
-  // {state, questions: {answer: …}}. `context` adds panel-wide facts:
-  // {flaggedCount, cellCount, valueRange, tickRange, excludedCount}.
-  function toDecisionRequest(q, context = {}) {
+  const REVIEWER_PROMPT = `You are the reviewer of Colormeris, a tool that turns colors in heatmaps from scientific figures back into numbers. Another model calibrated a heatmap panel; you check its work. You get images of the panel region: the figure as it is, the calibration overlay (magenta grid lines must sit on the cell borders; the orange colorbar line must run along the middle of the colored strip from end to end; each orange tick dot must be level with its printed label and show the same number), the reconstruction (each cell repainted with the color its extracted value maps to; cells outlined in red are flagged as far from every colorbar color) and, when there is a colorbar, a zoom on it with the calibration overlay. You also get numeric evidence for each check.
+
+Answer every check with the answer tool: pick one option, give your confidence (the probability that your option is right; 0.9 or more only when the images and numbers clearly show it) and one short reason naming what you saw (e.g. "grid lines are one column short on the right"). Judge each check on its own. Do not guess: when the images do not show it clearly, say so with a low confidence.`;
+
+  // A typed question (agent-schema.js openQuestions) → a review item
+  // {instructions, options: {name: description}, evidence} that the reviewer
+  // answers with one option. `context` adds panel-wide facts:
+  // {flaggedCount, cellCount, valueRange, tickRange, excludedCount, fit}.
+  function toReviewItem(q, context = {}) {
     const ev = q.evidence;
     if (q.type === 'confirm_grid_size') {
       const alt = { rows: ev.labelCounts?.rows || ev.detected.rows, cols: ev.labelCounts?.cols || ev.detected.cols };
-      const state = {
-        task: 'Check the number of rows and columns of cells in a heatmap from a scientific figure.',
-        detector: {
-          ...ev.detected,
-          rowConfidence: ev.rowConfidence,
-          colConfidence: ev.colConfidence,
-          note: 'Found from where colors change inside the grid. Confidence is the best period score over the runner-up; below 1.3 is uncertain.',
-        },
-        labels: { ...ev.labelCounts, note: 'Number of row and column labels read off the figure; 0 means none were read. A label can span several replicate rows or columns, so a smaller label count does not mean the detector is wrong.' },
-      };
-      if (alt.rows === ev.detected.rows && alt.cols === ev.detected.cols) {
-        return { state, questions: { answer: { type: 'noul', instructions: `Is the grid ${sizeText(ev.detected)}?` } } };
-      }
+      const same = alt.rows === ev.detected.rows && alt.cols === ev.detected.cols;
       return {
-        state,
-        questions: {
-          answer: {
-            type: 'choice',
-            instructions: 'Which grid size is right?',
-            criteria: { detected: `${sizeText(ev.detected)}, as detected from the colors`, labels: `${sizeText(alt)}, same as the number of labels read (labels may cover replicates, so this is weaker evidence than the colors)` },
-          },
+        instructions: 'How many rows and columns of cells does the heatmap have? Count them on the figure image and check that the magenta grid lines of the calibration overlay fall on the cell borders.',
+        options: {
+          detected: `${sizeText(ev.detected)}, as detected from the colors`,
+          ...(same ? {} : { labels: `${sizeText(alt)}, same as the number of labels read (labels can cover several replicate rows or columns)` }),
+          neither: 'Neither: the grid lines do not match the cells.',
         },
-        alt,
+        evidence: {
+          detector: { ...ev.detected, rowConfidence: ev.rowConfidence, colConfidence: ev.colConfidence, note: 'Confidence is the best period score over the runner-up; below 1.3 is uncertain.' },
+          labelsRead: ev.labelCounts,
+        },
+        ...(same ? {} : { alt }),
       };
     }
     if (q.type === 'classify_flagged') {
       return {
-        state: {
-          task: 'A heatmap cell\'s color is far from every color of the calibrated colorbar (CIEDE2000 ΔE above the threshold). Decide what to do with it.',
-          cell: { row: ev.rowLabel, column: ev.colLabel, color: ev.rgb ? hex(ev.rgb) : null, deltaE: ev.deltaE, threshold: ev.maxDeltaE, matchedValue: ev.value },
-          panel: { flaggedCells: context.flaggedCount, totalCells: context.cellCount },
+        instructions: `The cell in row ${ev.row + 1}, column ${ev.col + 1} (${ev.rowLabel || '?'} / ${ev.colLabel || '?'}; outlined in red on the reconstruction) has a color far from every colorbar color. How should it be treated?`,
+        options: {
+          keep: 'A colormap color distorted by compression, anti-aliasing or blending; the matched value is usable.',
+          exclude: 'Not a data color: text, a marker or significance symbol, a grid line, or a missing-data color (white, gray, black) outside the colormap.',
+          recheck_colorbar: 'The colorbar calibration is probably wrong, e.g. many cells are flagged or the bar was sampled off its colors.',
         },
-        questions: {
-          answer: {
-            type: 'choice',
-            instructions: 'How should this cell be treated?',
-            criteria: {
-              keep: 'A colormap color distorted by compression, anti-aliasing or blending; the matched value is usable.',
-              exclude: 'Not a data color: text, a marker or significance symbol, a grid line, or a missing-data color (white, gray, black) outside the colormap.',
-              recheck_colorbar: 'The colorbar calibration is probably wrong, e.g. many cells are flagged or the bar was sampled off its colors.',
-            },
-          },
-        },
+        evidence: { color: ev.rgb ? hex(ev.rgb) : null, deltaE: ev.deltaE, threshold: ev.maxDeltaE, matchedValue: ev.value, flaggedCells: context.flaggedCount, totalCells: context.cellCount },
       };
     }
     if (q.type === 'classify_flagged_cells') {
       return {
-        state: {
-          task: 'Many cells of a heatmap have colors far from every color of its calibrated colorbar (CIEDE2000 ΔE above the threshold). Decide what to do with them.',
-          flaggedCells: ev.count,
-          totalCells: ev.total,
-          medianDeltaE: ev.medianDeltaE,
-          maxDeltaE: ev.maxDeltaE,
-          threshold: ev.threshold,
-          sampleColors: ev.sampleColors.map(hex),
-          note: 'When most cells are flagged, the colorbar was usually sampled off the bar (wrong position) rather than the cells being non-data colors.',
+        instructions: `${ev.count} of ${ev.total} cells (outlined in red on the reconstruction) have colors far from every colorbar color. How should they be treated?`,
+        options: {
+          keep_all: 'They are colormap colors distorted by compression, anti-aliasing or blending; the matched values are usable.',
+          exclude_all: 'They are not data colors: text, markers, grid lines, or missing-data colors (white, gray, black) outside the colormap.',
+          recheck_colorbar: 'The colorbar calibration is probably wrong (the bar was sampled off its colors, or the ends or ticks are misplaced).',
         },
-        questions: {
-          answer: {
-            type: 'choice',
-            instructions: 'How should the flagged cells be treated?',
-            criteria: {
-              keep_all: 'They are colormap colors distorted by compression, anti-aliasing or blending; the matched values are usable.',
-              exclude_all: 'They are not data colors: text, markers, grid lines, or missing-data colors (white, gray, black) outside the colormap.',
-              recheck_colorbar: 'The colorbar calibration is probably wrong (the bar was sampled off its colors, or the ends or ticks are misplaced).',
-            },
-          },
-        },
+        evidence: { medianDeltaE: ev.medianDeltaE, maxDeltaE: ev.maxDeltaE, threshold: ev.threshold, sampleColors: ev.sampleColors.map(hex), note: 'When most cells are flagged, the colorbar was usually sampled off the bar rather than the cells being non-data colors.' },
       };
     }
     if (q.type === 'confirm_tick_order') {
       return {
-        state: { task: 'Tick values entered for a heatmap colorbar, in order along the bar. Colorbars almost always have monotonic labels.', ticks: ev.ticks.map((k) => ({ position: k.t, value: k.value })) },
-        questions: {
-          answer: {
-            type: 'choice',
-            instructions: 'Are these ticks right as entered?',
-            criteria: { as_placed: 'The labels really are non-monotonic (rare, e.g. a categorical bar).', fix_needed: 'A tick value or position was entered wrongly.' },
-          },
-        },
+        instructions: 'The tick values entered for the colorbar do not change monotonically along the bar. Compare the orange tick dots and their numbers with the printed labels on the colorbar zoom.',
+        options: { as_placed: 'The printed labels really are non-monotonic (rare, e.g. a categorical bar).', fix_needed: 'A tick value or position was entered wrongly.' },
+        evidence: { ticks: ev.ticks.map((k) => ({ position: k.t, value: k.value })), note: 'position is 0 at the start of the colorbar line and 1 at its end.' },
       };
     }
     if (q.type === 'confirm_extraction') {
       return {
-        state: {
-          task: 'Final check of values extracted from a heatmap by matching cell colors to its colorbar.',
+        instructions: 'Final check: is this extraction complete and right? The reconstruction must look like the figure cell by cell, the grid must cover exactly the cells, and the colorbar line and ticks must match the printed bar.',
+        options: { accept: 'The calibration and the extracted values look right.', reject: 'Something is off (grid, colorbar, ticks or scale); say what.' },
+        evidence: {
           grid: { rows: ev.rows, cols: ev.cols },
           flaggedCells: ev.flaggedCount,
           excludedCells: context.excludedCount ?? 0,
           valueRange: context.valueRange,
           colorbarTickRange: context.tickRange,
-          // Numbers a text-only model can judge without seeing the figure.
           fit: context.fit ?? null,
-          note: 'Values should lie within (or very near) the tick range. Many flagged cells suggest a bad calibration. fit: medianDeltaE/p95DeltaE are color distances between each cell and its matched colorbar color (small is good, threshold is the flag limit); rangeOverTicks is the value range divided by the tick range (about 1 when the figure uses the whole bar, far above 1 means values outside the ticks); distinctValues is how many different values were found.',
+          note: 'Values should lie within (or very near) the tick range. fit: medianDeltaE/p95DeltaE are color distances between each cell and its matched colorbar color (small is good; threshold is the flag limit); rangeOverTicks is the value range divided by the tick range; distinctValues is how many different values were found.',
         },
-        questions: { answer: { type: 'noul', instructions: 'Is this extraction complete and plausible?' } },
       };
     }
-    throw new Error(`No decision mapping for ${q.type}`);
+    throw new Error(`No review mapping for ${q.type}`);
   }
 
-  // Several questions in ONE decisions request (one network round trip per
-  // resolve cycle instead of one per question; the model still answers each
-  // key on its own). items: [{q, req}] from toDecisionRequest. Returns
-  // {state, questions, keys} where keys[i] is the answer key of items[i].
-  function batchDecisionRequests(items) {
+  // The reviewer's user message for one panel: the checks as text, then the
+  // images. items: [{q, item}] from toReviewItem; images: [{label, note,
+  // dataUrl}]. Returns {content, keys} where keys[i] is the key of items[i].
+  function reviewContent({ panelName, items, images }) {
     const keys = items.map((_, i) => `q${i}`);
-    const state = { task: 'Independent checks of extractions from scientific figures. Answer each question from its own case only.', cases: {} };
-    const questions = {};
-    items.forEach(({ req }, i) => {
-      state.cases[keys[i]] = req.state;
-      questions[keys[i]] = req.questions.answer;
-    });
-    return { state, questions, keys };
+    const checks = Object.fromEntries(items.map(({ item }, i) => [keys[i], { instructions: item.instructions, options: item.options, evidence: item.evidence }]));
+    const text = `Panel "${panelName}". Answer these checks (key → check):\n${JSON.stringify(checks, null, 1)}\n\nThe images follow: ${images.map((im) => im.label).join('; ')}.`;
+    const content = [{ type: 'text', text }, ...images.flatMap((im) => [{ type: 'text', text: `${im.label}. ${im.note}` }, { type: 'image_url', imageUrl: { url: im.dataUrl } }])];
+    return { content, keys };
   }
 
-  // Decision model answer → {answer, confidence} in the question's answerSchema.
-  function fromDecisionAnswer(q, req, a) {
-    if (!a) throw new Error('The decision model returned no answer.');
-    const choiceConf = () => a.confidence ?? a.probabilities?.[a.choice] ?? null;
+  // The one tool the reviewer must call, with each check's options as an enum.
+  function reviewTool(items, keys) {
+    const answer = (item) => ({
+      type: 'object',
+      properties: {
+        answer: { enum: Object.keys(item.options) },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        reason: { type: 'string' },
+      },
+      required: ['answer', 'confidence', 'reason'],
+    });
+    const properties = Object.fromEntries(items.map(({ item }, i) => [keys[i], answer(item)]));
+    return {
+      type: 'function',
+      function: {
+        name: 'answer',
+        description: 'Give your answer to every check.',
+        parameters: { type: 'object', properties: { answers: { type: 'object', properties, required: keys } }, required: ['answers'] },
+      },
+    };
+  }
+
+  // Reviewer message → {key: {answer, confidence, reason}}. Takes the forced
+  // tool call, or JSON in the text for models that answer in prose.
+  function parseReviewAnswers(msg) {
+    const call = msg?.toolCalls?.find((c) => c.function?.name === 'answer') ?? msg?.toolCalls?.[0];
+    let raw = call?.function?.arguments;
+    if (!raw && typeof msg?.content === 'string') raw = /\{[\s\S]*\}/.exec(msg.content)?.[0];
+    if (!raw) throw new Error('The reviewer gave no answers.');
+    let parsed;
+    try {
+      parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+      throw new Error('The reviewer\'s answers are not valid JSON.');
+    }
+    return parsed.answers ?? parsed;
+  }
+
+  // Reviewer answer → {answer, confidence, reason} in the question's
+  // answerSchema.
+  function fromReviewAnswer(q, item, a) {
+    if (!a || !(a.answer in item.options)) throw new Error(`The reviewer gave no valid answer${a?.answer ? ` ("${a.answer}")` : ''}.`);
+    const confidence = Number.isFinite(a.confidence) ? Math.min(1, Math.max(0, a.confidence)) : null;
+    const reason = typeof a.reason === 'string' ? a.reason : '';
     if (q.type === 'confirm_grid_size') {
       const d = q.evidence.detected;
-      if (a.type === 'noul') return { answer: { rows: d.rows, cols: d.cols }, confidence: a.noul };
-      return { answer: a.choice === 'labels' ? { ...req.alt } : { rows: d.rows, cols: d.cols }, confidence: choiceConf() };
+      if (a.answer === 'labels') return { answer: { ...item.alt }, confidence, reason };
+      // "neither": the detected size, with the confidence that it is right,
+      // so it goes to a human.
+      return { answer: { rows: d.rows, cols: d.cols }, confidence: a.answer === 'neither' && confidence !== null ? 1 - confidence : confidence, reason };
     }
-    if (q.type === 'confirm_extraction') {
-      return a.noul >= 0.5 ? { answer: 'accept', confidence: a.noul } : { answer: 'reject', confidence: 1 - a.noul };
-    }
-    return { answer: a.choice, confidence: choiceConf() };
+    return { answer: a.answer, confidence, reason };
   }
 
-  // What the LLM should do after decisions ({type, panelId, answer, applied}).
-  function decisionAdvice(decisions, panelName = (id) => id) {
+  // Page region around a panel's grid and colorbar (with room for labels),
+  // clamped to the page. Null when the panel has neither.
+  function panelRegion(panel, size, pad = 60) {
+    const pts = [...(panel.grid.corners || []), ...(panel.colorbar.start && panel.colorbar.end ? [panel.colorbar.start, panel.colorbar.end] : [])];
+    if (!pts.length) return null;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return {
+      x0: Math.max(0, Math.min(...xs) - pad),
+      y0: Math.max(0, Math.min(...ys) - pad),
+      x1: Math.min(size.width, Math.max(...xs) + pad),
+      y1: Math.min(size.height, Math.max(...ys) + pad),
+    };
+  }
+
+  // Region around the colorbar alone, wide enough for its tick labels.
+  function colorbarRegion(panel, size) {
+    const { start, end, halfWidth = 5 } = panel.colorbar;
+    if (!start || !end) return null;
+    const pad = Math.max(70, halfWidth * 8);
+    return {
+      x0: Math.max(0, Math.min(start.x, end.x) - pad),
+      y0: Math.max(0, Math.min(start.y, end.y) - pad),
+      x1: Math.min(size.width, Math.max(start.x, end.x) + pad),
+      y1: Math.min(size.height, Math.max(start.y, end.y) + pad),
+    };
+  }
+
+  // What the LLM should do after reviews ({type, panelId, answer, applied,
+  // reason}). The reviewer's reason is passed on: it says what looks wrong.
+  function reviewAdvice(reviews, panelName = (id) => id) {
     const out = [];
-    for (const d of decisions) {
+    const why = (d) => (d.reason ? ` The reviewer said: "${d.reason}"` : '');
+    for (const d of reviews) {
       const name = panelName(d.panelId);
       if (d.type === 'confirm_extraction' && d.answer === 'reject') {
-        out.push(`${name}: the extraction was ${d.applied ? 'rejected' : 'probably wrong (left for a human)'}. Look again at the grid corners, the colorbar line and the ticks with overlays, fix what is off, then resolve_questions again.`);
+        out.push(`${name}: the extraction was ${d.applied ? 'rejected' : 'probably wrong (left for a human)'}.${why(d)} Look again at the grid corners, the colorbar line and the ticks with overlays, fix what is off, then resolve_questions again.`);
       } else if ((d.type === 'classify_flagged' || d.type === 'classify_flagged_cells') && d.answer === 'recheck_colorbar') {
-        out.push(`${name}: recheck the colorbar. Zoom on it with overlay "calibration": the line must run along the middle of the colored strip from end to end, and the ticks must sit on their marks.`);
+        out.push(`${name}: recheck the colorbar.${why(d)} Zoom on it with overlay "calibration": the line must run along the middle of the colored strip from end to end, and the ticks must sit on their marks.`);
       } else if (d.type === 'confirm_grid_size' && !d.applied) {
-        out.push(`${name}: the grid size is uncertain. Count the rows and columns on a zoomed view and set_grid_size.`);
+        out.push(`${name}: the grid size is uncertain.${why(d)} Count the rows and columns on a zoomed view and set_grid_size.`);
+      } else if (d.type === 'confirm_tick_order' && d.answer === 'fix_needed') {
+        out.push(`${name}: a tick is wrong.${why(d)} Zoom on the colorbar and fix it with set_tick_value or remove_tick.`);
       }
     }
     return [...new Set(out)];
@@ -401,16 +401,21 @@ When every heatmap on every page is done, call finish with one line per panel an
 
   Object.assign(CM, {
     DEFAULT_LLM,
-    DEFAULT_DECISION_MODEL,
+    DEFAULT_REVIEWER,
     AGENT_SYSTEM_PROMPT: SYSTEM_PROMPT,
+    REVIEWER_PROMPT,
     LLM_ACTIONS,
     RUNNER_TOOLS,
     validateRunnerTool,
     llmTools,
-    toDecisionRequest,
-    batchDecisionRequests,
-    fromDecisionAnswer,
-    decisionAdvice,
+    toReviewItem,
+    reviewContent,
+    reviewTool,
+    parseReviewAnswers,
+    fromReviewAnswer,
+    panelRegion,
+    colorbarRegion,
+    reviewAdvice,
     createRetryGuard,
     progressNote,
     finishCheck,

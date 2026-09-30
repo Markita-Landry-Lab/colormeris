@@ -17,6 +17,6 @@
 
   // Typed API for software agents (agent.js).
   window.colormeris = createAgentApi(ws);
-  // LLM + decision-model agent for heatmaps (agent-panel.js, agent-runner.js).
+  // LLM agent with a vision reviewer for heatmaps (agent-panel.js, agent-runner.js).
   setupAgentPanel(ws, window.colormeris);
 })((globalThis.Colormeris ??= {}));
