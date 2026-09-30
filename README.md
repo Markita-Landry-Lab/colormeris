@@ -56,6 +56,26 @@ Measurements for each region copy:
 
 **Background**: a pixel whose CIELAB chroma is at or below the *gray* threshold is the photograph, i.e. no signal. The default is 20, which removes the JPEG color noise seen in published IVIS figures while keeping the dimmest overlay colors. Adjust it under *Signal settings* and check with *Show signal*.
 
+## Agent API
+
+`app.html` exposes a typed API as `window.colormeris`, so an LLM, a decision model or a script can drive the tools without clicking pixels. Coordinates are image pixels of the panel's page, as in `project.json`.
+
+```js
+await colormeris.run('open_url', { url: 'assets/img/example.pdf' });
+await colormeris.run('set_grid', { topLeft: { x: 40, y: 60 }, bottomRight: { x: 520, y: 400 } });
+await colormeris.run('set_colorbar', { start: { x: 560, y: 400 }, end: { x: 560, y: 60 } });
+await colormeris.run('add_tick', { t: 0, value: 0 });
+await colormeris.run('add_tick', { t: 1, value: 100 });
+await colormeris.run('get_results');   // → { ok, result } or { ok: false, error }
+```
+
+- `colormeris.tools()` lists every action as `{name, description, input_schema}` (JSON Schema), ready to pass to an LLM API as tool definitions. Arguments are validated before anything runs.
+- Actions that change the project also return `state`, the same snapshot as `get_state`. `colormeris.batch([{name, args}, …])` runs actions in order and stops at the first failure.
+- `get_questions` lists typed decisions with their evidence and an `answerSchema`: `confirm_grid_size`, `classify_flagged` (a cell far from every colorbar color), `confirm_tick_order` and `confirm_extraction`. `answer_question` takes an answer with a `confidence` and a `source`. An answer below `colormeris.policy.minConfidence` (0.9) is logged but not applied, and the question stays open with the answer attached for a human. Answers from `source: 'human'` always apply.
+- Every change made through the API and every decision is logged. The project zip includes both logs as `agent/actions.json` and `agent/decisions.json`.
+
+The action catalogue, validator, state snapshot and questions are in `assets/js/agent-schema.js`; `assets/js/agent.js` binds them to the page.
+
 ## How heatmap values are computed
 
 - **Cell color**: each channel's median over the central part of the cell. The *Sampled area* setting controls how much, 50% by default. Using the center avoids grid lines, anti-aliased edges and JPEG noise.
@@ -107,4 +127,6 @@ To deploy, publish the repository root with GitHub Pages or any static host. `.n
 | `assets/js/workspace.js` | shared shell for the tools: loading, pages, panels, grid, colorbar, undo, zip, tool switching |
 | `assets/js/heatmap.js` | heatmap tool |
 | `assets/js/ivis.js` | IVIS tool |
+| `assets/js/agent-schema.js` | agent action catalogue (JSON Schema), validation, state snapshot, typed questions |
+| `assets/js/agent.js` | binds the agent API to the workspace as `window.colormeris` |
 | `assets/js/app.js` | starts the workspace with both tools; `#heatmap` / `#ivis` picks the tool |

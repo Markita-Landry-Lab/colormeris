@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { createWorkspace, setupHeatmapTool, setupIvisTool } = CM;
+  const { createWorkspace, setupHeatmapTool, setupIvisTool, createAgentApi } = CM;
 
   // One page, two tools sharing one workspace: the loaded file, pages and
   // project (with every tool's panels) persist when switching tools. The tool
@@ -14,4 +14,7 @@
   ws.setTool(toolFromHash());
   window.addEventListener('hashchange', () => ws.setTool(toolFromHash()));
   ws.render();
+
+  // Typed API for software agents (agent.js).
+  window.colormeris = createAgentApi(ws);
 })((globalThis.Colormeris ??= {}));

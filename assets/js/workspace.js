@@ -1027,6 +1027,7 @@
         if (!idx.length || !t.panelFiles) return [];
         return t.panelFiles(idx.map((i) => app.project.panels[i]), idx.map((i) => results[i]), idx.map((i) => bases[i]));
       });
+      for (const extra of ws.zipExtras) files.push(...extra());
       const blob = await buildProjectZip(window.JSZip, {
         project: app.project,
         sourceFile: app.originalFile,
@@ -1325,6 +1326,16 @@
     drawHandle,
     snapAxis,
     render: () => renderSidebar(),
+    // Used by the agent API (agent.js).
+    openFile,
+    goToPage,
+    undo,
+    redo,
+    canUndo: () => app.history.length > 0,
+    canRedo: () => app.future.length > 0,
+    exportZip,
+    newTickId,
+    zipExtras: [], // functions returning [{path, content}] added to project zips
   };
   return ws;
   }
