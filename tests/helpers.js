@@ -1,5 +1,7 @@
 // Synthetic image helpers for tests.
-import { invertBilinear } from '../assets/js/grid.js';
+import CM from './load.js';
+
+const { invertBilinear } = CM;
 
 export function makeImage(width, height, fill = [255, 255, 255, 255]) {
   const data = new Uint8ClampedArray(width * height * 4);

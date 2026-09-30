@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sampleColorbar, projectT, makeValueFn, labToT, tickProblem, colorAtT } from '../assets/js/colormap.js';
-import { rgbToLab } from '../assets/js/color.js';
 import { makeImage, paintColorbar, cmap, VIRIDISH } from './helpers.js';
+import CM from './load.js';
+
+const { sampleColorbar, projectT, makeValueFn, labToT, tickProblem, colorAtT, rgbToLab } = CM;
 
 const close = (a, b, eps) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
 

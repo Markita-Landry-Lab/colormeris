@@ -8,7 +8,16 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/style.css">
   <script src="assets/vendor/jszip/jszip.min.js" defer></script>
-  <script type="module" src="assets/js/main.js"></script>
+  <!-- Classic (non-module) scripts so the page also works when opened from disk. Order matters. -->
+  <script src="assets/js/color.js" defer></script>
+  <script src="assets/js/grid.js" defer></script>
+  <script src="assets/js/colormap.js" defer></script>
+  <script src="assets/js/state.js" defer></script>
+  <script src="assets/js/extract.js" defer></script>
+  <script src="assets/js/export.js" defer></script>
+  <script src="assets/js/loader.js" defer></script>
+  <script src="assets/js/viewer.js" defer></script>
+  <script src="assets/js/main.js" defer></script>
 </head>
 <body>
   <header class="topbar">

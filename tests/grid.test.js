@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rectCorners, bilinear, invertBilinear, cellAt, sampleCell, readPixel } from '../assets/js/grid.js';
 import { makeImage } from './helpers.js';
+import CM from './load.js';
+
+const { rectCorners, bilinear, invertBilinear, cellAt, sampleCell, readPixel } = CM;
 
 const close = (a, b, eps) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
 const skewed = [{ x: 10, y: 12 }, { x: 110, y: 20 }, { x: 104, y: 220 }, { x: 4, y: 210 }];

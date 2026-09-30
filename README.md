@@ -39,14 +39,18 @@ Coordinates in `project.json` are pixels in `source/page-<n>.png`.
 
 ## Development
 
-There is no build step. The page is plain HTML, CSS and ES modules. pdf.js 6.3.289 and JSZip 3.10.2 are vendored in `assets/vendor/`.
+There is no build step. The page is plain HTML, CSS and classic scripts that register on a shared `Colormeris` namespace. They are loaded in order by `index.html`. pdf.js 6.3.289 and JSZip 3.10.2 are vendored in `assets/vendor/`.
+
+You can open `index.html` directly from disk or serve the folder:
 
 ```bash
 npm run serve   # python3 -m http.server 8000, then open http://localhost:8000
 npm test        # unit tests (node:test, no dependencies)
 ```
 
-A server is needed because ES modules and the pdf.js worker don't load from `file://`. To deploy, publish the repository root with GitHub Pages or any static host. `.nojekyll` is already included.
+Opened from disk (`file://`), browsers block module files, fetches and workers. There, pdf.js is loaded from `assets/vendor/pdfjs/pdf.embed.js` and runs on the main thread. PDFs that need extra data (non-embedded fonts, CJK character maps, JPEG 2000 images) render best when served over HTTP. After updating the vendored pdf.js, regenerate the embed with `node scripts/embed-pdfjs.mjs`.
+
+To deploy, publish the repository root with GitHub Pages or any static host. `.nojekyll` is already included.
 
 | File | Purpose |
 | --- | --- |

@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createProject, createPanel, serializeProject, parseProject, effectiveLabels, parseLabelText, rescalePanel } from '../assets/js/state.js';
-import { toWideCsv, toLongCsv, csvEscape, formatNumber, safeFileName } from '../assets/js/export.js';
-import { rectCorners } from '../assets/js/grid.js';
+import CM from './load.js';
+
+const { createProject, createPanel, serializeProject, parseProject, effectiveLabels, parseLabelText, rescalePanel, toWideCsv, toLongCsv, csvEscape, formatNumber, safeFileName, rectCorners } = CM;
 
 test('effectiveLabels pads with defaults', () => {
   assert.deepEqual(effectiveLabels(['a', '', 'c'], 4, 'R'), ['a', 'R2', 'c', 'R4']);

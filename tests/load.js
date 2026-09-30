@@ -1,0 +1,10 @@
+// Load the browser scripts (classic scripts registering on globalThis.Colormeris)
+// in dependency order and expose the shared namespace to tests.
+import '../assets/js/color.js';
+import '../assets/js/grid.js';
+import '../assets/js/colormap.js';
+import '../assets/js/state.js';
+import '../assets/js/extract.js';
+import '../assets/js/export.js';
+
+export default globalThis.Colormeris;

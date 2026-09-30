@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rgbToLab, labToRgb, deltaE2000, deltaE76, rgbToHex } from '../assets/js/color.js';
+import CM from './load.js';
+
+const { rgbToLab, labToRgb, deltaE2000, deltaE76, rgbToHex } = CM;
 
 const close = (a, b, eps) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
 

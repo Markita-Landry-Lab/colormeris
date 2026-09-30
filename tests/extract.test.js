@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractPanel, panelProblem } from '../assets/js/extract.js';
-import { createPanel } from '../assets/js/state.js';
-import { rectCorners } from '../assets/js/grid.js';
 import { makeImage, paintHeatmap, paintColorbar, VIRIDISH } from './helpers.js';
+import CM from './load.js';
+
+const { extractPanel, panelProblem, createPanel, rectCorners } = CM;
 
 function seeded(seed) {
   return () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
