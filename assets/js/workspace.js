@@ -631,7 +631,7 @@
       }),
     );
     setValue($('panel-name'), active.name);
-    $('panel-delete').disabled = pagePanels().length < 2;
+    $('panel-delete').textContent = pagePanels().length < 2 ? 'Clear' : 'Delete';
     renderOtherPages();
   }
 
@@ -1155,13 +1155,22 @@
   });
   $('panel-delete').addEventListener('click', () => {
     const here = pagePanels();
-    if (here.length < 2) return;
     const panel = activePanel();
-    if (!confirm(`Delete panel "${panel.name}"?`)) return;
+    const last = here.length < 2;
+    if (!confirm(last ? `Clear panel "${panel.name}"? A page always keeps one panel.` : `Delete panel "${panel.name}"?`)) return;
     pushHistory();
     const i = here.indexOf(panel);
-    app.project.panels.splice(app.project.panels.indexOf(panel), 1);
-    app.project.activePanelId = here[i === 0 ? 1 : i - 1].id;
+    const at = app.project.panels.indexOf(panel);
+    if (last) {
+      // Every page keeps one panel, so deleting the last one swaps in an empty panel.
+      const blank = createPanel(panel.name, panel.page, panel.tool);
+      blank.settings = { ...panel.settings };
+      app.project.panels.splice(at, 1, blank);
+      app.project.activePanelId = blank.id;
+    } else {
+      app.project.panels.splice(at, 1);
+      app.project.activePanelId = here[i === 0 ? 1 : i - 1].id;
+    }
     setMode(null);
     changed();
   });
