@@ -585,7 +585,7 @@
   function renderSidebar(light = false) {
     const loaded = !!app.sourceCanvas;
     for (const t of Object.values(tools)) for (const id of t.sections || []) $(id).hidden = true;
-    for (const id of ['sec-source', 'sec-panels', 'sec-grid', 'sec-colorbar', 'sec-settings', ...(tool.sections || [])]) $(id).hidden = !loaded;
+    for (const id of ['sec-panels', 'sec-grid', 'sec-colorbar', 'sec-settings', ...(tool.sections || [])]) $(id).hidden = !loaded;
     $('empty-state').hidden = loaded;
     $('view-tools').hidden = !loaded;
     $('btn-export-zip').disabled = !loaded;
@@ -902,8 +902,8 @@
     // Page controls also work for a reopened project that has several page images but no PDF.
     const isPdf = !!app.pdfDoc || s.pageCount > 1;
     $('pdf-controls').hidden = !isPdf;
-    $('source-info').textContent =
-      `${s.fileName} · ${s.width} × ${s.height} px` + (isPdf ? ` · page ${s.page} of ${s.pageCount}` : '');
+    // The page number is already in the page controls next to it.
+    $('source-info').textContent = `${s.fileName} · ${s.width} × ${s.height} px`;
     if (isPdf) {
       $('page-input').max = s.pageCount;
       setValue($('page-input'), s.page);

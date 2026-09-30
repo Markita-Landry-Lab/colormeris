@@ -347,21 +347,33 @@ table.ticks[hidden] { display: none; }
 .modebar[hidden] { display: none; }
 .modebar .btn { border-radius: 999px; }
 
-.view-tools {
-  position: absolute;
-  right: 10px;
-  bottom: 40px;
+/* Source, page and zoom controls, one row above the status bar */
+.viewbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 12px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  /* Wraps by its own width, not the window's: the sidebar takes part of the screen. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
-.view-tools[hidden] { display: none; }
-.view-tools .check { padding: 0 6px; }
+.viewbar[hidden], .viewbar-group[hidden] { display: none; }
+/* Groups never shrink or wrap inside, so "of 26" stays on one line. */
+.viewbar-group { display: flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap; }
+.zoom-group { margin-left: auto; }
+/* One control height for every button, input and select in the row */
+.viewbar .btn, .viewbar input.num, .viewbar select { height: 28px; min-height: 28px; font-size: 12px; }
+.viewbar .btn.icon { min-width: 28px; padding: 0 6px; font-size: 15px; line-height: 1; }
+.viewbar .btn.small { padding: 0 10px; }
+.viewbar input.num { width: 52px; padding: 2px 6px; }
+.viewbar select { width: auto; padding: 2px 6px; }
+.viewbar .check { height: 28px; padding: 0 4px 0 6px; font-size: 12px; }
+#page-count { color: var(--muted); }
+.source-info { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 160px; }
 
 .statusbar {
   display: flex;

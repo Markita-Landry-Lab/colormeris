@@ -117,31 +117,6 @@
         <ol id="agent-log" class="agent-log" hidden></ol>
       </section>
 
-      <section class="card" id="sec-source" hidden>
-        <h2>Source</h2>
-        <div id="source-info" class="muted small"></div>
-        <div id="pdf-controls" class="row wrap" hidden>
-          <label class="field">Page
-            <span class="row tight">
-              <button class="btn icon" id="page-prev" aria-label="Previous page">‹</button>
-              <input id="page-input" type="number" min="1" value="1" class="num">
-              <button class="btn icon" id="page-next" aria-label="Next page">›</button>
-            </span>
-            <span id="page-count" class="muted small"></span>
-          </label>
-          <label class="field">Resolution
-            <select id="scale-select">
-              <option value="1">72 dpi (1×)</option>
-              <option value="2">144 dpi (2×)</option>
-              <option value="3" selected>216 dpi (3×)</option>
-              <option value="4">288 dpi (4×)</option>
-              <option value="6">432 dpi (6×)</option>
-              <option value="8">576 dpi (8×)</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
       <section class="card" id="sec-panels" hidden>
         <div class="card-head">
           <h2>Panels <span id="panel-page-note" class="muted small"></span></h2>
@@ -336,11 +311,28 @@
         <span id="modebar-text"></span>
         <button class="btn small" id="mode-done">Done</button>
       </div>
-      <div class="view-tools" id="view-tools" hidden>
-        <button class="btn icon" id="zoom-out" title="Zoom out (−)">−</button>
-        <button class="btn icon" id="zoom-in" title="Zoom in (+)">+</button>
-        <button class="btn small" id="zoom-fit" title="Fit (F)">Fit</button>
-        <label class="check small"><input id="toggle-overlay" type="checkbox" checked> Overlay</label>
+      <div class="viewbar" id="view-tools" hidden>
+        <span id="source-info" class="source-info"></span>
+        <span id="pdf-controls" class="viewbar-group" hidden>
+          <button class="btn icon" id="page-prev" aria-label="Previous page">‹</button>
+          <input id="page-input" type="number" min="1" value="1" class="num" aria-label="Page">
+          <span id="page-count" class="muted small"></span>
+          <button class="btn icon" id="page-next" aria-label="Next page">›</button>
+          <select id="scale-select" title="Resolution" aria-label="Resolution">
+            <option value="1">72 dpi (1×)</option>
+            <option value="2">144 dpi (2×)</option>
+            <option value="3" selected>216 dpi (3×)</option>
+            <option value="4">288 dpi (4×)</option>
+            <option value="6">432 dpi (6×)</option>
+            <option value="8">576 dpi (8×)</option>
+          </select>
+        </span>
+        <span class="viewbar-group zoom-group">
+          <button class="btn icon" id="zoom-out" title="Zoom out (−)">−</button>
+          <button class="btn icon" id="zoom-in" title="Zoom in (+)">+</button>
+          <button class="btn small" id="zoom-fit" title="Fit (F)">Fit</button>
+          <label class="check small"><input id="toggle-overlay" type="checkbox" checked> Overlay</label>
+        </span>
       </div>
       <footer class="statusbar" id="statusbar">
         <span id="status-pos"></span>
