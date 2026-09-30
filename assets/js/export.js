@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { effectiveLabels, serializeProject, parseProject } = CM;
+  const { effectiveLabels, boxLabel, serializeProject, parseProject } = CM;
 
   // CSV formatting and project zip packaging.
 
@@ -67,18 +67,73 @@ project.json          Calibration metadata (grid corners, colorbar line and tick
                       in the panel's source/page-<n>.png.
 source/               The original uploaded file and the rendered image of each
                       page that has panels.
-data/<panel>.csv      Extracted values as a matrix (rows x columns).
-data/<panel>_long.csv One line per cell with sampled RGB and color distance (deltaE).
+data/                 Extracted data as CSV, one or more files per panel.
 
 Load this zip back into Colormeris to review or re-run the extraction.
 `;
 
   const pageImagePath = (page) => `source/page-${page}.png`;
 
+  // Region statistics, one line per region copy. `items` is [{panel, result}]
+  // with results from quantifyPanel.
+  function roiCsv(items) {
+    const unit = items.find((it) => it.result.unit)?.result.unit;
+    const head = ['panel', 'page', 'box', 'row', 'col', 'roi', 'shape', 'area_px', 'signal_px', 'flagged_px', 'sum', 'mean', 'mean_signal', 'max'];
+    if (unit) head.push(`area_${unit}2`, `signal_area_${unit}2`, 'sum_x_area');
+    const lines = [csvLine(head)];
+    for (const { panel, result } of items) {
+      if (result.error) continue;
+      for (const r of result.rows) {
+        const s = r.stats;
+        const inBox = r.row !== null;
+        const line = [
+          panel.name,
+          panel.page,
+          inBox ? boxLabel(panel.grid, r.row, r.col) : '',
+          inBox ? r.row + 1 : '',
+          inBox ? r.col + 1 : '',
+          r.roi.name,
+          r.roi.shape,
+          s.areaPx,
+          s.signalPx,
+          s.flaggedPx,
+          formatNumber(s.sum),
+          formatNumber(s.mean),
+          formatNumber(s.meanSignal),
+          formatNumber(s.max),
+        ];
+        if (unit) line.push(...(s.area !== undefined ? [formatNumber(s.area), formatNumber(s.signalArea), formatNumber(s.sumArea)] : ['', '', '']));
+        lines.push(csvLine(line));
+      }
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  // Unique, file-system safe base names for panels, in panel order.
+  function panelFileBases(panels) {
+    const used = new Set();
+    return panels.map((panel, i) => {
+      let base = safeFileName(panel.name);
+      while (used.has(base)) base += `_${i + 1}`;
+      used.add(base);
+      return base;
+    });
+  }
+
+  // Heatmap data files for one panel: the matrix and the long format.
+  function heatmapPanelFiles(panel, result, base) {
+    if (!result || result.error) return [];
+    return [
+      { path: `data/${base}.csv`, content: toWideCsv(panel, result) },
+      { path: `data/${base}_long.csv`, content: toLongCsv([{ panel, result }]) },
+    ];
+  }
+
   // Build the project zip. `JSZip` is the JSZip constructor; `sourceFile` is the
   // original upload (File/Blob, may be null); `pagePngs` maps page number to a
-  // PNG Blob of that rendered page.
-  async function buildProjectZip(JSZip, { project, results, sourceFile, pagePngs }) {
+  // PNG Blob of that rendered page; `files` are extra [{path, content}] entries
+  // such as data CSVs.
+  async function buildProjectZip(JSZip, { project, sourceFile, pagePngs, files = [] }) {
     const zip = new JSZip();
     const json = serializeProject(project);
     if (json.source) {
@@ -94,16 +149,7 @@ Load this zip back into Colormeris to review or re-run the extraction.
     zip.file('project.json', JSON.stringify(json, null, 2));
     zip.file('README.txt', README);
     if (sourceFile) zip.file(json.source.originalFile, sourceFile);
-    const used = new Set();
-    project.panels.forEach((panel, i) => {
-      const result = results[i];
-      if (!result || result.error) return;
-      let base = safeFileName(panel.name);
-      while (used.has(base)) base += `_${i + 1}`;
-      used.add(base);
-      zip.file(`data/${base}.csv`, toWideCsv(panel, result));
-      zip.file(`data/${base}_long.csv`, toLongCsv([{ panel, result }]));
-    });
+    for (const f of files) zip.file(f.path, f.content);
     return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   }
 
@@ -135,5 +181,5 @@ Load this zip back into Colormeris to review or re-run the extraction.
     return { project, pageImages, originalFile };
   }
 
-  Object.assign(CM, { formatNumber, csvEscape, toWideCsv, toLongCsv, safeFileName, buildProjectZip, readProjectZip });
+  Object.assign(CM, { formatNumber, csvEscape, csvLine, toWideCsv, toLongCsv, roiCsv, safeFileName, panelFileBases, heatmapPanelFiles, buildProjectZip, readProjectZip });
 })((globalThis.Colormeris ??= {}));

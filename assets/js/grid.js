@@ -303,7 +303,8 @@
     for (let i = margin; i < N - margin; i++) strongest = Math.max(strongest, prof[i]);
     if (strongest < MIN_EDGE) return { count: 1, confidence: 0 };
 
-    const ac = autocorrelation(prof, Math.floor(N / 2));
+    // Lags a bit beyond N/2 so a two-cell grid (P = N/2) is not at the edge.
+    const ac = autocorrelation(prof, Math.floor(0.6 * N));
     const minP = Math.max(MIN_CELL, N / MAX_CELLS);
     const cands = [];
     let best = null;

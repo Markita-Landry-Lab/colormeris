@@ -88,3 +88,35 @@ test('panels keep their page; older files fall back to source.page', () => {
   json.panels.forEach((p) => delete p.page);
   assert.deepEqual(parseProject(json).panels.map((p) => p.page), [3, 3]);
 });
+
+test('IVIS projects keep kind, regions, nudges and scale; old files are heatmaps', () => {
+  const project = createProject('ivis');
+  project.source = { fileName: 'fig.pdf', page: 3 };
+  const p = project.panels[0];
+  p.grid.boxLabels = ['B-a11', 'B-a16'];
+  p.rois.push(CM.createRoi('ellipse', { cx: 0.5, cy: 0.4, rx: 0.2, ry: 0.1 }, { name: 'liver' }));
+  p.rois[0].offsets['1,2'] = { dx: 0.05, dy: -0.02 };
+  p.rois.push(CM.createRoi('polygon', { points: [{ x: 1, y: 2 }, { x: 5, y: 2 }, { x: 3, y: 6 }] }, { name: 'tumour', replicate: false }));
+  p.scale = { p1: { x: 0, y: 0 }, p2: { x: 100, y: 0 }, length: 1, unit: 'cm' };
+  const json = JSON.parse(JSON.stringify(serializeProject(project)));
+  assert.equal(json.kind, 'ivis');
+  const back = parseProject(json);
+  assert.equal(back.kind, 'ivis');
+  const q = back.panels[0];
+  assert.deepEqual(q.grid.boxLabels, ['B-a11', 'B-a16']);
+  assert.deepEqual(q.rois.map((r) => [r.name, r.shape, r.replicate]), [['liver', 'ellipse', true], ['tumour', 'polygon', false]]);
+  assert.deepEqual(q.rois[0].offsets, { '1,2': { dx: 0.05, dy: -0.02 } });
+  assert.deepEqual(q.scale, { p1: { x: 0, y: 0 }, p2: { x: 100, y: 0 }, length: 1, unit: 'cm' });
+  delete json.kind;
+  assert.equal(parseProject(json).kind, 'heatmap');
+  // Rescaling moves pixel regions and the scale bar, not box-relative regions.
+  rescalePanel(q, 2);
+  assert.deepEqual(q.rois[0].geom, { cx: 0.5, cy: 0.4, rx: 0.2, ry: 0.1 });
+  assert.deepEqual(q.rois[1].geom.points[0], { x: 2, y: 4 });
+  assert.deepEqual(q.scale.p2, { x: 200, y: 0 });
+});
+
+test('new IVIS projects use background and flag defaults suited to photos', () => {
+  assert.deepEqual([createProject('ivis').panels[0].settings.grayChroma, createProject('ivis').panels[0].settings.maxDeltaE], [20, 20]);
+  assert.equal(createProject().panels[0].settings.maxDeltaE, 10);
+});

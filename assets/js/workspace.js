@@ -1,17 +1,43 @@
 (function (CM) {
   'use strict';
-  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, effectiveLabels, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, cellSamplePolygon, readPixel, projectT, pointAtT, colorAtT, extractPanel, panelProblem, toWideCsv, toLongCsv, buildProjectZip, readProjectZip, safeFileName, formatNumber, rgbToHex } = CM;
+  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, readPixel, projectT, pointAtT, colorAtT, buildProjectZip, readProjectZip, safeFileName, panelFileBases, rgbToHex } = CM;
 
-  // Application wiring: state, UI, canvas interaction and import/export.
-
-
+  // Shared workspace for the Colormeris tools: source loading and PDF pages,
+  // the zoomable viewer, panels, the grid and colorbar calibration, undo,
+  // keyboard shortcuts and project zips. A tool (heatmap.js, ivis.js) plugs in
+  // its own results and overlay through the hooks documented in TOOL_HOOKS.
+  //
+  // TOOL_HOOKS (all optional unless noted):
+  //   kind                      'heatmap' | 'ivis' (required)
+  //   otherToolUrl              page to suggest when a zip of another kind is opened
+  //   computeResult(panel, img) result object or {error} (required)
+  //   resultKey(panel)          JSON-able key of everything computeResult depends on
+  //   panelProblem(panel)       what is missing before results, or null (required)
+  //   panelFiles(panels, results, bases) → [{path, content}] data files for the zip
+  //   hasCalibration(panel)     extra test for unsaved work
+  //   sections                  ids of tool sidebar cards shown once a file is loaded
+  //   renderSidebar(panel, light)
+  //   modeTexts                 {mode: [texts by clicks so far] | (mode) => text}
+  //   onModeChange(type)
+  //   onClick(mode, p, e)       return true when handled
+  //   hitTest(p, tol)           tool handles, checked after the shared ones
+  //   onHandleDrag(handle, p, e) / onHandleDrop(handle)
+  //   wantsDrag(), onDragStart(p, e), onDragMove(p, e), onDragEnd(p, e)
+  //   drawUnderGrid / drawOverGrid (ctx, v, panel, active)
+  //   drawOverlay(ctx, v, active, panelsOnPage)
+  //   drawModePreview(ctx, v, mode, hover)
+  //   hoverText(panel, cell, p) text for the status bar
+  //   onHoverCell(cell)
+  //   onKey(e)                  return true when handled
+  //   gridTexts                 mode texts for placing the grid
+  function createWorkspace(tool) {
   const $ = (id) => document.getElementById(id);
 
   const COLORS = { grid: '#e22bd0', bar: '#f29900', flag: '#ff3b30', highlight: '#ffd400', outline: 'rgba(0,0,0,0.65)' };
   const SNAP_DEGREES = 3;
 
   const app = {
-    project: createProject(),
+    project: createProject(tool.kind),
     sourceCanvas: null,
     imageData: null,
     originalFile: null,
@@ -26,7 +52,6 @@
     hoverCell: null,
     tableCell: null,
     showOverlay: true,
-    showRecon: false,
   };
 
   let tickSeq = 1;
@@ -94,10 +119,10 @@
     if (!app.sourceCanvas) return { error: 'Load a file first.' };
     const image = app.pages.get(panel.page)?.imageData;
     if (!image) return { error: `Page ${panel.page} is not rendered yet.` };
-    const key = JSON.stringify([panel.page, panel.grid, panel.colorbar, panel.settings]);
+    const key = JSON.stringify([panel.page, tool.resultKey ? tool.resultKey(panel) : [panel.grid, panel.colorbar, panel.settings]]);
     const hit = app.cache.get(panel.id);
     if (hit && hit.key === key) return hit.result;
-    const result = extractPanel(image, panel);
+    const result = tool.computeResult(panel, image);
     app.cache.set(panel.id, { key, result });
     return result;
   }
@@ -110,6 +135,7 @@
     onHandleDrag,
     onHandleDrop: (handle) => {
       app.drag = null;
+      tool.onHandleDrop?.(handle);
       // Re-detect the cell count after moving a corner unless the user set it by hand.
       const panel = activePanel();
       if (handle.kind === 'corner' && panel.grid.autoSize) applyDetectedSize(panel, { onlyIfChanged: true });
@@ -118,13 +144,16 @@
     onHover,
     drawOverlay,
     wantsLoupe: () => !!app.mode,
+    wantsDrag: () => !!tool.wantsDrag?.(),
+    onDragStart: (p, e) => tool.onDragStart?.(p, e),
+    onDragMove: (p, e) => tool.onDragMove?.(p, e),
+    onDragEnd: (p, e) => tool.onDragEnd?.(p, e),
   });
 
   function onClick(p, e) {
     const mode = app.mode;
-    if (!mode) {
-      return;
-    }
+    if (tool.onClick?.(mode, p, e)) return;
+    if (!mode) return;
     if (mode.type === 'grid') {
       mode.points.push(p);
       if (mode.points.length === 2) {
@@ -205,8 +234,10 @@
     if (near(panel.colorbar.end)) return { kind: 'barEnd' };
     const corners = panel.grid.corners;
     if (corners) for (let i = 0; i < 4; i++) if (near(corners[i])) return { kind: 'corner', i };
-    return null;
+    return tool.hitTest?.(p, tol) || null;
   }
+
+  const SHARED_HANDLES = new Set(['corner', 'barStart', 'barEnd', 'tick']);
 
   function onHandleDrag(handle, p, e) {
     if (!app.drag) {
@@ -214,7 +245,9 @@
       app.drag = handle;
     }
     const panel = activePanel();
-    if (handle.kind === 'corner') {
+    if (!SHARED_HANDLES.has(handle.kind)) {
+      tool.onHandleDrag?.(handle, p, e);
+    } else if (handle.kind === 'corner') {
       const c = panel.grid.corners;
       if ($('grid-rect').checked) {
         const opposite = c[(handle.i + 2) % 4];
@@ -265,20 +298,15 @@
     const panel = activePanel();
     const cell = panel.grid.corners ? cellAt(panel.grid, p) : null;
     setHoverCell(cell);
-    if (cell) {
-      const rl = effectiveLabels(panel.grid.rowLabels, panel.grid.rows, 'R')[cell.row];
-      const cl = effectiveLabels(panel.grid.colLabels, panel.grid.cols, 'C')[cell.col];
-      const res = resultFor(panel);
-      const c = res.cells?.[cell.row]?.[cell.col];
-      $('status-cell').textContent = c ? `${rl} / ${cl}: ${formatNumber(c.value)}  (ΔE ${c.deltaE.toFixed(1)})` : `${rl} / ${cl}`;
-    } else $('status-cell').textContent = '';
+    $('status-cell').textContent = tool.hoverText?.(panel, cell, p) || '';
   }
 
   function setHoverCell(cell) {
     const same = cell && app.hoverCell && cell.row === app.hoverCell.row && cell.col === app.hoverCell.col;
     if (same || (!cell && !app.hoverCell)) return;
     app.hoverCell = cell;
-    highlightTableCell(cell);
+    tool.onHoverCell?.(cell);
+    viewer.requestDraw();
   }
 
   // ---------------------------------------------------------------- overlay drawing
@@ -320,21 +348,7 @@
     const g = panel.grid;
     if (!g.corners) return;
     const c = g.corners;
-    const result = active ? resultFor(panel) : null;
-    const cellPx = Math.min(
-      (Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y) / g.cols) * v.scale,
-      (Math.hypot(c[3].x - c[0].x, c[3].y - c[0].y) / g.rows) * v.scale,
-    );
-
-    if (active && app.showRecon && result?.cells) {
-      for (let r = 0; r < g.rows; r++) {
-        for (let k = 0; k < g.cols; k++) {
-          polyPath(ctx, v, cellSamplePolygon(g, r, k));
-          ctx.fillStyle = rgbToHex(colorAtT(result.samples, result.cells[r][k].t));
-          ctx.fill();
-        }
-      }
-    }
+    tool.drawUnderGrid?.(ctx, v, panel, active);
 
     // Internal lines.
     ctx.beginPath();
@@ -356,32 +370,7 @@
     ctx.stroke();
     ctx.globalAlpha /= 0.8;
 
-    // Sample boxes, only when cells are large enough to read.
-    if (active && cellPx > 10 && !app.showRecon) {
-      for (let r = 0; r < g.rows; r++) {
-        for (let k = 0; k < g.cols; k++) {
-          polyPath(ctx, v, cellSamplePolygon(g, r, k));
-          ctx.setLineDash([3, 3]);
-          ctx.lineWidth = 1;
-          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      }
-    }
-
-    if (active && result?.cells) {
-      for (let r = 0; r < g.rows; r++) {
-        for (let k = 0; k < g.cols; k++) {
-          if (!result.cells[r][k].flagged) continue;
-          polyPath(ctx, v, cellSamplePolygon(g, r, k));
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = COLORS.flag;
-          ctx.stroke();
-        }
-      }
-    }
-
+    tool.drawOverGrid?.(ctx, v, panel, active);
     polyPath(ctx, v, c);
     strokeDual(ctx, COLORS.grid, 2);
 
@@ -436,7 +425,7 @@
       ctx.lineTo(s.x + nx * 12, s.y + ny * 12);
       strokeDual(ctx, COLORS.bar, 2);
       drawHandle(ctx, v, k, COLORS.bar, 'circle');
-      const label = Number.isFinite(k.value) ? String(k.value) : '?';
+      const label = Number.isFinite(k.value) ? tickLabel(k.value) : '?';
       const lx = s.x + nx * 18 + (nx >= 0 ? 0 : -ctx.measureText(label).width);
       const ly = s.y + ny * 18;
       ctx.lineWidth = 3;
@@ -447,6 +436,12 @@
     }
     drawHandle(ctx, v, cb.start, COLORS.bar);
     drawHandle(ctx, v, cb.end, COLORS.bar);
+  }
+
+  // Compact tick text: 1.4e9 rather than 1400000000.
+  function tickLabel(v) {
+    const a = Math.abs(v);
+    return a !== 0 && (a >= 1e5 || a < 1e-3) ? v.toExponential().replace('e+', 'e') : String(v);
   }
 
   function drawOverlay(ctx, v) {
@@ -461,6 +456,7 @@
       ctx.globalAlpha = 1;
       drawGrid(ctx, v, active, true);
       drawColorbar(ctx, v, active, true);
+      tool.drawOverlay?.(ctx, v, active, pagePanels());
     }
 
     // Rubber band while placing.
@@ -481,6 +477,7 @@
         strokeDual(ctx, COLORS.bar, 1.5, [6, 4]);
       }
     }
+    if (m) tool.drawModePreview?.(ctx, v, m, hover);
     if (m && hover && m.type === 'tick') {
       const cb = activePanel().colorbar;
       const q = v.toScreen(pointAtT(cb.start, cb.end, projectT(cb.start, cb.end, hover)));
@@ -493,9 +490,10 @@
   // ---------------------------------------------------------------- modes
 
   const MODE_TEXT = {
-    grid: ['Click the outer top-left corner of the heatmap.', 'Click the outer bottom-right corner.'],
+    grid: tool.gridTexts || ['Click the outer top-left corner of the grid.', 'Click the outer bottom-right corner.'],
     colorbar: ['Click one end of the colorbar (middle of the bar).', 'Click the other end. Hold Alt to disable axis snapping.'],
     tick: ['Click a labelled tick on the colorbar, then type its value. Press Done when finished.'],
+    ...(tool.modeTexts || {}),
   };
 
   function setMode(type) {
@@ -512,6 +510,7 @@
     $('grid-place').classList.toggle('active', type === 'grid');
     $('bar-place').classList.toggle('active', type === 'colorbar');
     $('tick-add').classList.toggle('active', type === 'tick');
+    tool.onModeChange?.(type);
     viewer.requestDraw();
   }
 
@@ -520,8 +519,8 @@
     $('modebar').hidden = !m;
     if (!m) return;
     const texts = MODE_TEXT[m.type];
-    $('modebar-text').textContent = texts[Math.min(m.points.length, texts.length - 1)];
-    $('mode-done').textContent = m.type === 'tick' ? 'Done' : 'Cancel';
+    $('modebar-text').textContent = typeof texts === 'function' ? texts(m) : texts[Math.min(m.points.length, texts.length - 1)];
+    $('mode-done').textContent = m.type === 'tick' || m.done ? 'Done' : 'Cancel';
   }
 
   // ---------------------------------------------------------------- sidebar rendering
@@ -537,7 +536,7 @@
 
   function renderSidebar(light = false) {
     const loaded = !!app.sourceCanvas;
-    for (const id of ['sec-source', 'sec-panels', 'sec-grid', 'sec-colorbar', 'sec-results']) $(id).hidden = !loaded;
+    for (const id of ['sec-source', 'sec-panels', 'sec-grid', 'sec-colorbar', ...(tool.sections || [])]) $(id).hidden = !loaded;
     $('empty-state').hidden = loaded;
     $('view-tools').hidden = !loaded;
     $('btn-export-zip').disabled = !loaded;
@@ -552,10 +551,9 @@
     const g = panel.grid;
     setValue($('grid-rows'), g.rows);
     setValue($('grid-cols'), g.cols);
-    setValue($('grid-fraction'), g.sampleFraction);
-    $('grid-fraction-out').textContent = `${Math.round(g.sampleFraction * 100)}%`;
-    setValue($('grid-row-labels'), g.rowLabels.join('\n'));
-    setValue($('grid-col-labels'), g.colLabels.join('\n'));
+    if ($('grid-row-labels')) setValue($('grid-row-labels'), g.rowLabels.join('\n'));
+    if ($('grid-col-labels')) setValue($('grid-col-labels'), g.colLabels.join('\n'));
+    if ($('grid-box-labels')) setValue($('grid-box-labels'), g.boxLabels.join('\n'));
     setBadge($('grid-state'), g.corners ? `${g.rows} × ${g.cols}` : 'not placed', !!g.corners);
     $('grid-zoom').disabled = !g.corners;
     $('grid-detect').disabled = !g.corners;
@@ -578,7 +576,7 @@
     setValue($('set-distance'), panel.settings.distance);
     setValue($('set-maxde'), panel.settings.maxDeltaE);
 
-    renderResults(panel);
+    tool.renderSidebar?.(panel, light);
     renderBarStrip(panel);
   }
 
@@ -597,9 +595,10 @@
         const btn = document.createElement('button');
         btn.className = `btn small${p === active ? ' active' : ''}`;
         const dot = document.createElement('span');
-        dot.className = `status-dot${panelProblem(p) ? '' : ' done'}`;
+        const problem = tool.panelProblem(p);
+        dot.className = `status-dot${problem ? '' : ' done'}`;
         btn.append(dot, document.createTextNode(p.name || '(unnamed)'));
-        btn.title = panelProblem(p) || 'Calibrated';
+        btn.title = problem || 'Calibrated';
         btn.addEventListener('click', () => {
           if (p.id === app.project.activePanelId) return;
           setMode(null);
@@ -732,68 +731,6 @@
     }
   }
 
-  function renderResults(panel) {
-    const res = resultFor(panel);
-    const table = $('result-table');
-    $('dl-csv').disabled = $('dl-long').disabled = $('copy-tsv').disabled = !!res.error;
-    if (res.error) {
-      $('result-problem').textContent = res.error;
-      $('result-summary').textContent = '';
-      table.replaceChildren();
-      return;
-    }
-    $('result-problem').textContent = '';
-    const values = res.cells.flat().map((c) => c.value);
-    const flagged = res.cells.flat().filter((c) => c.flagged).length;
-    $('result-summary').textContent =
-      `${res.rows} × ${res.cols} cells · range ${formatNumber(Math.min(...values))} – ${formatNumber(Math.max(...values))}` +
-      ` · ${flagged ? `${flagged} flagged (ΔE > ${panel.settings.maxDeltaE}) — outlined in red` : 'no flagged cells'}`;
-
-    const rowLabels = effectiveLabels(panel.grid.rowLabels, res.rows, 'R');
-    const colLabels = effectiveLabels(panel.grid.colLabels, res.cols, 'C');
-    const thead = document.createElement('thead');
-    const hr = document.createElement('tr');
-    hr.append(th('', true), ...colLabels.map((l) => th(l)));
-    thead.append(hr);
-    const tbody = document.createElement('tbody');
-    res.cells.forEach((row, r) => {
-      const tr = document.createElement('tr');
-      tr.append(th(rowLabels[r], true));
-      row.forEach((c, k) => {
-        const td = document.createElement('td');
-        td.textContent = Number(c.value.toPrecision(4)).toString();
-        td.style.background = rgbToHex(c.rgb);
-        td.style.color = luminance(c.rgb) > 0.45 ? '#111' : '#fff';
-        td.title = `${rowLabels[r]} / ${colLabels[k]}\nvalue ${formatNumber(c.value)}\nΔE ${c.deltaE.toFixed(2)}`;
-        td.dataset.r = r;
-        td.dataset.c = k;
-        if (c.flagged) td.classList.add('flagged');
-        tr.append(td);
-      });
-      tbody.append(tr);
-    });
-    table.replaceChildren(thead, tbody);
-    highlightTableCell(app.hoverCell);
-  }
-
-  function th(text, rowhead = false) {
-    const el = document.createElement('th');
-    el.textContent = text;
-    if (rowhead) el.className = 'rowhead';
-    return el;
-  }
-
-  function luminance([r, g, b]) {
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  }
-
-  function highlightTableCell(cell) {
-    const table = $('result-table');
-    table.querySelector('td.hl')?.classList.remove('hl');
-    if (cell) table.querySelector(`td[data-r="${cell.row}"][data-c="${cell.col}"]`)?.classList.add('hl');
-    viewer.requestDraw();
-  }
-
   // ---------------------------------------------------------------- loading
 
   async function openFile(file) {
@@ -811,7 +748,7 @@
       if (hasCalibration() && !confirm('Opening a new file starts a new project and discards the current calibration. Continue?')) return;
       setMode(null);
       status(`Loading ${file.name}…`);
-      const project = createProject();
+      const project = createProject(tool.kind);
       project.name = file.name.replace(/\.[^.]+$/, '');
       project.source = { fileName: file.name, mime: file.type || null, page: 1, pageCount: 1, renderScale: 1, width: 0, height: 0, sha256: null };
       app.pdfDoc = null;
@@ -844,7 +781,7 @@
   }
 
   function hasCalibration() {
-    return app.project.panels.some((p) => p.grid.corners || p.colorbar.start);
+    return app.project.panels.some((p) => p.grid.corners || p.colorbar.start || tool.hasCalibration?.(p));
   }
 
   // Display a page that is already in app.pages.
@@ -871,14 +808,14 @@
   }
 
   function isEmptyPanel(p) {
-    return !p.grid.corners && !p.colorbar.start && !p.grid.rowLabels.length && !p.grid.colLabels.length;
+    return !p.grid.corners && !p.colorbar.start && !p.grid.rowLabels.length && !p.grid.colLabels.length && !p.grid.boxLabels.length && !p.rois.length;
   }
 
   // Every page shown gets at least one panel to calibrate.
-  function ensurePagePanel(page) {
+  function ensurePagePanel(page, settings = app.project.panels[0]?.settings) {
     if (app.project.panels.some((p) => p.page === page)) return;
     const panel = createPanel(`Panel ${app.project.panels.length + 1}`, page);
-    panel.settings = { ...activePanel().settings };
+    if (settings) panel.settings = { ...settings };
     app.project.panels.push(panel);
   }
   function updateSourceUi() {
@@ -917,12 +854,12 @@
       if (!(await ensurePage(page))) throw new Error('the page image is not available');
       setMode(null);
       const oldPage = s.page;
-      app.lastActive.set(oldPage, activePanel().id);
+      const leaving = activePanel();
+      app.lastActive.set(oldPage, leaving.id);
       // Drop untouched placeholder panels left on the page being left.
-      const keep = app.project.panels.filter((p) => p.page !== oldPage || !isEmptyPanel(p));
-      if (keep.length !== app.project.panels.length && keep.length) app.project.panels = keep;
+      app.project.panels = app.project.panels.filter((p) => p.page !== oldPage || !isEmptyPanel(p));
       s.page = page;
-      ensurePagePanel(page);
+      ensurePagePanel(page, leaving.settings);
       if (!keepActive || !pagePanels().some((p) => p.id === app.project.activePanelId)) {
         const remembered = app.lastActive.get(page);
         app.project.activePanelId = pagePanels().some((p) => p.id === remembered) ? remembered : pagePanels()[0].id;
@@ -968,6 +905,10 @@
     setMode(null);
     status(`Opening ${file.name}…`);
     const { project, pageImages, originalFile } = await readProjectZip(window.JSZip, file);
+    if (project.kind !== tool.kind) {
+      const names = { heatmap: 'Heatmap', ivis: 'IVIS' };
+      throw new Error(`this is a ${names[project.kind]} project; open it in the ${names[project.kind]} tool${tool.otherToolUrl ? ` (${tool.otherToolUrl})` : ''}`);
+    }
     const src = project.source || {};
     app.pdfDoc = null;
     const origFile = originalFile ? new File([originalFile.blob], originalFile.name, { type: src.mime || '' }) : null;
@@ -1056,11 +997,12 @@
       }
       const results = app.project.panels.map(resultFor);
       const incomplete = results.filter((r) => r.error).length;
+      const files = tool.panelFiles ? tool.panelFiles(app.project.panels, results, panelFileBases(app.project.panels)) : [];
       const blob = await buildProjectZip(window.JSZip, {
         project: app.project,
-        results,
         sourceFile: app.originalFile,
         pagePngs,
+        files,
       });
       download(blob, `colormeris-${safeFileName(app.project.name)}.zip`);
       status('');
@@ -1069,23 +1011,6 @@
       console.error(err);
       status('');
       toast(`Export failed: ${err.message}`, true);
-    }
-  }
-
-  async function copyTsv() {
-    const panel = activePanel();
-    const res = resultFor(panel);
-    if (res.error) return;
-    const tsv = toWideCsv(panel, res)
-      .trim()
-      .split('\n')
-      .map((line) => line.replace(/"([^"]|"")*"|,/g, (m) => (m === ',' ? '\t' : m.slice(1, -1).replace(/""/g, '"'))))
-      .join('\n');
-    try {
-      await navigator.clipboard.writeText(tsv);
-      toast('Table copied — paste into a spreadsheet.');
-    } catch {
-      toast('Clipboard is not available here.', true);
     }
   }
 
@@ -1222,10 +1147,10 @@
     p.grid.autoSize = false;
   });
   $('grid-detect').addEventListener('click', () => commit((p) => applyDetectedSize(p)));
-  bindNumber('grid-fraction', (p, v) => (p.grid.sampleFraction = v));
-  bindText('grid-row-labels', (p, v) => (p.grid.rowLabels = parseLabelText(v)));
-  bindText('grid-col-labels', (p, v) => (p.grid.colLabels = parseLabelText(v)));
-  for (const [id, key] of [['grid-row-labels', 'rows'], ['grid-col-labels', 'cols']]) {
+  if ($('grid-row-labels')) bindText('grid-row-labels', (p, v) => (p.grid.rowLabels = parseLabelText(v)));
+  if ($('grid-col-labels')) bindText('grid-col-labels', (p, v) => (p.grid.colLabels = parseLabelText(v)));
+  if ($('grid-box-labels')) bindText('grid-box-labels', (p, v) => (p.grid.boxLabels = parseLabelText(v)));
+  for (const [id, key] of [['grid-row-labels', 'rows'], ['grid-col-labels', 'cols']].filter(([id]) => $(id))) {
     // Pasting a label list sets the matching grid dimension when the grid is still default-sized.
     $(id).addEventListener('change', () => {
       const p = activePanel();
@@ -1252,33 +1177,9 @@
   $('bar-scale').addEventListener('change', (e) => commit((p) => (p.colorbar.scale = e.target.value)));
   bindNumber('bar-halfwidth', (p, v) => (p.colorbar.halfWidth = Math.min(50, Math.max(0, v))));
 
-  // Results
-  $('toggle-recon').addEventListener('change', (e) => {
-    app.showRecon = e.target.checked;
-    viewer.requestDraw();
-  });
+  // Matching settings (both tools)
   $('set-distance').addEventListener('change', (e) => commit((p) => (p.settings.distance = e.target.value)));
   bindNumber('set-maxde', (p, v) => (p.settings.maxDeltaE = Math.max(0, v)));
-  $('dl-csv').addEventListener('click', () => {
-    const p = activePanel();
-    const r = resultFor(p);
-    if (!r.error) download(new Blob([toWideCsv(p, r)], { type: 'text/csv' }), csvName(p));
-  });
-  $('dl-long').addEventListener('click', () => {
-    const p = activePanel();
-    const r = resultFor(p);
-    if (!r.error) download(new Blob([toLongCsv([{ panel: p, result: r }])], { type: 'text/csv' }), csvName(p, '_long'));
-  });
-  $('copy-tsv').addEventListener('click', copyTsv);
-  $('result-table').addEventListener('pointerover', (e) => {
-    const td = e.target.closest('td');
-    app.tableCell = td ? { row: Number(td.dataset.r), col: Number(td.dataset.c) } : null;
-    viewer.requestDraw();
-  });
-  $('result-table').addEventListener('pointerleave', () => {
-    app.tableCell = null;
-    viewer.requestDraw();
-  });
 
   // View tools
   $('mode-done').addEventListener('click', () => setMode(null));
@@ -1292,6 +1193,7 @@
 
   // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
+    if (tool.onKey?.(e)) return;
     const t = e.target;
     const typing = t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== 'checkbox' && t.type !== 'range';
     const mod = e.metaKey || e.ctrlKey;
@@ -1325,5 +1227,37 @@
     if (hasCalibration()) e.preventDefault();
   });
 
-  renderSidebar();
+  const ws = {
+    app,
+    $,
+    COLORS,
+    viewer,
+    activePanel,
+    pagePanels,
+    currentPage,
+    commit,
+    pushHistory,
+    changed,
+    setMode,
+    updateModebar,
+    resultFor,
+    toast,
+    status,
+    download,
+    csvName,
+    zoomToPoints,
+    bindNumber,
+    bindText,
+    setValue,
+    setBadge,
+    strokeDual,
+    polyPath,
+    drawHandle,
+    snapAxis,
+    render: () => renderSidebar(),
+  };
+  return ws;
+  }
+
+  Object.assign(CM, { createWorkspace });
 })((globalThis.Colormeris ??= {}));

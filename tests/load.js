@@ -6,5 +6,7 @@ import '../assets/js/colormap.js';
 import '../assets/js/state.js';
 import '../assets/js/extract.js';
 import '../assets/js/export.js';
+import '../assets/js/roi.js';
+import '../assets/js/quantify.js';
 
 export default globalThis.Colormeris;

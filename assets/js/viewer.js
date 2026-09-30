@@ -7,6 +7,8 @@
   // Interaction: wheel zooms around the cursor; dragging empty space pans
   // (left drag, middle drag, or space + drag); a click without movement is
   // reported via onClick; dragging a handle reported by hitTest moves it.
+  // While wantsDrag() is true, a left drag on empty space is reported through
+  // onDragStart/onDragMove/onDragEnd instead of panning (drawing tools).
 
   const DRAG_THRESHOLD = 4;
   const LOUPE_SIZE = 132;
@@ -15,7 +17,7 @@
   class Viewer {
     constructor(container, callbacks) {
       this.container = container;
-      this.cb = callbacks; // {onClick, hitTest, onHandleDrag, onHandleDrop, onHover, drawOverlay, wantsLoupe}
+      this.cb = callbacks; // {onClick, hitTest, onHandleDrag, onHandleDrop, onHover, drawOverlay, wantsLoupe, wantsDrag, onDragStart, onDragMove, onDragEnd}
       this.canvas = document.createElement('canvas');
       this.canvas.className = 'viewer-canvas';
       this.loupe = document.createElement('canvas');
@@ -146,7 +148,8 @@
       const panOnly = e.button === 1 || this.spaceDown;
       if (e.button === 2) return;
       const handle = panOnly ? null : this.cb.hitTest?.(img, 8 / this.scale);
-      this.pointer = { id: e.pointerId, sx, sy, ox: this.ox, oy: this.oy, moved: false, handle, panOnly, shift: e.shiftKey, alt: e.altKey };
+      const draw = !panOnly && !handle && e.button === 0 && !!this.cb.wantsDrag?.();
+      this.pointer = { id: e.pointerId, sx, sy, start: img, ox: this.ox, oy: this.oy, moved: false, handle, draw, panOnly, shift: e.shiftKey, alt: e.altKey };
       this.canvas.setPointerCapture(e.pointerId);
       if (handle) this.canvas.classList.add('dragging');
     }
@@ -158,9 +161,14 @@
       this.hover = { sx, sy, img };
       const p = this.pointer;
       if (p && p.id === e.pointerId) {
-        if (!p.moved && Math.hypot(sx - p.sx, sy - p.sy) > DRAG_THRESHOLD) p.moved = true;
+        if (!p.moved && Math.hypot(sx - p.sx, sy - p.sy) > DRAG_THRESHOLD) {
+          p.moved = true;
+          if (p.draw) this.cb.onDragStart?.(p.start, e);
+        }
         if (p.moved) {
-          if (p.handle) {
+          if (p.draw) {
+            this.cb.onDragMove?.(img, e);
+          } else if (p.handle) {
             this.cb.onHandleDrag?.(p.handle, img, e);
           } else {
             this.ox = p.ox + (sx - p.sx);
@@ -182,7 +190,8 @@
       this.pointer = null;
       this.canvas.classList.remove('grabbing', 'dragging');
       const { sx, sy } = this.eventPoint(e);
-      if (p.handle && p.moved) this.cb.onHandleDrop?.(p.handle);
+      if (p.draw && p.moved) this.cb.onDragEnd?.(this.toImage(sx, sy), e);
+      else if (p.handle && p.moved) this.cb.onHandleDrop?.(p.handle);
       else if (!p.moved && !p.panOnly && e.button === 0) this.cb.onClick?.(this.toImage(sx, sy), e);
       this.requestDraw();
     }
