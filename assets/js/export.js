@@ -63,11 +63,13 @@
   const README = `Colormeris project archive
 
 project.json          Calibration metadata (grid corners, colorbar line and ticks,
-                      labels, settings, page of each panel). Coordinates are pixels
-                      in the panel's source/page-<n>.png.
+                      labels, settings, page and review of each panel).
+                      Coordinates are pixels in the panel's source/page-<n>.png.
 source/               The original uploaded file and the rendered image of each
                       page that has panels.
 data/                 Extracted data as CSV, one or more files per panel.
+agent/                actions.json and decisions.json: what the agent API and the
+                      heatmap agent changed and decided (with confidences).
 
 Load this zip back into Colormeris to review or re-run the extraction.
 `;

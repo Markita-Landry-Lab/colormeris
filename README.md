@@ -91,18 +91,23 @@ await colormeris.run('get_results');   // → { ok, result } or { ok: false, err
 
 ```
 project.json            per panel: tool (heatmap or ivis), page, grid, colorbar,
-                        labels, settings, and for IVIS the regions and scale bar
+                        labels, settings, review (accepted/rejected), and for
+                        IVIS the regions and scale bar
 README.txt
 source/<original file>  the uploaded PDF/image
 source/page-<n>.png     the rendered image of each page that has panels
 data/<panel>.csv        heatmap: matrix of values
 data/<panel>_long.csv   heatmap: per-cell values with page, RGB and ΔE
 data/<panel>_rois.csv   IVIS: measurements per region copy
+agent/actions.json      changes made through the agent API, in order
+agent/decisions.json    typed decisions (answer, confidence, source, applied)
 ```
 
-Each panel records its `page`. Its coordinates are pixels in that page's `source/page-<n>.png`. Regions copied into every box are stored relative to a box, where a box spans 0–1 in each direction, with per-box nudges. A zip opens in either tool with everything in it. Zips in the older format load too: those from before the IVIS tool are heatmap projects, and those saved by the separate IVIS page are IVIS projects.
+The agent logs are written but not read back when a zip is reopened; panel reviews are (they live in `project.json`). Each panel records its `page`. Its coordinates are pixels in that page's `source/page-<n>.png`. Regions copied into every box are stored relative to a box, where a box spans 0–1 in each direction, with per-box nudges. A zip opens in either tool with everything in it. Zips in the older format load too: those from before the IVIS tool are heatmap projects, and those saved by the separate IVIS page are IVIS projects.
 
 ## Development
+
+More documentation: [docs/agent.md](docs/agent.md) (agent reference, generated), [docs/research.md](docs/research.md) (prior work, novelty, experiment plan), and [CLAUDE.md](CLAUDE.md) (architecture, conventions, status and next steps for Claude sessions).
 
 There is no build step. The pages are plain HTML, CSS and classic scripts that register on a shared `Colormeris` namespace. Each tool page loads them in order. pdf.js 6.3.289, JSZip 3.10.2 and a browser bundle of the OpenRouter TypeScript SDK (loaded only when the agent runs; rebuild with `node scripts/bundle-openrouter.mjs`) are vendored in `assets/vendor/`.
 
