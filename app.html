@@ -208,6 +208,14 @@
           </label>
           <label class="field">Averaging half-width (px) <input id="bar-halfwidth" type="number" min="0" max="50" step="1" class="num"></label>
         </div>
+        <div class="row">
+          <label class="field" title="What happens to the ticks when you drag an end of the colorbar: move with the bar and keep their proportions, or stay on their marks on the page. Drag the line itself to move everything together.">When dragging an end, ticks
+            <select id="bar-tick-mode">
+              <option value="follow">Move with the bar (keep proportions)</option>
+              <option value="fixed">Stay in place on the page</option>
+            </select>
+          </label>
+        </div>
         <table class="ticks">
           <thead><tr><th>Tick value</th><th>Position</th><th></th></tr></thead>
           <tbody id="tick-list"></tbody>

@@ -250,10 +250,20 @@
     if (near(panel.colorbar.end)) return { kind: 'barEnd' };
     const corners = panel.grid.corners;
     if (corners) for (let i = 0; i < 4; i++) if (near(corners[i])) return { kind: 'corner', i };
-    return tool.hitTest?.(p, tol) || null;
+    const own = tool.hitTest?.(p, tol);
+    if (own) return own;
+    // The line itself moves the whole calibration (not while adding ticks,
+    // where a click on the line places one).
+    const { start, end } = panel.colorbar;
+    if (start && end && app.mode?.type !== 'tick') {
+      const t = Math.min(1, Math.max(0, projectT(start, end, p)));
+      const q = pointAtT(start, end, t);
+      if (Math.hypot(q.x - p.x, q.y - p.y) <= tol) return { kind: 'bar', last: p };
+    }
+    return null;
   }
 
-  const SHARED_HANDLES = new Set(['corner', 'barStart', 'barEnd', 'tick']);
+  const SHARED_HANDLES = new Set(['corner', 'barStart', 'barEnd', 'bar', 'tick']);
 
   function onHandleDrag(handle, p, e) {
     if (!app.drag) {
@@ -277,11 +287,31 @@
       const cb = panel.colorbar;
       const other = handle.kind === 'barStart' ? cb.end : cb.start;
       const q = e.altKey ? p : snapAxis(other, p);
-      // Keep ticks at the same relative position along the bar.
-      const ts = ticksWithT(cb).map((k) => k.t);
+      // "follow": ticks keep their relative position along the bar.
+      // "fixed": they keep their distance from the end that is not dragged,
+      // so lengthening the bar leaves them in place and rotating turns them
+      // with it. Distances are taken once, at the start of the drag:
+      // re-projecting the moved ticks on every event shrank them towards the
+      // fixed end whenever the line turned.
+      const fixed = $('bar-tick-mode').value === 'fixed';
+      const len = () => Math.hypot(cb.end.x - cb.start.x, cb.end.y - cb.start.y);
+      handle.ts ??= ticksWithT(cb).map((k) => k.t);
+      handle.len ??= len();
       if (handle.kind === 'barStart') cb.start = q;
       else cb.end = q;
-      cb.ticks.forEach((k, i) => Object.assign(k, pointAtT(cb.start, cb.end, ts[i])));
+      const L = len() || 1e-9;
+      const tAt = (t0) => (handle.kind === 'barEnd' ? (t0 * handle.len) / L : 1 - ((1 - t0) * handle.len) / L);
+      cb.ticks.forEach((k, i) => Object.assign(k, pointAtT(cb.start, cb.end, fixed ? tAt(handle.ts[i]) : handle.ts[i])));
+    } else if (handle.kind === 'bar') {
+      // Move the line and its ticks together, by the pointer's step since the last event.
+      const cb = panel.colorbar;
+      const dx = p.x - handle.last.x;
+      const dy = p.y - handle.last.y;
+      handle.last = p;
+      for (const q of [cb.start, cb.end, ...cb.ticks]) {
+        q.x += dx;
+        q.y += dy;
+      }
     } else if (handle.kind === 'tick') {
       const cb = panel.colorbar;
       const k = cb.ticks.find((x) => x.id === handle.id);
