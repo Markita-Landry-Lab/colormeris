@@ -1,20 +1,24 @@
 (function (CM) {
   'use strict';
-  const { createWorkspace, extractPanel, panelProblem, effectiveLabels, cellSamplePolygon, colorAtT, rgbToHex, formatNumber, toWideCsv, toLongCsv, heatmapPanelFiles } = CM;
+  const { extractPanel, panelProblem, effectiveLabels, cellSamplePolygon, colorAtT, rgbToHex, formatNumber, toWideCsv, toLongCsv, heatmapPanelFiles } = CM;
 
   // Heatmap tool: extract one value per grid cell by matching the cell's color
-  // against the calibrated colorbar.
+  // against the calibrated colorbar. setupHeatmapTool(ws) registers it with a
+  // workspace (workspace.js).
 
+  function setupHeatmapTool(ws) {
   const state = { showRecon: false };
+  const { $, app, viewer } = ws;
 
-  const ws = createWorkspace({
+  ws.addTool({
     kind: 'heatmap',
-    otherToolUrl: 'ivis.html',
+    label: 'heatmap',
+    title: 'Colormeris · Heatmap',
     computeResult: (panel, image) => extractPanel(image, panel),
     resultKey: (panel) => [panel.grid, panel.colorbar, panel.settings],
     panelProblem,
     panelFiles: (panels, results, bases) => panels.flatMap((p, i) => heatmapPanelFiles(p, results[i], bases[i])),
-    sections: ['sec-results'],
+    sections: ['sec-hm-results'],
     gridTexts: ['Click the outer top-left corner of the heatmap.', 'Click the outer bottom-right corner.'],
     renderSidebar,
     drawUnderGrid,
@@ -22,7 +26,6 @@
     hoverText,
     onHoverCell: (cell) => highlightTableCell(cell),
   });
-  const { $, app, viewer } = ws;
 
   // ---------------------------------------------------------------- overlay
 
@@ -198,5 +201,7 @@
     viewer.requestDraw();
   });
 
-  ws.render();
+  }
+
+  Object.assign(CM, { setupHeatmapTool });
 })((globalThis.Colormeris ??= {}));

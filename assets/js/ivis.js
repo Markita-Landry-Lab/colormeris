@@ -1,7 +1,6 @@
 (function (CM) {
   'use strict';
   const {
-    createWorkspace,
     quantifyPanel,
     roiPanelProblem,
     makeClassifier,
@@ -43,6 +42,9 @@
     area: 'Region area',
   };
 
+  // setupIvisTool(ws) registers the tool with a workspace (workspace.js).
+  function setupIvisTool(ws) {
+  const { $, app, viewer } = ws;
   const state = {
     selectedId: null, // selected region
     draft: null, // {shape, a, b, equal} while dragging a new ellipse/rect
@@ -51,16 +53,17 @@
     metric: 'sum',
   };
 
-  const ws = createWorkspace({
+  ws.addTool({
     kind: 'ivis',
-    otherToolUrl: 'heatmap.html',
+    label: 'IVIS',
+    title: 'Colormeris · IVIS',
     computeResult: (panel, image) => quantifyPanel(image, panel),
     resultKey: (panel) => [panel.grid, panel.colorbar, panel.settings, panel.rois, panel.scale],
     panelProblem: roiPanelProblem,
     panelFiles: (panels, results, bases) =>
       panels.flatMap((p, i) => (results[i].error ? [] : [{ path: `data/${bases[i]}_rois.csv`, content: roiCsv([{ panel: p, result: results[i] }]) }])),
     hasCalibration: (p) => p.rois.length > 0 || !!p.scale,
-    sections: ['sec-rois', 'sec-scale', 'sec-results'],
+    sections: ['sec-rois', 'sec-scale', 'sec-iv-results'],
     gridTexts: ['Click the outer top-left corner of the grid of boxes.', 'Click the outer bottom-right corner.'],
     modeTexts: {
       ellipse: ['Drag to draw an ellipse. Hold Shift for a circle.'],
@@ -92,7 +95,6 @@
     onKey,
     renderSidebar,
   });
-  const { $, app, viewer } = ws;
 
   const selectedRoi = () => ws.activePanel().rois.find((r) => r.id === state.selectedId) || null;
   const roiColor = (panel, roi) => PALETTE[panel.rois.indexOf(roi) % PALETTE.length];
@@ -600,19 +602,19 @@
 
   function renderResults(panel) {
     const res = ws.resultFor(panel);
-    const table = $('result-table');
-    $('dl-csv').disabled = $('copy-tsv').disabled = !!res.error;
+    const table = $('iv-result-table');
+    $('iv-dl-csv').disabled = $('iv-copy-tsv').disabled = !!res.error;
     if (res.error) {
-      $('result-problem').textContent = res.error;
-      $('result-summary').textContent = '';
+      $('iv-result-problem').textContent = res.error;
+      $('iv-result-summary').textContent = '';
       table.replaceChildren();
       return;
     }
-    $('result-problem').textContent = '';
+    $('iv-result-problem').textContent = '';
     const flagged = res.rows.reduce((s, r) => s + r.stats.flaggedPx, 0);
     const unit = res.unit ? ` · areas in ${res.unit}²` : ' · pixel units';
     const signal = res.rows.reduce((s, r) => s + r.stats.signalPx, 0);
-    $('result-summary').textContent =
+    $('iv-result-summary').textContent =
       `${panel.rois.length} region${panel.rois.length === 1 ? '' : 's'} · ${res.rows.length} measurement${res.rows.length === 1 ? '' : 's'}${unit}` +
       (flagged ? ` · ${((100 * flagged) / Math.max(1, signal)).toFixed(1)}% of signal pixels matched no colorbar color (ΔE > ${panel.settings.maxDeltaE}); cells over 10% are outlined` : '');
     const model = tableModel(panel, res);
@@ -707,21 +709,23 @@
     state.showMask = e.target.checked;
     viewer.requestDraw();
   });
-  $('dl-csv').addEventListener('click', () => {
+  $('iv-dl-csv').addEventListener('click', () => {
     const p = ws.activePanel();
     const r = ws.resultFor(p);
     if (!r.error) ws.download(new Blob([roiCsv([{ panel: p, result: r }])], { type: 'text/csv' }), ws.csvName(p, '_rois'));
   });
-  $('copy-tsv').addEventListener('click', copyTsv);
-  $('result-table').addEventListener('pointerover', (e) => {
+  $('iv-copy-tsv').addEventListener('click', copyTsv);
+  $('iv-result-table').addEventListener('pointerover', (e) => {
     const td = e.target.closest('td[data-r]');
     app.tableCell = td ? { row: Number(td.dataset.r), col: Number(td.dataset.c) } : null;
     viewer.requestDraw();
   });
-  $('result-table').addEventListener('pointerleave', () => {
+  $('iv-result-table').addEventListener('pointerleave', () => {
     app.tableCell = null;
     viewer.requestDraw();
   });
 
-  ws.render();
+  }
+
+  Object.assign(CM, { setupIvisTool });
 })((globalThis.Colormeris ??= {}));

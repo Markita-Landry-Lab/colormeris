@@ -4,12 +4,15 @@
 
   // Shared workspace for the Colormeris tools: source loading and PDF pages,
   // the zoomable viewer, panels, the grid and colorbar calibration, undo,
-  // keyboard shortcuts and project zips. A tool (heatmap.js, ivis.js) plugs in
-  // its own results and overlay through the hooks documented in TOOL_HOOKS.
+  // keyboard shortcuts and project zips. Tools (heatmap.js, ivis.js) register
+  // with addTool and plug in their results and overlay through the hooks in
+  // TOOL_HOOKS. One project holds the panels of every tool (panel.tool); the
+  // active tool (setTool) shows and edits its own panels, and a project zip
+  // carries the data of all tools.
   //
   // TOOL_HOOKS (all optional unless noted):
   //   kind                      'heatmap' | 'ivis' (required)
-  //   otherToolUrl              page to suggest when a zip of another kind is opened
+  //   title                     page title while the tool is active
   //   computeResult(panel, img) result object or {error} (required)
   //   resultKey(panel)          JSON-able key of everything computeResult depends on
   //   panelProblem(panel)       what is missing before results, or null (required)
@@ -30,14 +33,17 @@
   //   onHoverCell(cell)
   //   onKey(e)                  return true when handled
   //   gridTexts                 mode texts for placing the grid
-  function createWorkspace(tool) {
+  function createWorkspace() {
   const $ = (id) => document.getElementById(id);
+  const tools = {};
+  let tool = null; // the active tool
+  const toolFor = (panel) => tools[panel.tool] || tool;
 
   const COLORS = { grid: '#e22bd0', bar: '#f29900', flag: '#ff3b30', highlight: '#ffd400', outline: 'rgba(0,0,0,0.65)' };
   const SNAP_DEGREES = 3;
 
   const app = {
-    project: createProject(tool.kind),
+    project: createProject(),
     sourceCanvas: null,
     imageData: null,
     originalFile: null,
@@ -45,7 +51,7 @@
     mode: null, // {type: 'grid' | 'colorbar' | 'tick', points: []}
     cache: new Map(), // panel id → {key, result}
     pages: new Map(), // page number → {canvas, imageData} of rendered pages
-    lastActive: new Map(), // page number → id of the panel last active there
+    lastActive: new Map(), // `${tool}|${page}` → id of the panel last active there
     history: [],
     future: [],
     drag: null,
@@ -59,7 +65,8 @@
 
   const currentPage = () => app.project.source?.page || 1;
   // Panels belonging to the page on screen; only these are drawn and edited.
-  const pagePanels = () => app.project.panels.filter((p) => p.page === currentPage());
+  const pagePanels = () => app.project.panels.filter((p) => p.page === currentPage() && p.tool === tool.kind);
+  const activeKey = (page = currentPage()) => `${tool.kind}|${page}`;
   const activePanel = () => {
     const here = pagePanels();
     return here.find((p) => p.id === app.project.activePanelId) || here[0] || app.project.panels[0];
@@ -82,6 +89,14 @@
     app.project.activePanelId = snap.activePanelId;
     // Undoing a change made on another page takes you back to that page.
     const target = app.project.panels.find((p) => p.id === snap.activePanelId);
+    if (target && target.tool !== tool.kind) {
+      setTool(target.tool, { quiet: true });
+      if (target.page !== currentPage()) {
+        goToPage(target.page, { keepActive: true });
+        return;
+      }
+      app.project.activePanelId = target.id;
+    }
     if (target && target.page !== currentPage()) {
       goToPage(target.page, { keepActive: true });
       return;
@@ -119,10 +134,11 @@
     if (!app.sourceCanvas) return { error: 'Load a file first.' };
     const image = app.pages.get(panel.page)?.imageData;
     if (!image) return { error: `Page ${panel.page} is not rendered yet.` };
-    const key = JSON.stringify([panel.page, tool.resultKey ? tool.resultKey(panel) : [panel.grid, panel.colorbar, panel.settings]]);
+    const t = toolFor(panel);
+    const key = JSON.stringify([panel.page, panel.tool, t.resultKey ? t.resultKey(panel) : [panel.grid, panel.colorbar, panel.settings]]);
     const hit = app.cache.get(panel.id);
     if (hit && hit.key === key) return hit.result;
-    const result = tool.computeResult(panel, image);
+    const result = t.computeResult(panel, image);
     app.cache.set(panel.id, { key, result });
     return result;
   }
@@ -490,11 +506,11 @@
   // ---------------------------------------------------------------- modes
 
   const MODE_TEXT = {
-    grid: tool.gridTexts || ['Click the outer top-left corner of the grid.', 'Click the outer bottom-right corner.'],
+    grid: ['Click the outer top-left corner of the grid.', 'Click the outer bottom-right corner.'],
     colorbar: ['Click one end of the colorbar (middle of the bar).', 'Click the other end. Hold Alt to disable axis snapping.'],
     tick: ['Click a labelled tick on the colorbar, then type its value. Press Done when finished.'],
-    ...(tool.modeTexts || {}),
   };
+  const modeTexts = (type) => tool.modeTexts?.[type] || (type === 'grid' && tool.gridTexts) || MODE_TEXT[type];
 
   function setMode(type) {
     if (type && !app.sourceCanvas) return;
@@ -518,7 +534,7 @@
     const m = app.mode;
     $('modebar').hidden = !m;
     if (!m) return;
-    const texts = MODE_TEXT[m.type];
+    const texts = modeTexts(m.type);
     $('modebar-text').textContent = typeof texts === 'function' ? texts(m) : texts[Math.min(m.points.length, texts.length - 1)];
     $('mode-done').textContent = m.type === 'tick' || m.done ? 'Done' : 'Cancel';
   }
@@ -536,7 +552,8 @@
 
   function renderSidebar(light = false) {
     const loaded = !!app.sourceCanvas;
-    for (const id of ['sec-source', 'sec-panels', 'sec-grid', 'sec-colorbar', ...(tool.sections || [])]) $(id).hidden = !loaded;
+    for (const t of Object.values(tools)) for (const id of t.sections || []) $(id).hidden = true;
+    for (const id of ['sec-source', 'sec-panels', 'sec-grid', 'sec-colorbar', 'sec-settings', ...(tool.sections || [])]) $(id).hidden = !loaded;
     $('empty-state').hidden = loaded;
     $('view-tools').hidden = !loaded;
     $('btn-export-zip').disabled = !loaded;
@@ -595,7 +612,7 @@
         const btn = document.createElement('button');
         btn.className = `btn small${p === active ? ' active' : ''}`;
         const dot = document.createElement('span');
-        const problem = tool.panelProblem(p);
+        const problem = toolFor(p).panelProblem(p);
         dot.className = `status-dot${problem ? '' : ' done'}`;
         btn.append(dot, document.createTextNode(p.name || '(unnamed)'));
         btn.title = problem || 'Calibrated';
@@ -749,6 +766,7 @@
       setMode(null);
       status(`Loading ${file.name}…`);
       const project = createProject(tool.kind);
+      project.activePanelId = project.panels[0].id;
       project.name = file.name.replace(/\.[^.]+$/, '');
       project.source = { fileName: file.name, mime: file.type || null, page: 1, pageCount: 1, renderScale: 1, width: 0, height: 0, sha256: null };
       app.pdfDoc = null;
@@ -781,7 +799,7 @@
   }
 
   function hasCalibration() {
-    return app.project.panels.some((p) => p.grid.corners || p.colorbar.start || tool.hasCalibration?.(p));
+    return app.project.panels.some((p) => p.grid.corners || p.colorbar.start || toolFor(p).hasCalibration?.(p));
   }
 
   // Display a page that is already in app.pages.
@@ -811,12 +829,20 @@
     return !p.grid.corners && !p.colorbar.start && !p.grid.rowLabels.length && !p.grid.colLabels.length && !p.grid.boxLabels.length && !p.rois.length;
   }
 
-  // Every page shown gets at least one panel to calibrate.
-  function ensurePagePanel(page, settings = app.project.panels[0]?.settings) {
-    if (app.project.panels.some((p) => p.page === page)) return;
-    const panel = createPanel(`Panel ${app.project.panels.length + 1}`, page);
+  // Every page shown gets at least one panel of the active tool to calibrate.
+  function ensurePagePanel(page, settings) {
+    if (app.project.panels.some((p) => p.page === page && p.tool === tool.kind)) return;
+    const panel = createPanel(nextPanelName(), page, tool.kind);
+    settings ??= app.project.panels.find((p) => p.tool === tool.kind)?.settings;
     if (settings) panel.settings = { ...settings };
     app.project.panels.push(panel);
+  }
+
+  function nextPanelName() {
+    const used = new Set(app.project.panels.map((p) => p.name));
+    let n = app.project.panels.filter((p) => p.tool === tool.kind).length + 1;
+    while (used.has(`Panel ${n}`)) n++;
+    return `Panel ${n}`;
   }
   function updateSourceUi() {
     const s = app.project.source;
@@ -855,13 +881,13 @@
       setMode(null);
       const oldPage = s.page;
       const leaving = activePanel();
-      app.lastActive.set(oldPage, leaving.id);
+      app.lastActive.set(activeKey(oldPage), leaving.id);
       // Drop untouched placeholder panels left on the page being left.
       app.project.panels = app.project.panels.filter((p) => p.page !== oldPage || !isEmptyPanel(p));
       s.page = page;
-      ensurePagePanel(page, leaving.settings);
+      ensurePagePanel(page, leaving.tool === tool.kind ? leaving.settings : undefined);
       if (!keepActive || !pagePanels().some((p) => p.id === app.project.activePanelId)) {
-        const remembered = app.lastActive.get(page);
+        const remembered = app.lastActive.get(activeKey(page));
         app.project.activePanelId = pagePanels().some((p) => p.id === remembered) ? remembered : pagePanels()[0].id;
       }
       app.tableCell = null;
@@ -905,10 +931,6 @@
     setMode(null);
     status(`Opening ${file.name}…`);
     const { project, pageImages, originalFile } = await readProjectZip(window.JSZip, file);
-    if (project.kind !== tool.kind) {
-      const names = { heatmap: 'Heatmap', ivis: 'IVIS' };
-      throw new Error(`this is a ${names[project.kind]} project; open it in the ${names[project.kind]} tool${tool.otherToolUrl ? ` (${tool.otherToolUrl})` : ''}`);
-    }
     const src = project.source || {};
     app.pdfDoc = null;
     const origFile = originalFile ? new File([originalFile.blob], originalFile.name, { type: src.mime || '' }) : null;
@@ -958,10 +980,11 @@
     status('');
     if (origFile && !project.source.sha256) sha256Hex(origFile).then((h) => (project.source.sha256 = h));
     const pageCount = new Set(project.panels.map((p) => p.page)).size;
-    toast(
-      `Opened project with ${project.panels.length} panel${project.panels.length === 1 ? '' : 's'}` +
-        (pageCount > 1 ? ` on ${pageCount} pages.` : '.'),
-    );
+    const counts = Object.values(tools)
+      .map((t) => [t, project.panels.filter((p) => p.tool === t.kind && !isEmptyPanel(p)).length])
+      .filter(([, n]) => n)
+      .map(([t, n]) => `${n} ${t.label || t.kind} panel${n === 1 ? '' : 's'}`);
+    toast(`Opened project with ${counts.join(' and ') || 'no calibrated panels'}${pageCount > 1 ? ` on ${pageCount} pages` : ''}.`);
   }
 
   // ---------------------------------------------------------------- export
@@ -997,7 +1020,13 @@
       }
       const results = app.project.panels.map(resultFor);
       const incomplete = results.filter((r) => r.error).length;
-      const files = tool.panelFiles ? tool.panelFiles(app.project.panels, results, panelFileBases(app.project.panels)) : [];
+      // Data files of every tool, with file names unique across all panels.
+      const bases = panelFileBases(app.project.panels);
+      const files = Object.values(tools).flatMap((t) => {
+        const idx = app.project.panels.map((p, i) => (p.tool === t.kind ? i : -1)).filter((i) => i >= 0);
+        if (!idx.length || !t.panelFiles) return [];
+        return t.panelFiles(idx.map((i) => app.project.panels[i]), idx.map((i) => results[i]), idx.map((i) => bases[i]));
+      });
       const blob = await buildProjectZip(window.JSZip, {
         project: app.project,
         sourceFile: app.originalFile,
@@ -1110,7 +1139,7 @@
   $('panel-add').addEventListener('click', () => {
     pushHistory();
     const prev = activePanel();
-    const panel = createPanel(`Panel ${app.project.panels.length + 1}`, currentPage());
+    const panel = createPanel(nextPanelName(), currentPage(), tool.kind);
     panel.settings = { ...prev.settings };
     app.project.panels.push(panel);
     app.project.activePanelId = panel.id;
@@ -1227,7 +1256,48 @@
     if (hasCalibration()) e.preventDefault();
   });
 
+  // ---------------------------------------------------------------- tools
+
+  function addTool(config) {
+    tools[config.kind] = config;
+  }
+
+  // Make another tool active. The loaded file, pages and all panels stay; the
+  // tool shows its own panels on the current page (creating one if needed).
+  function setTool(kind, { quiet = false } = {}) {
+    if (!tools[kind] || tool?.kind === kind) return;
+    if (tool) {
+      setMode(null);
+      if (app.sourceCanvas) {
+        app.lastActive.set(activeKey(), activePanel()?.id);
+        // Drop the old tool's untouched placeholder panels on this page.
+        const kept = app.project.panels.filter((p) => !(p.tool === tool.kind && p.page === currentPage() && isEmptyPanel(p)));
+        if (kept.length) app.project.panels = kept;
+      }
+    }
+    tool = tools[kind];
+    for (const el of document.querySelectorAll('[data-tool]')) el.hidden = el.dataset.tool !== kind;
+    for (const a of document.querySelectorAll('[data-tool-link]')) {
+      if (a.dataset.toolLink === kind) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    }
+    if (tool.title) document.title = tool.title;
+    // Keep the URL (#heatmap / #ivis) in step, e.g. when undo switches tools.
+    if (location.hash !== `#${kind}`) history.replaceState(null, '', `#${kind}`);
+    app.tableCell = null;
+    app.hoverCell = null;
+    if (app.sourceCanvas) {
+      ensurePagePanel(currentPage());
+      const remembered = app.lastActive.get(activeKey());
+      app.project.activePanelId = pagePanels().some((p) => p.id === remembered) ? remembered : pagePanels()[0].id;
+    }
+    if (!quiet) changed();
+  }
+
   const ws = {
+    addTool,
+    setTool,
+    tool: () => tool,
     app,
     $,
     COLORS,

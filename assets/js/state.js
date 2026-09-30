@@ -7,7 +7,8 @@
 
 
   const SCHEMA = 'colormeris-project';
-  const SCHEMA_VERSION = 1;
+  // Version 2: each panel names its tool; version 1 had one tool per project (`kind`).
+  const SCHEMA_VERSION = 2;
   const APP_VERSION = '0.1.0';
 
   let nextId = 1;
@@ -19,29 +20,33 @@
   const SCALE_UNITS = ['cm', 'mm'];
 
   // `page` is the 1-based PDF page the panel's coordinates refer to (always 1
-  // for images). `rois` and `scale` are used by the IVIS tool (see roi.js);
-  // `settings.grayChroma` is its background threshold (CIELAB chroma).
-  function createPanel(name = 'Panel 1', page = 1) {
-    return {
+  // for images). `tool` is 'heatmap' or 'ivis'. `rois` and `scale` are used by
+  // the IVIS tool (see roi.js); `settings.grayChroma` is its background
+  // threshold (CIELAB chroma).
+  function createPanel(name = 'Panel 1', page = 1, tool = 'heatmap') {
+    const panel = {
       id: newId(),
       name,
       page,
+      tool,
       grid: { corners: null, rows: 4, cols: 4, sampleFraction: 0.5, rowLabels: [], colLabels: [], boxLabels: [] },
       colorbar: { start: null, end: null, halfWidth: 2, nSamples: 256, ticks: [], scale: 'linear' },
       settings: { distance: 'de2000', maxDeltaE: 10, grayChroma: 10 },
       rois: [],
       scale: null,
     };
-  }
-
-  // `kind` names the tool that owns the project: 'heatmap' or 'ivis'.
-  function createProject(kind = 'heatmap') {
-    const panel = createPanel();
     // IVIS photos carry JPEG color noise up to about chroma 20 (measured on
     // Fig. 1k of the example paper), and blended overlay edges sit further from
     // the colorbar colors than heatmap cells do.
-    if (kind === 'ivis') Object.assign(panel.settings, { grayChroma: 20, maxDeltaE: 20 });
-    return { kind, name: 'untitled', source: null, panels: [panel], activePanelId: panel.id };
+    if (tool === 'ivis') Object.assign(panel.settings, { grayChroma: 20, maxDeltaE: 20 });
+    return panel;
+  }
+
+  // A project holds the panels of every tool for one source file; the first
+  // panel belongs to `tool`, the tool it was created in.
+  function createProject(tool = 'heatmap') {
+    const panel = createPanel('Panel 1', 1, tool);
+    return { name: 'untitled', source: null, panels: [panel], activePanelId: panel.id };
   }
 
   function createRoi(shape, geom, { name = 'ROI', replicate = true } = {}) {
@@ -88,12 +93,12 @@
       version: SCHEMA_VERSION,
       appVersion: APP_VERSION,
       createdAt: new Date().toISOString(),
-      kind: project.kind || 'heatmap',
       name: project.name,
       source: project.source ? { ...project.source } : null,
       panels: project.panels.map((p) => ({
         name: p.name,
         page: p.page,
+        tool: p.tool,
         grid: {
           corners: p.grid.corners ? p.grid.corners.map(pt) : null,
           rows: p.grid.rows,
@@ -117,7 +122,7 @@
           })),
         },
         settings: { ...p.settings },
-        ...(project.kind === 'ivis'
+        ...(p.tool === 'ivis'
           ? {
               rois: p.rois.map((r) => ({
                 name: r.name,
@@ -178,12 +183,14 @@
       fail(`unsupported version ${json.version}; this app reads up to ${SCHEMA_VERSION}`);
     }
     if (!Array.isArray(json.panels) || json.panels.length === 0) fail('no panels');
-    // Files written before there were two tools are heatmap projects.
-    const kind = KINDS.includes(json.kind) ? json.kind : 'heatmap';
+    // Version 1 files have one tool for the whole project in `kind` (missing in
+    // files written before the IVIS tool existed, which are heatmap projects).
+    const fileKind = KINDS.includes(json.kind) ? json.kind : 'heatmap';
     const panels = json.panels.map((raw, i) => {
       // Version 1 files written before panels had pages refer to source.page.
       const page = Number.isInteger(raw.page) && raw.page >= 1 ? raw.page : json.source?.page || 1;
-      const p = createPanel(typeof raw.name === 'string' ? raw.name : `Panel ${i + 1}`, page);
+      const tool = json.version >= 2 && KINDS.includes(raw.tool) ? raw.tool : fileKind;
+      const p = createPanel(typeof raw.name === 'string' ? raw.name : `Panel ${i + 1}`, page, tool);
       const g = raw.grid || {};
       if (g.corners !== null && g.corners !== undefined) {
         if (!Array.isArray(g.corners) || g.corners.length !== 4) fail(`panel ${i + 1} grid needs 4 corners`);
@@ -209,7 +216,7 @@
       p.settings.distance = s.distance === 'de76' ? 'de76' : 'de2000';
       if (Number.isFinite(s.maxDeltaE)) p.settings.maxDeltaE = s.maxDeltaE;
       if (Number.isFinite(s.grayChroma)) p.settings.grayChroma = Math.max(0, s.grayChroma);
-      if (kind === 'ivis') {
+      if (tool === 'ivis') {
         p.rois = (Array.isArray(raw.rois) ? raw.rois : []).map((r, j) => readRoi(r, `panel ${i + 1} region ${j + 1}`));
         const sc = raw.scale;
         if (sc && typeof sc === 'object') {
@@ -221,7 +228,6 @@
       return p;
     });
     return {
-      kind,
       name: typeof json.name === 'string' ? json.name : 'untitled',
       source: json.source && typeof json.source === 'object' ? { ...json.source } : null,
       panels,

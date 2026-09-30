@@ -2,10 +2,12 @@
 
 Colormeris is a set of static web pages that turn colors in scientific figures back into numbers. You load a PDF, PNG or JPG and click to mark the colorbar. The page reads values out of the colors and exports them as CSV. It can also save a project zip, which you can load again later to review or re-run the extraction.
 
-`index.html` is a landing page for two tools that share the same loading, viewer, colorbar calibration and project files:
+`index.html` is a landing page. Both tools live in `app.html` and share the loaded file, viewer, colorbar calibration and project:
 
-- **Heatmap** (`heatmap.html`) gives one value per cell of a gridded heatmap.
-- **IVIS** (`ivis.html`) measures signal inside regions drawn on in vivo luminescence images.
+- **Heatmap** (`app.html#heatmap`) gives one value per cell of a gridded heatmap.
+- **IVIS** (`app.html#ivis`) measures signal inside regions drawn on in vivo luminescence images.
+
+Switch tools at any time with the Heatmap | IVIS control in the top bar. The file, the PDF page and each tool's panels stay. One project zip holds the work of both tools. `heatmap.html` and `ivis.html` redirect to the matching tool, so older links keep working.
 
 Everything runs in the browser. Files are never uploaded anywhere.
 
@@ -63,7 +65,7 @@ Measurements for each region copy:
 ## Project zip layout
 
 ```
-project.json            kind (heatmap or ivis), and per panel: page, grid, colorbar,
+project.json            per panel: tool (heatmap or ivis), page, grid, colorbar,
                         labels, settings, and for IVIS the regions and scale bar
 README.txt
 source/<original file>  the uploaded PDF/image
@@ -73,7 +75,7 @@ data/<panel>_long.csv   heatmap: per-cell values with page, RGB and ΔE
 data/<panel>_rois.csv   IVIS: measurements per region copy
 ```
 
-Each panel records its `page`. Its coordinates are pixels in that page's `source/page-<n>.png`. Regions copied into every box are stored relative to a box, where a box spans 0–1 in each direction, with per-box nudges. Each tool opens only its own kind of project and points to the other tool otherwise. Zips made before the IVIS tool existed open as heatmap projects.
+Each panel records its `page`. Its coordinates are pixels in that page's `source/page-<n>.png`. Regions copied into every box are stored relative to a box, where a box spans 0–1 in each direction, with per-box nudges. A zip opens in either tool with everything in it. Zips in the older format load too: those from before the IVIS tool are heatmap projects, and those saved by the separate IVIS page are IVIS projects.
 
 ## Development
 
@@ -102,6 +104,7 @@ To deploy, publish the repository root with GitHub Pages or any static host. `.n
 | `assets/js/viewer.js` | zoom/pan canvas, handles, loupe |
 | `assets/js/roi.js` | region shapes, copies into grid boxes, pixel scan |
 | `assets/js/quantify.js` | background/signal classification and region statistics |
-| `assets/js/workspace.js` | shared tool shell: loading, pages, panels, grid, colorbar, undo, zip |
+| `assets/js/workspace.js` | shared shell for the tools: loading, pages, panels, grid, colorbar, undo, zip, tool switching |
 | `assets/js/heatmap.js` | heatmap tool |
 | `assets/js/ivis.js` | IVIS tool |
+| `assets/js/app.js` | starts the workspace with both tools; `#heatmap` / `#ivis` picks the tool |
