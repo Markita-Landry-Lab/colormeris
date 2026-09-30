@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Colormeris</title>
+  <meta name="description" content="Extract numbers from gridded heatmap figures in PDFs and images by calibrating the grid and colorbar.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/vendor/jszip/jszip.min.js" defer></script>
+  <script type="module" src="assets/js/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Colormeris</span>
+    </div>
+    <label class="btn primary">
+      Open file…
+      <input id="file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.webp,.zip,image/*,application/pdf,application/zip" hidden>
+    </label>
+    <span id="source-label" class="source-label muted">No file loaded</span>
+    <span class="spacer"></span>
+    <button id="btn-undo" class="btn ghost" title="Undo (Ctrl/⌘+Z)" disabled>Undo</button>
+    <button id="btn-redo" class="btn ghost" title="Redo (Ctrl/⌘+Shift+Z)" disabled>Redo</button>
+    <button id="btn-export-zip" class="btn" disabled>Export project (.zip)</button>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar" id="sidebar">
+      <details class="help">
+        <summary>How it works</summary>
+        <ol>
+          <li>Open a PDF, PNG or JPG (or drop / paste it). For PDFs pick the page and resolution.</li>
+          <li>Add one panel per heatmap.</li>
+          <li><b>Grid</b>: click the outer top-left and bottom-right corners of the heatmap, then set rows, columns and labels.</li>
+          <li><b>Colorbar</b>: click the two ends of the colorbar along its middle, then click at least two tick marks and type their values.</li>
+          <li>Check the results (toggle <i>Reconstruct</i> to compare colors), then download CSV or export the project zip to reload later.</li>
+        </ol>
+        <p class="muted">Scroll to zoom, drag to pan, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes. Everything runs in your browser; files are never uploaded.</p>
+      </details>
+
+      <section class="card" id="sec-source" hidden>
+        <h2>Source</h2>
+        <div id="source-info" class="muted small"></div>
+        <div id="pdf-controls" class="row wrap" hidden>
+          <label class="field">Page
+            <span class="row tight">
+              <button class="btn icon" id="page-prev" aria-label="Previous page">‹</button>
+              <input id="page-input" type="number" min="1" value="1" class="num">
+              <button class="btn icon" id="page-next" aria-label="Next page">›</button>
+            </span>
+            <span id="page-count" class="muted small"></span>
+          </label>
+          <label class="field">Resolution
+            <select id="scale-select">
+              <option value="1">72 dpi (1×)</option>
+              <option value="2">144 dpi (2×)</option>
+              <option value="3" selected>216 dpi (3×)</option>
+              <option value="4">288 dpi (4×)</option>
+              <option value="6">432 dpi (6×)</option>
+              <option value="8">576 dpi (8×)</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="card" id="sec-panels" hidden>
+        <div class="card-head">
+          <h2>Panels</h2>
+          <button class="btn small" id="panel-add">+ Add panel</button>
+        </div>
+        <ul id="panel-list" class="panel-list"></ul>
+        <div class="row">
+          <label class="field grow">Name <input id="panel-name" type="text" spellcheck="false"></label>
+          <button class="btn small danger" id="panel-delete">Delete</button>
+        </div>
+      </section>
+
+      <section class="card" id="sec-grid" hidden>
+        <div class="card-head">
+          <h2><span class="step-dot grid-dot"></span>Grid</h2>
+          <span id="grid-state" class="badge"></span>
+        </div>
+        <div class="row">
+          <button class="btn" id="grid-place" title="Shortcut: G">Place grid corners</button>
+          <button class="btn ghost small" id="grid-zoom" title="Zoom to grid">Zoom to</button>
+        </div>
+        <div class="row">
+          <label class="field">Rows <input id="grid-rows" type="number" min="1" max="1000" class="num"></label>
+          <label class="field">Columns <input id="grid-cols" type="number" min="1" max="1000" class="num"></label>
+          <label class="field">Sampled area
+            <span class="row tight"><input id="grid-fraction" type="range" min="0.1" max="1" step="0.05"><output id="grid-fraction-out" class="small"></output></span>
+          </label>
+        </div>
+        <label class="check"><input id="grid-rect" type="checkbox" checked> Keep rectangular when dragging corners</label>
+        <div class="row">
+          <label class="field grow">Row labels (top → bottom)
+            <textarea id="grid-row-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated; blank = R1, R2, …"></textarea>
+          </label>
+          <label class="field grow">Column labels (left → right)
+            <textarea id="grid-col-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated; blank = C1, C2, …"></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="card" id="sec-colorbar" hidden>
+        <div class="card-head">
+          <h2><span class="step-dot bar-dot"></span>Colorbar</h2>
+          <span id="bar-state" class="badge"></span>
+        </div>
+        <div class="row">
+          <button class="btn" id="bar-place" title="Shortcut: B">Place colorbar ends</button>
+          <button class="btn" id="tick-add" title="Shortcut: T">Add ticks</button>
+          <button class="btn ghost small" id="bar-zoom" title="Zoom to colorbar">Zoom to</button>
+        </div>
+        <canvas id="bar-strip" class="bar-strip" width="600" height="28" aria-label="Sampled colorbar"></canvas>
+        <div class="row">
+          <label class="field">Scale
+            <select id="bar-scale">
+              <option value="linear">Linear</option>
+              <option value="log10">Log₁₀ (tick values are raw numbers)</option>
+            </select>
+          </label>
+          <label class="field">Averaging half-width (px) <input id="bar-halfwidth" type="number" min="0" max="50" step="1" class="num"></label>
+        </div>
+        <table class="ticks">
+          <thead><tr><th>Tick value</th><th>Position</th><th></th></tr></thead>
+          <tbody id="tick-list"></tbody>
+        </table>
+        <p id="tick-empty" class="muted small">No ticks yet. Use <b>Add ticks</b>, click a labelled tick on the bar, type its value, repeat.</p>
+      </section>
+
+      <section class="card" id="sec-results" hidden>
+        <div class="card-head">
+          <h2>Results</h2>
+          <label class="check small"><input id="toggle-recon" type="checkbox"> Reconstruct</label>
+        </div>
+        <p id="result-problem" class="notice"></p>
+        <p id="result-summary" class="muted small"></p>
+        <div class="table-wrap"><table id="result-table" class="result-table"></table></div>
+        <div class="row wrap">
+          <button class="btn primary" id="dl-csv">Download CSV</button>
+          <button class="btn" id="dl-long">Long CSV</button>
+          <button class="btn" id="copy-tsv">Copy table</button>
+        </div>
+        <details class="settings">
+          <summary>Matching settings</summary>
+          <div class="row">
+            <label class="field">Color difference
+              <select id="set-distance">
+                <option value="de2000">CIEDE2000</option>
+                <option value="de76">CIE76 (Lab distance)</option>
+              </select>
+            </label>
+            <label class="field">Flag cells with ΔE above <input id="set-maxde" type="number" min="0" step="0.5" class="num"></label>
+          </div>
+        </details>
+      </section>
+    </aside>
+
+    <div class="stage">
+      <div id="viewer" class="viewer">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-card">
+            <div class="empty-icon" aria-hidden="true"></div>
+            <p><b>Drop a PDF, PNG or JPG here</b></p>
+            <p class="muted">or paste an image, or open a saved project <code>.zip</code></p>
+            <label class="btn primary">Choose file…<input id="file-input-2" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.webp,.zip,image/*,application/pdf,application/zip" hidden></label>
+          </div>
+        </div>
+        <div id="drop-overlay" class="drop-overlay" hidden>Drop to open</div>
+      </div>
+      <div id="modebar" class="modebar" hidden>
+        <span id="modebar-text"></span>
+        <button class="btn small" id="mode-done">Done</button>
+      </div>
+      <div class="view-tools" id="view-tools" hidden>
+        <button class="btn icon" id="zoom-out" title="Zoom out (−)">−</button>
+        <button class="btn icon" id="zoom-in" title="Zoom in (+)">+</button>
+        <button class="btn small" id="zoom-fit" title="Fit (F)">Fit</button>
+        <label class="check small"><input id="toggle-overlay" type="checkbox" checked> Overlay</label>
+      </div>
+      <footer class="statusbar" id="statusbar">
+        <span id="status-pos"></span>
+        <span id="status-swatch" class="swatch" hidden></span>
+        <span id="status-color"></span>
+        <span id="status-cell"></span>
+        <span class="spacer"></span>
+        <span id="status-msg"></span>
+      </footer>
+    </div>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
