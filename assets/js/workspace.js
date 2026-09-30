@@ -1153,26 +1153,32 @@
     $('panel-name').focus();
     $('panel-name').select();
   });
-  $('panel-delete').addEventListener('click', () => {
-    const here = pagePanels();
-    const panel = activePanel();
+  // Delete a panel. Every page keeps one panel, so deleting the last one on
+  // its page swaps in an empty panel instead. Undo restores it.
+  function removePanel(panel) {
+    const here = app.project.panels.filter((p) => p.page === panel.page && p.tool === panel.tool);
     const last = here.length < 2;
-    if (!confirm(last ? `Clear panel "${panel.name}"? A page always keeps one panel.` : `Delete panel "${panel.name}"?`)) return;
     pushHistory();
     const i = here.indexOf(panel);
     const at = app.project.panels.indexOf(panel);
     if (last) {
-      // Every page keeps one panel, so deleting the last one swaps in an empty panel.
       const blank = createPanel(panel.name, panel.page, panel.tool);
       blank.settings = { ...panel.settings };
       app.project.panels.splice(at, 1, blank);
-      app.project.activePanelId = blank.id;
+      if (app.project.activePanelId === panel.id) app.project.activePanelId = blank.id;
     } else {
       app.project.panels.splice(at, 1);
-      app.project.activePanelId = here[i === 0 ? 1 : i - 1].id;
+      if (app.project.activePanelId === panel.id) app.project.activePanelId = here[i === 0 ? 1 : i - 1].id;
     }
     setMode(null);
     changed();
+    return { cleared: last };
+  }
+  $('panel-delete').addEventListener('click', () => {
+    const panel = activePanel();
+    const last = pagePanels().length < 2;
+    if (!confirm(last ? `Clear panel "${panel.name}"? A page always keeps one panel.` : `Delete panel "${panel.name}"?`)) return;
+    removePanel(panel);
   });
   bindText('panel-name', (p, v) => (p.name = v));
   $('panel-name').addEventListener('input', () => renderPanels(activePanel()));
@@ -1347,6 +1353,7 @@
     canRedo: () => app.future.length > 0,
     exportZip,
     newTickId,
+    removePanel,
     zipExtras: [], // functions returning [{path, content}] added to project zips
     onChange: (fn) => changeListeners.push(fn),
     reviewStatus: null, // (panel) → 'accepted' | 'rejected' | 'stale' | null, set by agent.js

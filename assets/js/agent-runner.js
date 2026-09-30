@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, fromDecisionAnswer, decisionAdvice, createRetryGuard, pruneImages, toolResultText,
+    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, batchDecisionRequests, fromDecisionAnswer, decisionAdvice, createRetryGuard, progressNote, finishCheck, pruneImages, toolResultText,
     bilinear, cellSamplePolygon, colorAtT, rgbToHex, ticksWithT, renderPdfPage,
   } = CM;
 
@@ -195,7 +195,12 @@
       const vals = res.values.flat().filter(Number.isFinite);
       const panel = app.project.panels.find((p) => p.id === panelId);
       const tickVals = panel.colorbar.ticks.map((k) => k.value).filter(Number.isFinite);
+      const des = res.deltaE.flat().filter(Number.isFinite).sort((a, b) => a - b);
+      const at = (f) => (des.length ? Math.round(des[Math.min(des.length - 1, Math.floor(f * des.length))] * 100) / 100 : null);
+      const tickSpan = tickVals.length ? Math.max(...tickVals) - Math.min(...tickVals) : 0;
+      const valSpan = vals.length ? Math.max(...vals) - Math.min(...vals) : 0;
       return {
+        fit: { medianDeltaE: at(0.5), p95DeltaE: at(0.95), threshold: res.maxDeltaE, rangeOverTicks: tickSpan ? Math.round((valSpan / tickSpan) * 100) / 100 : null, distinctValues: new Set(vals.map((v) => v.toPrecision(6))).size },
         flaggedCount: res.flagged.length,
         cellCount: vals.length,
         excludedCount: res.excluded?.length ?? 0,
@@ -211,8 +216,18 @@
     // ({panelId, note}) asks the agent to fix one rejected panel.
     async function run(settings) {
       const { client, llmModel, decisionModel, pages, maxSteps = 60, signal, onEvent = () => {}, decisionServerURL, focus } = settings;
-      const usage = { llmCost: 0, decisionCost: 0, promptTokens: 0, completionTokens: 0, steps: 0, decisions: 0 };
+      let decisionCache = null;
+      const usage = { llmCost: 0, decisionCost: 0, decisionMs: 0, promptTokens: 0, completionTokens: 0, steps: 0, decisions: 0 };
       const emit = (type, data) => onEvent(type, { ...data, usage: { ...usage } });
+      // What the model has looked at and built, so it cannot stop after the
+      // first heatmap (see finishCheck).
+      const viewedPages = new Set();
+      const finishState = { checked: false, refusals: 0 };
+      const runPanels = () =>
+        app.project.panels
+          .filter((p) => p.tool === 'heatmap' && pages.includes(p.page))
+          .map((p) => ({ id: p.id, name: p.name, page: p.page, ready: !ws.resultFor(p).error, started: !!(p.grid.corners || p.colorbar.start || p.grid.rowLabels.length || p.grid.colLabels.length) }));
+      const progress = () => progressNote({ pages, viewedPages, panels: runPanels(), currentPage: ws.currentPage() });
 
       async function resolveQuestions(panelId) {
         const qr = await api.run('get_questions', panelId ? { panelId } : {});
@@ -220,22 +235,51 @@
         // Skip questions already sent to a human in this run.
         const open = qr.result.filter((q) => !q.escalated);
         const contexts = new Map();
-        const outcomes = await Promise.all(
-          open.map(async (q) => {
-            try {
-              if (!contexts.has(q.panelId)) contexts.set(q.panelId, panelContext(q.panelId));
-              const req = toDecisionRequest(q, await contexts.get(q.panelId));
-              const res = await decide(client, decisionModel, { state: req.state, questions: req.questions }, signal, decisionServerURL);
-              usage.decisionCost += res.usage?.cost || 0;
-              usage.decisions++;
-              const { answer, confidence } = fromDecisionAnswer(q, req, res.answers?.answer);
-              return { q, answer, confidence };
-            } catch (err) {
-              if (signal?.aborted) throw err;
-              return { q, error: err.message };
-            }
-          }),
-        );
+        // Same evidence, same answer: a question id contains the hash of what
+        // it judges, so repeated resolves never pay twice for it.
+        const cache = (decisionCache ??= new Map());
+        const ready = [];
+        for (const q of open) {
+          try {
+            if (!contexts.has(q.panelId)) contexts.set(q.panelId, panelContext(q.panelId));
+            ready.push({ q, req: toDecisionRequest(q, await contexts.get(q.panelId)) });
+          } catch (err) {
+            if (signal?.aborted) throw err;
+            ready.push({ q, error: err.message });
+          }
+        }
+        const pending = ready.filter((x) => !x.error && !cache.has(x.q.id));
+        const answers = new Map(); // q.id → raw answer
+        const call = async (group) => {
+          const t0 = performance.now();
+          const b = batchDecisionRequests(group);
+          const res = await decide(client, decisionModel, { state: b.state, questions: b.questions }, signal, decisionServerURL);
+          usage.decisionCost += res.usage?.cost || 0;
+          usage.decisionMs += performance.now() - t0;
+          usage.decisions++;
+          group.forEach((x, i) => answers.set(x.q.id, res.answers?.[b.keys[i]]));
+        };
+        if (pending.length) {
+          try {
+            await call(pending);
+          } catch (err) {
+            if (signal?.aborted) throw err;
+            // The batch failed as a whole (or one question was malformed): ask one by one.
+            if (pending.length > 1) await Promise.all(pending.map((x) => call([x]).catch((e) => { if (signal?.aborted) throw e; x.error = e.message; })));
+            else pending[0].error = err.message;
+          }
+        }
+        const outcomes = ready.map((x) => {
+          if (x.error) return { q: x.q, error: x.error };
+          try {
+            const raw = cache.has(x.q.id) ? cache.get(x.q.id) : answers.get(x.q.id);
+            const { answer, confidence } = fromDecisionAnswer(x.q, x.req, raw);
+            if (!cache.has(x.q.id)) cache.set(x.q.id, raw);
+            return { q: x.q, answer, confidence };
+          } catch (err) {
+            return { q: x.q, error: err.message };
+          }
+        });
         const results = [];
         // Answer one by one: applying one decision can change the others.
         for (const o of outcomes) {
@@ -250,7 +294,7 @@
         }
         const panelName = (id) => app.project.panels.find((p) => p.id === id)?.name || id;
         const advice = decisionAdvice(results, panelName);
-        return { ok: true, result: { decisions: results, advice, stillOpen: (await api.run('get_questions', panelId ? { panelId } : {})).result?.length ?? 0 } };
+        return { ok: true, result: { decisions: results, advice, stillOpen: (await api.run('get_questions', panelId ? { panelId } : {})).result?.length ?? 0, next: progress() } };
       }
 
       async function callTool(name, args) {
@@ -267,7 +311,11 @@
         if (!RUNNER_TOOLS[name]) return { ok: false, error: `Unknown tool "${name}".` };
         const errs = validateRunnerTool(name, args);
         if (errs.length) return { ok: false, error: errs.join('; ') };
-        if (name === 'view_page') return { ok: true, image: renderView(args) };
+        if (name === 'view_page') {
+          const image = renderView(args);
+          viewedPages.add(ws.currentPage());
+          return { ok: true, image };
+        }
         if (name === 'view_pages_overview') return { ok: true, image: await renderOverview(args.from, args.to) };
         if (name === 'resolve_questions') return resolveQuestions(args.panelId);
         if (name === 'decide') {
@@ -276,6 +324,15 @@
           usage.decisions++;
           emit('decide', { questions: args.questions, answers: res.answers });
           return { ok: true, result: res.answers };
+        }
+        if (name === 'finish' && !focus) {
+          const why = finishCheck({ pages, viewedPages, panels: runPanels(), ...finishState });
+          if (why) {
+            finishState.refusals++;
+            if (why.checklist) finishState.checked = true;
+            emit('assistant', { text: `(finish refused) ${why.message}` });
+            return { ok: true, finished: false, result: why.message };
+          }
         }
         return { ok: true, result: null };
       }
@@ -289,6 +346,7 @@
         : '';
       if (!first.ok) throw new Error(first.error);
       const opening = pages.length > 1 && app.pdfDoc ? await renderOverview(pages[0], pages[Math.min(pages.length, 12) - 1]) : renderView();
+      if (!(pages.length > 1 && app.pdfDoc)) viewedPages.add(ws.currentPage());
       const messages = [
         { role: 'system', content: AGENT_SYSTEM_PROMPT },
         {
@@ -322,7 +380,7 @@
         if (text.trim()) emit('assistant', { text });
         if (!msg.toolCalls?.length) {
           if (++nudges > 2) break;
-          messages.push({ role: 'user', content: 'Continue with the tools. Call finish when every page is done.' });
+          messages.push({ role: 'user', content: `Continue with the tools. ${progress()} Call finish only when every heatmap on every page has its own calibrated panel.` });
           continue;
         }
         nudges = 0;
@@ -351,7 +409,7 @@
             }
           }
           result = guard.after(name, panelKey, result);
-          if (call.function.name === 'finish' && result.ok) summary = args.summary;
+          if (call.function.name === 'finish' && result.ok && result.finished !== false) summary = args.summary;
           if (result.image) {
             images.push(result.image);
             result = { ok: true, result: `${result.image.note} The image follows.` };

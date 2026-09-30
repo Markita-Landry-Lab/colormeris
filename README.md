@@ -63,7 +63,7 @@ The *Agent* card in the heatmap tool calibrates every heatmap on the chosen page
 1. **Connect.** Enter your [OpenRouter](https://openrouter.ai/keys) key. Or keep it out of the browser: put `OPENROUTER_API_KEY=…` in `.env` (ignored by git), run `npm run proxy`, and set *API base URL* to `http://localhost:8787/api/v1` with the key field empty.
 2. **Pick models.** The LLM needs image input and tool calling; the default is `anthropic/claude-sonnet-5.5`. The decision model defaults to `typesafe/jev-1.13` (Jev).
 3. **Run.** Choose the pages and press *Run agent*. The LLM looks at page images with pixel rulers, zooms in, places the grid, labels, colorbar and ticks, and checks them with overlays. The decision model then answers typed checks: grid size, flagged cells, tick order and final acceptance.
-4. **Review.** Checks answered below *Min. confidence* appear under *Needs review*. A rejected panel gets a red dot and stays there until you accept it or it changes. Add a note on what is wrong and press *Redo with agent* to have the agent fix it.
+4. **Review.** Checks answered below *Min. confidence* appear under *Needs review*. A rejected panel gets a red dot and stays there until you accept it or it changes. Add a note on what is wrong and press *Redo with agent* to have the agent fix it. *Delete panel* removes a wrong extraction outright (undo brings it back).
 
 The agent retries a failing tool at most 3 times per panel, then skips that step and reports it. It stops after 8 failed calls in a row or after *Max. steps*. The log shows every step, decision and the cost so far.
 

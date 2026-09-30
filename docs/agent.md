@@ -115,6 +115,14 @@ Rename a panel. _Changes the project; undoable._ _Available to the heatmap agent
 | `panelId` | string |  | Panel to act on. Defaults to the active panel; another panel is selected first (switching tool and page if needed). |
 | `name` | string | yes |  |
 
+### `remove_panel`
+
+Delete a panel with its calibration and review. The last panel of a page is replaced by an empty one. Undo restores it. _Changes the project; undoable._
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `panelId` | string | yes | Panel to delete. |
+
 ## Grid
 
 ### `set_grid`
@@ -169,18 +177,19 @@ Remove the grid. _Changes the project; undoable._ _Available to the heatmap agen
 
 ### `set_colorbar`
 
-Place the colorbar ends along its middle. Existing ticks keep their t. Put both ends inside the colored strip, on the first and last color pixel, not on its black or grey outline. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
+Place the colorbar along its colored strip. With snap (default), the line is moved to the strip's centre line, both ends go to its first and last colored pixel (off the outline) and halfWidth is set from the strip width; the result reports what moved. Existing ticks stay at their page positions. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `panelId` | string |  | Panel to act on. Defaults to the active panel; another panel is selected first (switching tool and page if needed). |
 | `start` | {x, y} | yes | One end of the colored strip, on its centre line. Just inside the border: the first pixel that shows the color, not the outline. |
 | `end` | {x, y} | yes | The other end, on the centre line, just inside the border (not on the outline). |
-| `halfWidth` | number (≥ 0, ≤ 50) |  | Pixels averaged on each side of the line. Default 2; keep it inside the strip. |
+| `halfWidth` | number (≥ 0, ≤ 50) |  | Pixels averaged on each side of the line. Set from the strip when snapping; keep it inside the strip. |
+| `snap` | boolean |  | Snap the line and its ends to the colored strip under it. Default true; set false only when a snap was clearly wrong. |
 
 ### `add_tick`
 
-Add a labelled tick on the placed colorbar. Give its position ONE way: `at` (the page point of the tick mark, projected onto the bar; preferred) or `t` (0 at start, 1 at end). Example: {"at": {"x": 606, "y": 822}, "value": 3}. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
+Add a labelled tick on the placed colorbar. Give its position ONE way: `at` (the page point of the tick mark, projected onto the bar; preferred) or `t` (0 at start, 1 at end). With snap (default), it moves to the nearest tick mark beside the strip within a few pixels; the result says how far. Example: {"at": {"x": 606, "y": 822}, "value": 3}. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -188,6 +197,7 @@ Add a labelled tick on the placed colorbar. Give its position ONE way: `at` (the
 | `at` | {x, y} |  | Page point of the tick mark. Use this or t, not both. |
 | `t` | number (≥ -0.1, ≤ 1.1) |  | Position along the bar, 0 at start and 1 at end. Use this or at, not both. |
 | `value` | number | yes | The printed tick label as a number, with any ×10^n multiplier applied (e.g. 1.4e9). |
+| `snap` | boolean |  | Snap to the nearest tick mark. Default true; set false for bars without tick marks or when the snap picked the wrong mark. |
 
 ### `set_tick_value`
 
@@ -329,9 +339,9 @@ A panel's review (`accepted` or `rejected`, who decided, confidence and a note) 
 
 The *Agent* card runs an LLM (default `anthropic/claude-sonnet-5.5`; any OpenRouter model with image input and tool calling) and a decision model (default `typesafe/jev-1.13`; any OpenRouter model with decision output) through the OpenRouter TypeScript SDK.
 
-1. The LLM sees page images with pixel rulers, finds the heatmaps, and calibrates one panel per heatmap with the actions marked above. It zooms in with `view_page` and checks its work with overlays.
-2. `resolve_questions` sends the open typed questions to the decision model, applies confident answers, and returns advice on what to fix.
-3. Answers below *Min. confidence* go to *Needs review* in the card. There you can answer them, reject or accept a panel, and use *Redo with agent* to have the agent fix a rejected panel with your note.
+1. The LLM sees page images with pixel rulers, finds the heatmaps, and calibrates one panel per heatmap with the actions marked above. It zooms in with `view_page` and checks its work with overlays. `set_colorbar` snaps the line to the strip's centre and its ends to the first and last colored pixel, and `add_tick` snaps to the nearest tick mark (outside the bar or drawn into it), because models read coordinates a few pixels off. `finish` is refused while pages of the run are unseen or panels half done, and the first time it is answered with a per-page checklist, so the model does not stop after the first heatmap.
+2. `resolve_questions` sends all open typed questions to the decision model in one request (text evidence only, no images; answers are cached by question id, and a failed batch falls back to one request per question), applies confident answers, and returns advice on what to fix.
+3. Answers below *Min. confidence* go to *Needs review* in the card. There you can answer them, accept, reject or delete a panel, and use *Redo with agent* to have the agent fix a rejected panel with your note.
 
 ### Images
 
@@ -391,6 +401,7 @@ End the run with a short summary for the user.
 | Attempts of one tool on one panel before it is blocked for that panel | 3 |
 | `resolve_questions` calls per panel | 3 |
 | Failed tool calls in a row before the run stops | 8 |
+| Refused `finish` calls (pages not viewed, partly calibrated panels, final checklist) before `finish` is always accepted | 3 |
 | Steps (LLM calls) per run | *Max. steps* in the card (default 80) |
 | Replies without a tool call before the run ends | 3 |
 
@@ -410,11 +421,12 @@ You are the extraction agent of Colormeris, a tool that turns colors in scientif
 Coordinates are pixels of the current page image (its width and height are in get_state). Each image you receive shows a region of the page: image pixel (0, 0) is the region's top-left corner, and its note gives the conversion page x = x0 + image x / scale (same for y). Rulers on the bottom and right edges are labelled in page pixels; use them to check your conversion. Precision matters: a few pixels of error shift every cell or every tick value. Always zoom in (view_page with a small region, so the scale is high) before placing anything, read the coordinates off the rulers, and check the conversion twice. After placing, look again at a zoomed view and correct any offset of more than 1–2 pixels.
 
 For each page:
-1. go_to_page, then view_page to see the whole page. A heatmap here is a grid of colored cells with a colorbar. Skip photos, IVIS/luminescence images, contour or scatter plots and tables with colored text; mention them in finish.
-2. For each heatmap, use one panel. A new page starts with one empty panel; use add_panel for more. Name it after the figure label (e.g. "Fig 2b") with rename_panel.
+1. go_to_page, then view_page to see the whole page. A heatmap here is a grid of colored cells with a colorbar. Skip photos, IVIS/luminescence images, contour or scatter plots and tables with colored text; mention them in finish. Before calibrating anything, list in your message EVERY heatmap on the page (figure label and rough region). Pages often hold several (e.g. panels b, c and d); each one needs its own panel.
+2. Work through that list one heatmap at a time, each in its own panel. A new page starts with one empty panel; use add_panel for each further heatmap. Name each panel after its figure label (e.g. "Fig 2b") with rename_panel. Finishing one heatmap is not the end: go on with the next one on the list, then the next page.
 3. Grid: zoom on the heatmap's top-left and bottom-right corners. set_grid with the outer corners of the cell area only (not labels, axes, dendrograms or the colorbar). Put each corner exactly on the outer edge of the first/last cell, not on a border line, axis or tick outside it. Rows and columns are counted and filled in automatically; do not give them. Read the row labels (top to bottom) and column labels (left to right) and set_labels. Axis labels do not always match the cell count: one label can cover several replicate rows or columns (or only some cells are labelled). Never resize the grid to match the label count; trust the cell structure you see and the detected size.
-4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its centre line, placed just inside the strip: on the first and last pixel that shows the color, NOT on the colorbar's black or grey border/outline, which would sample the border color. Keep halfWidth small enough that the sampled band stays off the border too. Add at least two ticks with add_tick using "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Prefer the outermost labelled ticks. If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
-5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the bar), then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
+4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its middle. It snaps the line to the strip's centre line and each end to the first and last colored pixel (off the outline), and sets halfWidth from the strip width; read the note it returns. If it says no strip or no edge was found, place those points yourself on a zoomed view: on the centre line, just inside the colored strip, never on the black or grey outline and never short of the last color.
+   Ticks: add at least two with add_tick, "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Use the outermost labelled ticks, and a middle one when there is one. add_tick snaps to the nearest tick mark; if its note says no mark was found (bars without marks), put "at" level with the middle of the label text. Read each label carefully (signs, decimals, exponents). If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
+5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the middle of the bar from end to end), then zoom on the colorbar alone with overlay "calibration": each orange tick dot must be level with its printed label and show the same number. Then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
 6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again. Call resolve_questions at most 3 times per panel.
 
 Errors and retries:
@@ -424,5 +436,5 @@ Errors and retries:
 - Give each argument once, in the form its description asks for (e.g. add_tick takes either "at" or "t", never both).
 
 Use decide when a judgment is a clean choice you are unsure of (e.g. which of two readings of a label fits the other ticks). Do not guess silently.
-When every page is done, call finish with one line per panel and anything a human should check. Keep your messages short.
+When every heatmap on every page is done, call finish with one line per panel and anything a human should check. The first finish is answered with a checklist: look at each page once more, calibrate any heatmap still missing, then call finish again. Keep your messages short.
 ```

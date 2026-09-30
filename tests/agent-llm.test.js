@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import CM from './load.js';
 
-const { toDecisionRequest, fromDecisionAnswer, pruneImages, parsePages, llmTools, validateRunnerTool, toolResultText } = CM;
+const { batchDecisionRequests, toDecisionRequest, fromDecisionAnswer, pruneImages, parsePages, llmTools, validateRunnerTool, toolResultText } = CM;
 
 const gridQ = (labelCounts) => ({
   type: 'confirm_grid_size',
@@ -110,4 +110,34 @@ test('normalizeArgs forgives nulls and at+t on add_tick', () => {
   assert.deepEqual(CM.validateAction('add_tick', r.args), []);
   assert.match(CM.validateAction('add_tick', { value: 3 })[0], /"at": \{"x": 606/);
   assert.deepEqual(CM.normalizeArgs('set_review', { status: null }).args, { status: null }, 'null kept where it is a value');
+});
+
+test('batchDecisionRequests puts several questions in one request', () => {
+  const acc = { type: 'confirm_extraction', evidence: { rows: 4, cols: 5, flaggedCount: 0 } };
+  const tick = { type: 'confirm_tick_order', evidence: { ticks: [{ t: 0, value: 1 }, { t: 1, value: 0 }] } };
+  const items = [acc, tick].map((q) => ({ q, req: toDecisionRequest(q, { fit: { medianDeltaE: 1.2 } }) }));
+  const b = batchDecisionRequests(items);
+  assert.deepEqual(b.keys, ['q0', 'q1']);
+  assert.deepEqual(Object.keys(b.questions), ['q0', 'q1']);
+  assert.equal(b.questions.q0.type, 'noul');
+  assert.equal(b.state.cases.q0.fit.medianDeltaE, 1.2);
+  assert.ok(b.state.cases.q1.ticks);
+});
+
+test('finishCheck refuses to stop after the first heatmap', () => {
+  const { finishCheck, progressNote } = CM;
+  const panels = [
+    { id: 'a', name: 'Fig 2b', page: 3, ready: true, started: true },
+    { id: 'b', name: 'Panel 2', page: 5, ready: false, started: false },
+  ];
+  const base = { pages: [3, 5], panels, checked: false, refusals: 0 };
+  assert.match(finishCheck({ ...base, viewedPages: new Set([3]) }).message, /page 5 was not looked at/);
+  const list = finishCheck({ ...base, viewedPages: new Set([3, 5]) });
+  assert.ok(list.checklist);
+  assert.match(list.message, /page 3: Fig 2b; page 5: no panels/);
+  assert.equal(finishCheck({ ...base, viewedPages: new Set([3, 5]), checked: true, refusals: 1 }), null);
+  const partial = [{ ...panels[0], ready: false }];
+  assert.match(finishCheck({ ...base, panels: partial, viewedPages: new Set([3, 5]) }).message, /only partly calibrated/);
+  assert.equal(finishCheck({ ...base, viewedPages: new Set(), refusals: 3 }), null, 'a stuck model can still end');
+  assert.match(progressNote({ pages: [3, 5], viewedPages: new Set([3]), panels, currentPage: 3 }), /Page 3 panels: Fig 2b\. .*not looked at yet: 5/);
 });

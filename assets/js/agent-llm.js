@@ -15,11 +15,12 @@
 Coordinates are pixels of the current page image (its width and height are in get_state). Each image you receive shows a region of the page: image pixel (0, 0) is the region's top-left corner, and its note gives the conversion page x = x0 + image x / scale (same for y). Rulers on the bottom and right edges are labelled in page pixels; use them to check your conversion. Precision matters: a few pixels of error shift every cell or every tick value. Always zoom in (view_page with a small region, so the scale is high) before placing anything, read the coordinates off the rulers, and check the conversion twice. After placing, look again at a zoomed view and correct any offset of more than 1–2 pixels.
 
 For each page:
-1. go_to_page, then view_page to see the whole page. A heatmap here is a grid of colored cells with a colorbar. Skip photos, IVIS/luminescence images, contour or scatter plots and tables with colored text; mention them in finish.
-2. For each heatmap, use one panel. A new page starts with one empty panel; use add_panel for more. Name it after the figure label (e.g. "Fig 2b") with rename_panel.
+1. go_to_page, then view_page to see the whole page. A heatmap here is a grid of colored cells with a colorbar. Skip photos, IVIS/luminescence images, contour or scatter plots and tables with colored text; mention them in finish. Before calibrating anything, list in your message EVERY heatmap on the page (figure label and rough region). Pages often hold several (e.g. panels b, c and d); each one needs its own panel.
+2. Work through that list one heatmap at a time, each in its own panel. A new page starts with one empty panel; use add_panel for each further heatmap. Name each panel after its figure label (e.g. "Fig 2b") with rename_panel. Finishing one heatmap is not the end: go on with the next one on the list, then the next page.
 3. Grid: zoom on the heatmap's top-left and bottom-right corners. set_grid with the outer corners of the cell area only (not labels, axes, dendrograms or the colorbar). Put each corner exactly on the outer edge of the first/last cell, not on a border line, axis or tick outside it. Rows and columns are counted and filled in automatically; do not give them. Read the row labels (top to bottom) and column labels (left to right) and set_labels. Axis labels do not always match the cell count: one label can cover several replicate rows or columns (or only some cells are labelled). Never resize the grid to match the label count; trust the cell structure you see and the detected size.
-4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its centre line, placed just inside the strip: on the first and last pixel that shows the color, NOT on the colorbar's black or grey border/outline, which would sample the border color. Keep halfWidth small enough that the sampled band stays off the border too. Add at least two ticks with add_tick using "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Prefer the outermost labelled ticks. If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
-5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the bar), then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
+4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its middle. It snaps the line to the strip's centre line and each end to the first and last colored pixel (off the outline), and sets halfWidth from the strip width; read the note it returns. If it says no strip or no edge was found, place those points yourself on a zoomed view: on the centre line, just inside the colored strip, never on the black or grey outline and never short of the last color.
+   Ticks: add at least two with add_tick, "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Use the outermost labelled ticks, and a middle one when there is one. add_tick snaps to the nearest tick mark; if its note says no mark was found (bars without marks), put "at" level with the middle of the label text. Read each label carefully (signs, decimals, exponents). If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
+5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the middle of the bar from end to end), then zoom on the colorbar alone with overlay "calibration": each orange tick dot must be level with its printed label and show the same number. Then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
 6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again. Call resolve_questions at most 3 times per panel.
 
 Errors and retries:
@@ -29,7 +30,7 @@ Errors and retries:
 - Give each argument once, in the form its description asks for (e.g. add_tick takes either "at" or "t", never both).
 
 Use decide when a judgment is a clean choice you are unsure of (e.g. which of two readings of a label fits the other ticks). Do not guess silently.
-When every page is done, call finish with one line per panel and anything a human should check. Keep your messages short.`;
+When every heatmap on every page is done, call finish with one line per panel and anything a human should check. The first finish is answered with a checklist: look at each page once more, calibrate any heatmap still missing, then call finish again. Keep your messages short.`;
 
   // Agent actions the LLM may call (see agent-schema.js). File, tool, IVIS
   // and question-answering actions are left to the runner and the user.
@@ -215,12 +216,29 @@ When every page is done, call finish with one line per panel and anything a huma
           excludedCells: context.excludedCount ?? 0,
           valueRange: context.valueRange,
           colorbarTickRange: context.tickRange,
-          note: 'Values should lie within (or very near) the tick range. Many flagged cells suggest a bad calibration.',
+          // Numbers a text-only model can judge without seeing the figure.
+          fit: context.fit ?? null,
+          note: 'Values should lie within (or very near) the tick range. Many flagged cells suggest a bad calibration. fit: medianDeltaE/p95DeltaE are color distances between each cell and its matched colorbar color (small is good, threshold is the flag limit); rangeOverTicks is the value range divided by the tick range (about 1 when the figure uses the whole bar, far above 1 means values outside the ticks); distinctValues is how many different values were found.',
         },
         questions: { answer: { type: 'noul', instructions: 'Is this extraction complete and plausible?' } },
       };
     }
     throw new Error(`No decision mapping for ${q.type}`);
+  }
+
+  // Several questions in ONE decisions request (one network round trip per
+  // resolve cycle instead of one per question; the model still answers each
+  // key on its own). items: [{q, req}] from toDecisionRequest. Returns
+  // {state, questions, keys} where keys[i] is the answer key of items[i].
+  function batchDecisionRequests(items) {
+    const keys = items.map((_, i) => `q${i}`);
+    const state = { task: 'Independent checks of extractions from scientific figures. Answer each question from its own case only.', cases: {} };
+    const questions = {};
+    items.forEach(({ req }, i) => {
+      state.cases[keys[i]] = req.state;
+      questions[keys[i]] = req.questions.answer;
+    });
+    return { state, questions, keys };
   }
 
   // Decision model answer → {answer, confidence} in the question's answerSchema.
@@ -254,11 +272,43 @@ When every page is done, call finish with one line per panel and anything a huma
     return [...new Set(out)];
   }
 
+  // ---------------------------------------------------------------- progress
+
+  // Models tend to call finish (or stop talking) after the first heatmap.
+  // `panels` are the run's heatmap panels [{id, name, page, ready, started}]
+  // (started: has a grid, colorbar or labels).
+
+  // Where the run stands, for tool results and nudges.
+  function progressNote({ pages, viewedPages, panels, currentPage }) {
+    const left = pages.filter((p) => !viewedPages.has(p));
+    const here = panels.filter((p) => p.page === currentPage && p.started);
+    const parts = [];
+    if (here.length) parts.push(`Page ${currentPage} panels: ${here.map((p) => `${p.name}${p.ready ? '' : ' (incomplete)'}`).join(', ')}. Is every heatmap on this page in the list? If not, add_panel for the next one.`);
+    parts.push(left.length ? `Pages not looked at yet: ${left.join(', ')}.` : 'Every page of the run has been looked at.');
+    return parts.join(' ');
+  }
+
+  // Why `finish` is refused, as {message, checklist}, or null to let the run
+  // end. The final checklist is given once (`checked` after that); other
+  // refusals stop after MAX_FINISH_REFUSALS so a stuck model can still end.
+  function finishCheck({ pages, viewedPages, panels, checked, refusals = 0 }) {
+    if (refusals >= MAX_FINISH_REFUSALS) return null;
+    const left = pages.filter((p) => !viewedPages.has(p));
+    const many = left.length > 1;
+    if (left.length) return { message: `Not finished: page${many ? 's' : ''} ${left.join(', ')} ${many ? 'were' : 'was'} not looked at. go_to_page and view_page ${many ? 'each' : 'it'}, calibrate every heatmap on ${many ? 'them' : 'it'}, then call finish again.`, checklist: false };
+    const incomplete = panels.filter((p) => p.started && !p.ready);
+    if (incomplete.length && refusals < 1) return { message: `Not finished: ${incomplete.map((p) => `${p.name} (page ${p.page})`).join(', ')} ${incomplete.length > 1 ? 'are' : 'is'} only partly calibrated. Complete ${incomplete.length > 1 ? 'them' : 'it'}, or say in finish why not, then call finish again.`, checklist: false };
+    if (checked) return null;
+    const byPage = pages.map((pg) => `page ${pg}: ${panels.filter((p) => p.page === pg && p.started).map((p) => p.name).join(', ') || 'no panels'}`).join('; ');
+    return { message: `Final check before finishing. Calibrated so far: ${byPage}. view_page each page once more (whole page) and compare: does every heatmap have its own panel? If one is missing, add_panel and calibrate it. When all are done, call finish again.`, checklist: true };
+  }
+
   // ---------------------------------------------------------------- retries
 
   const MAX_ATTEMPTS = 3; // tries of one tool on one panel before it is blocked
   const MAX_RESOLVES = 3; // resolve_questions calls per panel
   const MAX_ERRORS_IN_A_ROW = 8; // failed calls in a row before the run stops
+  const MAX_FINISH_REFUSALS = 3; // refused finish calls before any finish is accepted
 
   // Tracks failures so a model that keeps repeating a bad call is told
   // clearly, then blocked, instead of looping until it runs out of steps.
@@ -358,10 +408,13 @@ When every page is done, call finish with one line per panel and anything a huma
     validateRunnerTool,
     llmTools,
     toDecisionRequest,
+    batchDecisionRequests,
     fromDecisionAnswer,
     decisionAdvice,
     createRetryGuard,
-    AGENT_LIMITS: { MAX_ATTEMPTS, MAX_RESOLVES, MAX_ERRORS_IN_A_ROW },
+    progressNote,
+    finishCheck,
+    AGENT_LIMITS: { MAX_ATTEMPTS, MAX_RESOLVES, MAX_ERRORS_IN_A_ROW, MAX_FINISH_REFUSALS },
     pruneImages,
     toolResultText,
     parsePages,

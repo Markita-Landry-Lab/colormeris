@@ -285,9 +285,11 @@
       } else if (q.type === 'confirm_extraction') {
         // A review of the panel as it is now, so it also works after the
         // values changed since the question was asked.
+        // Reject keeps the panel to fix or redo; Delete is the hard no.
         row.append(
           button('Accept', q.escalated.answer === 'accept' ? 'active' : '', () => review(q.panelId, 'accepted')),
           button('Reject', `danger${q.escalated.answer === 'reject' ? ' active' : ''}`, () => review(q.panelId, 'rejected')),
+          deleteButton(q.panelId),
         );
       } else {
         for (const opt of q.answerSchema.enum) row.append(button(opt.replaceAll('_', ' '), opt === q.escalated.answer ? 'active' : '', () => answer(q, opt)));
@@ -308,9 +310,24 @@
       row.className = 'row tight';
       const redo = button('Redo with agent', 'primary', () => start({ panelId: panel.id, note: note.value.trim() }));
       redo.disabled = !!abort || !hasKeyOrProxy();
-      row.append(button('Show', 'ghost', () => showPanel(panel.id)), redo, button('Accept anyway', '', () => review(panel.id, 'accepted')));
+      row.append(button('Show', 'ghost', () => showPanel(panel.id)), redo, button('Accept anyway', '', () => review(panel.id, 'accepted')), deleteButton(panel.id));
       li.append(head, note, row);
       return li;
+    }
+
+    // Deletes the panel with its calibration (undo restores it); the last
+    // panel of a page is cleared instead.
+    function deleteButton(panelId) {
+      const b = button('Delete panel', 'danger', async () => {
+        const name = panelName(panelId);
+        const r = await api.run('remove_panel', { panelId });
+        if (!r.ok) ws.toast(r.error, true);
+        else ws.toast(`${name} ${r.result.cleared ? 'cleared' : 'deleted'}. Undo brings it back.`);
+        renderReview();
+      });
+      b.disabled = !!abort;
+      b.title = 'Delete this panel and its extraction (undo restores it)';
+      return b;
     }
 
     function button(text, cls, onClick) {

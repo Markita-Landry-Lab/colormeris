@@ -44,7 +44,7 @@ function section(name, spec, extra = '') {
 
 const groups = [
   ['Reading', ['get_state', 'get_results', 'get_questions', 'sample_pixel', 'focus']],
-  ['File, tool and page', ['open_url', 'set_tool', 'go_to_page', 'select_panel', 'add_panel', 'rename_panel']],
+  ['File, tool and page', ['open_url', 'set_tool', 'go_to_page', 'select_panel', 'add_panel', 'rename_panel', 'remove_panel']],
   ['Grid', ['set_grid', 'detect_grid_size', 'set_grid_size', 'set_labels', 'remove_grid']],
   ['Colorbar and matching', ['set_colorbar', 'add_tick', 'set_tick_value', 'remove_tick', 'set_colorbar_scale', 'set_settings']],
   ['IVIS regions', ['add_region', 'remove_region', 'set_scale_bar']],
@@ -101,9 +101,9 @@ A panel's review (\`accepted\` or \`rejected\`, who decided, confidence and a no
 
 The *Agent* card runs an LLM (default \`${DEFAULT_LLM}\`; any OpenRouter model with image input and tool calling) and a decision model (default \`${DEFAULT_DECISION_MODEL}\`; any OpenRouter model with decision output) through the OpenRouter TypeScript SDK.
 
-1. The LLM sees page images with pixel rulers, finds the heatmaps, and calibrates one panel per heatmap with the actions marked above. It zooms in with \`view_page\` and checks its work with overlays.
-2. \`resolve_questions\` sends the open typed questions to the decision model, applies confident answers, and returns advice on what to fix.
-3. Answers below *Min. confidence* go to *Needs review* in the card. There you can answer them, reject or accept a panel, and use *Redo with agent* to have the agent fix a rejected panel with your note.
+1. The LLM sees page images with pixel rulers, finds the heatmaps, and calibrates one panel per heatmap with the actions marked above. It zooms in with \`view_page\` and checks its work with overlays. \`set_colorbar\` snaps the line to the strip's centre and its ends to the first and last colored pixel, and \`add_tick\` snaps to the nearest tick mark (outside the bar or drawn into it), because models read coordinates a few pixels off. \`finish\` is refused while pages of the run are unseen or panels half done, and the first time it is answered with a per-page checklist, so the model does not stop after the first heatmap.
+2. \`resolve_questions\` sends all open typed questions to the decision model in one request (text evidence only, no images; answers are cached by question id, and a failed batch falls back to one request per question), applies confident answers, and returns advice on what to fix.
+3. Answers below *Min. confidence* go to *Needs review* in the card. There you can answer them, accept, reject or delete a panel, and use *Redo with agent* to have the agent fix a rejected panel with your note.
 
 ### Images
 
@@ -121,6 +121,7 @@ ${Object.entries(RUNNER_TOOLS).map(([n, t]) => section(n, t)).join('\n')}
 | Attempts of one tool on one panel before it is blocked for that panel | ${AGENT_LIMITS.MAX_ATTEMPTS} |
 | \`resolve_questions\` calls per panel | ${AGENT_LIMITS.MAX_RESOLVES} |
 | Failed tool calls in a row before the run stops | ${AGENT_LIMITS.MAX_ERRORS_IN_A_ROW} |
+| Refused \`finish\` calls (pages not viewed, partly calibrated panels, final checklist) before \`finish\` is always accepted | ${AGENT_LIMITS.MAX_FINISH_REFUSALS} |
 | Steps (LLM calls) per run | *Max. steps* in the card (default 80) |
 | Replies without a tool call before the run ends | 3 |
 

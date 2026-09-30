@@ -45,6 +45,8 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 - **Decisions**: `get_questions` produces typed questions (`confirm_grid_size`, `classify_flagged` for ≤ 3 flagged cells, `classify_flagged_cells` for more, `confirm_tick_order`, `confirm_extraction`). The runner sends each to the decision model (`/api/alpha/decisions`, `typesafe/jev-1.13`: choice, noul and score question types). `policy.minConfidence` (0.9) gates applying; lower answers are "escalated" to *Needs review*. `source: "human"` always applies.
 - **Reviews** (`panel.review`) are stored with the `resultHash` of the values they judged. They are `stale` once the values change; rejected panels get a red dot and Redo / Accept anyway in *Needs review*.
 - **Forgiving arguments**: `normalizeArgs` drops `null` optionals, and `add_tick` with both `at` and `t` uses `at`. Models did send both, which caused endless "give exactly one of t or at" loops.
+- **Snapping**: `set_colorbar` and `add_tick` (agent API only, `snap: false` to skip) move the LLM's rough points onto the colored strip and the tick marks (`refineColorbar`, `snapTick` in `colormap.js`). Measured on `example.pdf` page 5, Fig h: ends and ticks within 1 px. Ticks keep their page positions when the colorbar moves.
+- **Finish check**: `finishCheck` refuses `finish` for unseen pages or half-done panels and gives a per-page checklist once; after 3 refusals any finish is accepted.
 - **Retry guard**: 3 attempts per tool per panel, then blocked; 3 `resolve_questions` per panel; the run stops after 8 failures in a row.
 - **Docs**: `docs/agent.md` is generated from the schemas, prompt and limits by `scripts/agent-docs.mjs`. After changing any action, prompt or limit, run `npm run docs`.
 

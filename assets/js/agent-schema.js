@@ -61,6 +61,7 @@
     select_panel: { description: 'Make a panel active.', mutates: true, args: { type: 'object', properties: { panelId }, required: ['panelId'] } },
     add_panel: { description: 'Add a panel on the current page for the active tool and make it active.', mutates: true, args: { type: 'object', properties: { name: { type: 'string' } } } },
     rename_panel: { description: 'Rename a panel.', mutates: true, args: { type: 'object', properties: { panelId, name: { type: 'string', minLength: 1 } }, required: ['name'] } },
+    remove_panel: { description: 'Delete a panel with its calibration and review. The last panel of a page is replaced by an empty one. Undo restores it.', mutates: true, args: { type: 'object', properties: { panelId: { type: 'string', description: 'Panel to delete.' } }, required: ['panelId'] } },
 
     set_grid: {
       description: 'Place the grid by its outer top-left and bottom-right corners, or by 4 corners (TL, TR, BR, BL) for skewed scans. Rows and columns are filled in automatically from the colors inside the grid, and a confirm_grid_size question opens. Precision matters: a few pixels off shifts every cell.',
@@ -93,7 +94,7 @@
     remove_grid: { description: 'Remove the grid.', mutates: true, args: { type: 'object', properties: { panelId } } },
 
     set_colorbar: {
-      description: 'Place the colorbar ends along its middle. Existing ticks keep their t. Put both ends inside the colored strip, on the first and last color pixel, not on its black or grey outline.',
+      description: 'Place the colorbar along its colored strip. With snap (default), the line is moved to the strip\'s centre line, both ends go to its first and last colored pixel (off the outline) and halfWidth is set from the strip width; the result reports what moved. Existing ticks stay at their page positions.',
       mutates: true,
       args: {
         type: 'object',
@@ -101,13 +102,14 @@
           panelId,
           start: pointOf('One end of the colored strip, on its centre line. Just inside the border: the first pixel that shows the color, not the outline.'),
           end: pointOf('The other end, on the centre line, just inside the border (not on the outline).'),
-          halfWidth: { type: 'number', minimum: 0, maximum: 50, description: 'Pixels averaged on each side of the line. Default 2; keep it inside the strip.' },
+          halfWidth: { type: 'number', minimum: 0, maximum: 50, description: 'Pixels averaged on each side of the line. Set from the strip when snapping; keep it inside the strip.' },
+          snap: { type: 'boolean', description: 'Snap the line and its ends to the colored strip under it. Default true; set false only when a snap was clearly wrong.' },
         },
         required: ['start', 'end'],
       },
     },
     add_tick: {
-      description: 'Add a labelled tick on the placed colorbar. Give its position ONE way: `at` (the page point of the tick mark, projected onto the bar; preferred) or `t` (0 at start, 1 at end). Example: {"at": {"x": 606, "y": 822}, "value": 3}.',
+      description: 'Add a labelled tick on the placed colorbar. Give its position ONE way: `at` (the page point of the tick mark, projected onto the bar; preferred) or `t` (0 at start, 1 at end). With snap (default), it moves to the nearest tick mark beside the strip within a few pixels; the result says how far. Example: {"at": {"x": 606, "y": 822}, "value": 3}.',
       mutates: true,
       args: {
         type: 'object',
@@ -116,6 +118,7 @@
           at: pointOf('Page point of the tick mark. Use this or t, not both.'),
           t: { type: 'number', minimum: -0.1, maximum: 1.1, description: 'Position along the bar, 0 at start and 1 at end. Use this or at, not both.' },
           value: { type: 'number', description: 'The printed tick label as a number, with any ×10^n multiplier applied (e.g. 1.4e9).' },
+          snap: { type: 'boolean', description: 'Snap to the nearest tick mark. Default true; set false for bars without tick marks or when the snap picked the wrong mark.' },
         },
         required: ['value'],
       },

@@ -2,7 +2,7 @@
   'use strict';
   const {
     AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, normalizeArgs, toolDefinitions, stateSnapshot, heatmapResultJson, ivisResultJson, openQuestions, resultKeyHash,
-    createPanel, createRoi, rectCorners, detectGridSize, projectT, pointAtT, readPixel, rgbToLab, sampleColorbar, labToT, makeValueFn, ticksWithT, tickProblem,
+    createPanel, createRoi, rectCorners, detectGridSize, projectT, pointAtT, refineColorbar, snapTick, readPixel, rgbToLab, sampleColorbar, labToT, makeValueFn, ticksWithT, tickProblem,
     cellAt, centroid, geomToBox, boxLabel, fileKind,
   } = CM;
 
@@ -236,6 +236,13 @@
         return null;
       },
 
+      remove_panel: async ({ panelId }) => {
+        needSource();
+        const panel = findPanel(panelId);
+        if (!panel) throw new Error(`No panel "${panelId}".`);
+        return ws.removePanel(panel);
+      },
+
       set_grid: async ({ panelId, topLeft, bottomRight, corners }) => {
         await usePanel(panelId);
         const cs = corners || rectCorners(topLeft, bottomRight);
@@ -279,29 +286,47 @@
         return null;
       },
 
-      set_colorbar: async ({ panelId, start, end, halfWidth }) => {
-        await usePanel(panelId);
+      set_colorbar: async ({ panelId, start, end, halfWidth, snap = true }) => {
+        const panel = await usePanel(panelId);
         if (Math.hypot(end.x - start.x, end.y - start.y) < 3) throw new Error('Colorbar is too short.');
+        const fit = snap ? refineColorbar(imageOf(panel), start, end) : null;
+        const s = fit ? fit.start : start;
+        const e = fit ? fit.end : end;
+        // A snapped halfWidth never reaches past the middle of the strip.
+        const hw = fit ? Math.min(halfWidth ?? fit.halfWidth, fit.halfWidth) : halfWidth;
         ws.commit((p) => {
           const cb = p.colorbar;
-          const ts = cb.start && cb.end ? cb.ticks.map((k) => projectT(cb.start, cb.end, k)) : null;
-          cb.start = { ...start };
-          cb.end = { ...end };
-          if (halfWidth !== undefined) cb.halfWidth = halfWidth;
-          if (ts) cb.ticks.forEach((k, i) => Object.assign(k, pointAtT(cb.start, cb.end, ts[i])));
+          cb.start = { ...s };
+          cb.end = { ...e };
+          if (hw !== undefined) cb.halfWidth = hw;
+          // Ticks mark printed labels, so they stay where they are on the page.
+          for (const k of cb.ticks) Object.assign(k, pointAtT(cb.start, cb.end, projectT(cb.start, cb.end, k)));
         });
-        return null;
+        const r1 = (v) => Math.round(v * 10) / 10;
+        const pt = (q) => `(${r1(q.x)}, ${r1(q.y)})`;
+        let note;
+        if (!snap) note = 'Placed as given (no snapping).';
+        else if (!fit) note = 'No colored strip was found under the line, so it was placed as given. Check that the line runs along the bar.';
+        else {
+          note = `Snapped to the strip (${Math.round(fit.stripHalf * 2 + 1)} px wide): start ${pt(start)} → ${pt(s)}, end ${pt(end)} → ${pt(e)}, halfWidth ${hw}.`;
+          const missed = ['start', 'end'].filter((k) => !fit.found[k]);
+          if (missed.length) note += ` No clear edge was found near the ${missed.join(' and ')}; ${missed.length > 1 ? 'they were' : 'it was'} only moved sideways. Check ${missed.length > 1 ? 'them' : 'it'} on a zoomed view.`;
+        }
+        return { start: s, end: e, halfWidth: panel.colorbar.halfWidth, note };
       },
 
-      add_tick: async ({ panelId, t, at, value }) => {
+      add_tick: async ({ panelId, t, at, value, snap = true }) => {
         const panel = await usePanel(panelId);
         const { start, end } = panel.colorbar;
         if (!start || !end) throw new Error('Place the colorbar first (set_colorbar).');
-        const tt = at ? projectT(start, end, at) : t;
+        let tt = at ? projectT(start, end, at) : t;
         if (tt < -0.1 || tt > 1.1) throw new Error(`That point is off the colorbar (t = ${tt.toFixed(2)}).`);
+        const mark = snap ? snapTick(imageOf(panel), start, end, pointAtT(start, end, tt)) : null;
+        if (mark) tt = mark.t;
         const id = ws.newTickId();
         ws.commit((p) => p.colorbar.ticks.push({ id, ...pointAtT(start, end, tt), value }));
-        return { tickId: id, t: tt };
+        const note = !snap ? 'Placed as given.' : mark ? `Snapped ${Math.abs(mark.moved)} px along the bar onto the tick mark.` : 'No tick mark found nearby; placed as given.';
+        return { tickId: id, t: Math.round(tt * 10000) / 10000, note };
       },
 
       set_tick_value: async ({ panelId, tickId, value }) => {
