@@ -20,7 +20,13 @@ For each page:
 3. Grid: zoom on the heatmap's top-left and bottom-right corners. set_grid with the outer corners of the cell area only (not labels, axes, dendrograms or the colorbar), without rows/cols: the size is detected automatically. Read the row labels (top to bottom) and column labels (left to right) and set_labels.
 4. Colorbar: zoom on it. set_colorbar with start and end at the two ends of the colored strip, along its centre line. Add at least two ticks with add_tick using "at" on the tick mark and the printed number as value (include any ×10^n multiplier). Prefer the outermost labelled ticks. If the labels grow by constant factors (1, 10, 100) use set_colorbar_scale log10.
 5. Check: view_page on the heatmap region with overlay "calibration" (grid lines must sit on cell borders, the colorbar line on the bar), then overlay "reconstruction" (repainted cells must match the figure). Fix and re-check if needed.
-6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again (at most twice per panel).
+6. resolve_questions: a fast decision model answers typed checks (grid size, cells whose color is off the colorbar, tick order, final acceptance) with calibrated confidence. Low-confidence answers are left for a human. Follow the advice it returns: if a panel is rejected or left for review, look again and fix what you can, then resolve again. Call resolve_questions at most 3 times per panel.
+
+Errors and retries:
+- When a tool returns ok: false, read the error and change the arguments before calling again. Never repeat an identical call.
+- Each tool gets at most 3 attempts per panel. After the third failure the tool is blocked for that panel: skip the step and move on.
+- If a panel still fails its checks after two rounds of fixes, stop working on it. Leave it for the human and say so in finish.
+- Give each argument once, in the form its description asks for (e.g. add_tick takes either "at" or "t", never both).
 
 Use decide when a judgment is a clean choice you are unsure of (e.g. which of two readings of a label fits the other ticks). Do not guess silently.
 When every page is done, call finish with one line per panel and anything a human should check. Keep your messages short.`;
@@ -248,6 +254,60 @@ When every page is done, call finish with one line per panel and anything a huma
     return [...new Set(out)];
   }
 
+  // ---------------------------------------------------------------- retries
+
+  const MAX_ATTEMPTS = 3; // tries of one tool on one panel before it is blocked
+  const MAX_RESOLVES = 3; // resolve_questions calls per panel
+  const MAX_ERRORS_IN_A_ROW = 8; // failed calls in a row before the run stops
+
+  // Tracks failures so a model that keeps repeating a bad call is told
+  // clearly, then blocked, instead of looping until it runs out of steps.
+  //   guard.before(name, panelId) → a result to return instead of running the
+  //     call (blocked), or null
+  //   guard.after(name, panelId, result) → the result, with the attempt count
+  //     and instructions added to errors
+  //   guard.stop → a reason to end the run, or null
+  function createRetryGuard({ maxAttempts = MAX_ATTEMPTS, maxResolves = MAX_RESOLVES, maxErrorsInARow = MAX_ERRORS_IN_A_ROW } = {}) {
+    const failures = new Map();
+    const resolves = new Map();
+    let inARow = 0;
+    const guard = {
+      stop: null,
+      before(name, panelId) {
+        const key = `${name}|${panelId}`;
+        if ((failures.get(key) || 0) >= maxAttempts) {
+          return { ok: false, error: `${name} is blocked for this panel after ${maxAttempts} failed attempts. Do not call it again for this panel. Skip this step, continue with the next step or panel, and list what is missing in finish.` };
+        }
+        if (name === 'resolve_questions') {
+          const n = (resolves.get(panelId) || 0) + 1;
+          resolves.set(panelId, n);
+          if (n > maxResolves) {
+            return { ok: true, result: `Checks were already resolved ${maxResolves} times for this panel. Stop fixing it: leave the open checks for the human and continue with the next panel, or finish.` };
+          }
+        }
+        return null;
+      },
+      after(name, panelId, result) {
+        const key = `${name}|${panelId}`;
+        if (result.ok) {
+          failures.delete(key);
+          inARow = 0;
+          return result;
+        }
+        const n = (failures.get(key) || 0) + 1;
+        failures.set(key, n);
+        inARow++;
+        if (inARow >= maxErrorsInARow) guard.stop = `${inARow} tool calls in a row failed; the last was ${name}: ${result.error}`;
+        const next =
+          n >= maxAttempts
+            ? `This was attempt ${n} of ${maxAttempts}: ${name} is now blocked for this panel. Skip this step and move on; list it in finish.`
+            : `Attempt ${n} of ${maxAttempts}. Read the error and change the arguments; do not repeat the same call.`;
+        return { ...result, error: `${result.error} ${next}` };
+      },
+    };
+    return guard;
+  }
+
   // ---------------------------------------------------------------- messages
 
   // Replace the images of all but the last `keep` image-bearing messages with
@@ -300,6 +360,8 @@ When every page is done, call finish with one line per panel and anything a huma
     toDecisionRequest,
     fromDecisionAnswer,
     decisionAdvice,
+    createRetryGuard,
+    AGENT_LIMITS: { MAX_ATTEMPTS, MAX_RESOLVES, MAX_ERRORS_IN_A_ROW },
     pruneImages,
     toolResultText,
     parsePages,

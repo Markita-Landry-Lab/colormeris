@@ -15,6 +15,8 @@
   const AGENT_VERSION = 1;
 
   const point = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] };
+  const pointOf = (description) => ({ ...point, description });
+  const count = (description) => ({ type: 'integer', minimum: 1, maximum: 1000, description });
   const panelId = { type: 'string', description: 'Panel to act on. Defaults to the active panel; another panel is selected first (switching tool and page if needed).' };
   const labels = { type: 'array', items: { type: 'string' } };
 
@@ -40,7 +42,16 @@
     },
     sample_pixel: {
       description: 'Color at a point, its CIELAB value and, when the colorbar is calibrated, the matched value and ΔE.',
-      args: { type: 'object', properties: { panelId, x: { type: 'number' }, y: { type: 'number' }, radius: { type: 'integer', minimum: 0, maximum: 20 } }, required: ['x', 'y'] },
+      args: {
+        type: 'object',
+        properties: {
+          panelId,
+          x: { type: 'number', description: 'Page pixel.' },
+          y: { type: 'number', description: 'Page pixel.' },
+          radius: { type: 'integer', minimum: 0, maximum: 20, description: 'Average a (2r+1)² square. Default 0.' },
+        },
+        required: ['x', 'y'],
+      },
     },
     focus: { description: 'Zoom the viewer to points (for screenshot-based checking).', args: { type: 'object', properties: { points: { type: 'array', items: point, minItems: 1 } }, required: ['points'] } },
 
@@ -58,31 +69,61 @@
         type: 'object',
         properties: {
           panelId,
-          topLeft: point,
-          bottomRight: point,
-          corners: { type: 'array', items: point, minItems: 4, maxItems: 4 },
-          rows: { type: 'integer', minimum: 1, maximum: 1000 },
-          cols: { type: 'integer', minimum: 1, maximum: 1000 },
+          topLeft: pointOf('Outer top-left corner of the top-left cell. Give with bottomRight.'),
+          bottomRight: pointOf('Outer bottom-right corner of the bottom-right cell. Give with topLeft.'),
+          corners: { type: 'array', items: point, minItems: 4, maxItems: 4, description: 'Instead of topLeft/bottomRight: all 4 outer corners, in order top-left, top-right, bottom-right, bottom-left.' },
+          rows: count('Number of cell rows. Omit to detect it.'),
+          cols: count('Number of cell columns. Omit to detect it.'),
         },
       },
     },
     detect_grid_size: { description: 'Guess rows and columns from the colors inside the placed grid, with confidences (below ~1.3 is uncertain). Does not change the panel.', args: { type: 'object', properties: { panelId } } },
-    set_grid_size: { description: 'Set rows and columns.', mutates: true, args: { type: 'object', properties: { panelId, rows: { type: 'integer', minimum: 1, maximum: 1000 }, cols: { type: 'integer', minimum: 1, maximum: 1000 } }, required: ['rows', 'cols'] } },
-    set_labels: { description: 'Row, column and (IVIS) box labels. Boxes are in reading order.', mutates: true, args: { type: 'object', properties: { panelId, rows: labels, cols: labels, boxes: labels } } },
+    set_grid_size: { description: 'Set rows and columns.', mutates: true, args: { type: 'object', properties: { panelId, rows: count('Number of cell rows.'), cols: count('Number of cell columns.') }, required: ['rows', 'cols'] } },
+    set_labels: {
+      description: 'Row, column and (IVIS) box labels. Give at least one list.',
+      mutates: true,
+      args: {
+        type: 'object',
+        properties: {
+          panelId,
+          rows: { ...labels, description: 'Row labels, top to bottom.' },
+          cols: { ...labels, description: 'Column labels, left to right.' },
+          boxes: { ...labels, description: 'IVIS box names in reading order.' },
+        },
+      },
+    },
     remove_grid: { description: 'Remove the grid.', mutates: true, args: { type: 'object', properties: { panelId } } },
 
     set_colorbar: {
       description: 'Place the colorbar ends along its middle. Existing ticks keep their t.',
       mutates: true,
-      args: { type: 'object', properties: { panelId, start: point, end: point, halfWidth: { type: 'number', minimum: 0, maximum: 50 } }, required: ['start', 'end'] },
+      args: {
+        type: 'object',
+        properties: {
+          panelId,
+          start: pointOf('One end of the colored strip, on its centre line.'),
+          end: pointOf('The other end, on the centre line.'),
+          halfWidth: { type: 'number', minimum: 0, maximum: 50, description: 'Pixels averaged on each side of the line. Default 2; keep it inside the strip.' },
+        },
+        required: ['start', 'end'],
+      },
     },
     add_tick: {
-      description: 'Add a labelled tick, at position t along the bar or at a point (projected onto the bar).',
+      description: 'Add a labelled tick on the placed colorbar. Give its position ONE way: `at` (the page point of the tick mark, projected onto the bar; preferred) or `t` (0 at start, 1 at end). Example: {"at": {"x": 606, "y": 822}, "value": 3}.',
       mutates: true,
-      args: { type: 'object', properties: { panelId, t: { type: 'number', minimum: -0.1, maximum: 1.1 }, at: point, value: { type: 'number' } }, required: ['value'] },
+      args: {
+        type: 'object',
+        properties: {
+          panelId,
+          at: pointOf('Page point of the tick mark. Use this or t, not both.'),
+          t: { type: 'number', minimum: -0.1, maximum: 1.1, description: 'Position along the bar, 0 at start and 1 at end. Use this or at, not both.' },
+          value: { type: 'number', description: 'The printed tick label as a number, with any ×10^n multiplier applied (e.g. 1.4e9).' },
+        },
+        required: ['value'],
+      },
     },
-    set_tick_value: { description: 'Change a tick\'s value.', mutates: true, args: { type: 'object', properties: { panelId, tickId: { type: 'string' }, value: { type: 'number' } }, required: ['tickId', 'value'] } },
-    remove_tick: { description: 'Remove a tick.', mutates: true, args: { type: 'object', properties: { panelId, tickId: { type: 'string' } }, required: ['tickId'] } },
+    set_tick_value: { description: 'Change a tick\'s value.', mutates: true, args: { type: 'object', properties: { panelId, tickId: { type: 'string', description: 'From add_tick or get_state.' }, value: { type: 'number' } }, required: ['tickId', 'value'] } },
+    remove_tick: { description: 'Remove a tick.', mutates: true, args: { type: 'object', properties: { panelId, tickId: { type: 'string', description: 'From add_tick or get_state.' } }, required: ['tickId'] } },
     set_colorbar_scale: { description: 'linear, or log10 when the tick labels are raw numbers on a logarithmic bar.', mutates: true, args: { type: 'object', properties: { panelId, scale: { enum: ['linear', 'log10'] } }, required: ['scale'] } },
     set_settings: {
       description: 'Matching settings.',
@@ -142,7 +183,7 @@
   const EXTRA_CHECKS = {
     set_grid: (a) =>
       a.corners ? null : a.topLeft && a.bottomRight ? null : 'give corners, or topLeft and bottomRight',
-    add_tick: (a) => (Number.isFinite(a.t) !== !!a.at ? null : 'give exactly one of t or at'),
+    add_tick: (a) => (a.at || Number.isFinite(a.t) ? null : 'give the tick position as at (page point of the tick mark), e.g. {"at": {"x": 606, "y": 822}, "value": 3}, or as t (0–1 along the bar)'),
     set_labels: (a) => (a.rows || a.cols || a.boxes ? null : 'give rows, cols or boxes'),
     add_region: (a) =>
       a.shape === 'polygon'
@@ -186,6 +227,26 @@
       if (typeof value !== 'boolean') errs.push(`${path}: must be true or false`);
     }
     return errs;
+  }
+
+  // Forgive common LLM habits before validating: optional arguments sent as
+  // null are dropped (unless null is a meaningful value), and add_tick with
+  // both at and t uses at. Returns {args, notes}.
+  function normalizeArgs(name, args) {
+    const spec = ACTIONS[name];
+    if (!spec || !args || typeof args !== 'object' || Array.isArray(args)) return { args, notes: [] };
+    const notes = [];
+    const out = {};
+    for (const [k, v] of Object.entries(args)) {
+      const sub = spec.args.properties?.[k];
+      if (v === null && !(sub?.enum || []).includes(null)) continue;
+      out[k] = v;
+    }
+    if (name === 'add_tick' && out.at && out.t !== undefined) {
+      delete out.t;
+      notes.push('Both at and t were given; used at and ignored t. Next time give only one.');
+    }
+    return { args: out, notes };
   }
 
   function validateAction(name, args = {}) {
@@ -426,6 +487,7 @@
     AGENT_ACTIONS: ACTIONS,
     validate,
     validateAction,
+    normalizeArgs,
     toolDefinitions,
     stateSnapshot,
     heatmapResultJson,

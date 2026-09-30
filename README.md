@@ -56,35 +56,30 @@ Measurements for each region copy:
 
 **Background**: a pixel whose CIELAB chroma is at or below the *gray* threshold is the photograph, i.e. no signal. The default is 20, which removes the JPEG color noise seen in published IVIS figures while keeping the dimmest overlay colors. Adjust it under *Signal settings* and check with *Show signal*.
 
+## Heatmap agent
+
+The *Agent* card in the heatmap tool calibrates every heatmap on the chosen pages by itself:
+
+1. **Connect.** Enter your [OpenRouter](https://openrouter.ai/keys) key. Or keep it out of the browser: put `OPENROUTER_API_KEY=…` in `.env` (ignored by git), run `npm run proxy`, and set *API base URL* to `http://localhost:8787/api/v1` with the key field empty.
+2. **Pick models.** The LLM needs image input and tool calling; the default is `anthropic/claude-sonnet-5.5`. The decision model defaults to `typesafe/jev-1.13` (Jev).
+3. **Run.** Choose the pages and press *Run agent*. The LLM looks at page images with pixel rulers, zooms in, places the grid, labels, colorbar and ticks, and checks them with overlays. The decision model then answers typed checks: grid size, flagged cells, tick order and final acceptance.
+4. **Review.** Checks answered below *Min. confidence* appear under *Needs review*. A rejected panel gets a red dot and stays there until you accept it or it changes. Add a note on what is wrong and press *Redo with agent* to have the agent fix it.
+
+The agent retries a failing tool at most 3 times per panel, then skips that step and reports it. It stops after 8 failed calls in a row or after *Max. steps*. The log shows every step, decision and the cost so far.
+
+Page images and extracted values are sent to OpenRouter and the model providers you pick.
+
 ## Agent API
 
-`app.html` exposes a typed API as `window.colormeris`, so an LLM, a decision model or a script can drive the tools without clicking pixels. Coordinates are image pixels of the panel's page, as in `project.json`.
+`app.html` exposes typed actions as `window.colormeris`, so any program can drive the tools without clicking pixels:
 
 ```js
-await colormeris.run('open_url', { url: 'assets/img/example.pdf' });
 await colormeris.run('set_grid', { topLeft: { x: 40, y: 60 }, bottomRight: { x: 520, y: 400 } });
-await colormeris.run('set_colorbar', { start: { x: 560, y: 400 }, end: { x: 560, y: 60 } });
-await colormeris.run('add_tick', { t: 0, value: 0 });
-await colormeris.run('add_tick', { t: 1, value: 100 });
+await colormeris.run('add_tick', { at: { x: 560, y: 400 }, value: 0 });
 await colormeris.run('get_results');   // → { ok, result } or { ok: false, error }
 ```
 
-- `colormeris.tools()` lists every action as `{name, description, input_schema}` (JSON Schema), ready to pass to an LLM API as tool definitions. Arguments are validated before anything runs.
-- Actions that change the project also return `state`, the same snapshot as `get_state`. `colormeris.batch([{name, args}, …])` runs actions in order and stops at the first failure.
-- `get_questions` lists typed decisions with their evidence and an `answerSchema`: `confirm_grid_size`, `classify_flagged` (a cell far from every colorbar color), `confirm_tick_order` and `confirm_extraction`. `answer_question` takes an answer with a `confidence` and a `source`. An answer below `colormeris.policy.minConfidence` (0.9) is logged but not applied, and the question stays open with the answer attached for a human. Answers from `source: 'human'` always apply.
-- Every change made through the API and every decision is logged. The project zip includes both logs as `agent/actions.json` and `agent/decisions.json`.
-
-The action catalogue, validator, state snapshot and questions are in `assets/js/agent-schema.js`; `assets/js/agent.js` binds them to the page.
-
-### Heatmap agent
-
-The *Agent* card in the heatmap tool extracts every heatmap on the chosen pages by itself, using your own [OpenRouter](https://openrouter.ai/keys) key:
-
-- An **LLM** (any OpenRouter model with image input and tool calling; `anthropic/claude-sonnet-5.5` by default) looks at page images with pixel rulers, finds the heatmaps, and calibrates one panel per heatmap through the agent API. It zooms in to place corners and ticks, and checks its work with *calibration* and *reconstruction* overlays.
-- A **decision model** (`typesafe/jev-1.13` by default, or any OpenRouter model with decision output) answers the typed questions: grid size, flagged cells, tick order and final acceptance. The LLM can also ask it its own `decide` questions.
-- An answer below *Min. confidence* is not applied. It is listed under *Needs review*, where you can answer it yourself.
-
-The key stays in memory unless you tick *Remember the key*; then it is kept in this browser's local storage. *API base URL* points the agent at an OpenRouter-compatible proxy. Page images and extracted values go to OpenRouter and the model providers. The log shows every step, decision and the cost so far. *Stop* ends the run.
+**[docs/agent.md](docs/agent.md)** is the full reference: every action and argument, typed questions and reviews, the heatmap agent's tools, limits and system prompt. It is generated from the code with `node scripts/agent-docs.mjs`, and a test fails when it is out of date.
 
 ## How heatmap values are computed
 
@@ -116,6 +111,8 @@ You can open `index.html` directly from disk or serve the folder:
 ```bash
 npm run serve   # python3 -m http.server 8000, then open http://localhost:8000
 npm test        # unit tests (node:test, no dependencies)
+npm run proxy   # optional: OpenRouter proxy on :8787 using the key in .env
+npm run docs    # regenerate docs/agent.md after changing the agent
 ```
 
 Opened from disk (`file://`), browsers block module files, fetches and workers. There, pdf.js is loaded from `assets/vendor/pdfjs/pdf.embed.js` and runs on the main thread. PDFs that need extra data (non-embedded fonts, CJK character maps, JPEG 2000 images) render best when served over HTTP. After updating the vendored pdf.js, regenerate the embed with `node scripts/embed-pdfjs.mjs`.
@@ -139,7 +136,9 @@ To deploy, publish the repository root with GitHub Pages or any static host. `.n
 | `assets/js/ivis.js` | IVIS tool |
 | `assets/js/agent-schema.js` | agent action catalogue (JSON Schema), validation, state snapshot, typed questions |
 | `assets/js/agent.js` | binds the agent API to the workspace as `window.colormeris` |
-| `assets/js/agent-llm.js` | agent system prompt, LLM tool list, typed question ↔ decision-model mapping |
+| `assets/js/agent-llm.js` | agent system prompt, LLM tool list, typed question ↔ decision-model mapping, retry limits |
 | `assets/js/agent-runner.js` | agent loop: page images with rulers and overlays, OpenRouter chat and decisions calls |
 | `assets/js/agent-panel.js` | Agent card: key, model pickers, run/stop, log, review of low-confidence decisions |
+| `scripts/agent-docs.mjs` | generates `docs/agent.md` from the agent definitions |
+| `scripts/openrouter-proxy.mjs` | local proxy that adds the OpenRouter key from `.env` (`npm run proxy`) |
 | `assets/js/app.js` | starts the workspace with both tools; `#heatmap` / `#ivis` picks the tool |

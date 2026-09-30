@@ -84,3 +84,30 @@ test('decisionAdvice tells the LLM what to fix', () => {
   assert.match(advice[0], /^Fig 2f: the extraction was rejected/);
   assert.match(advice[1], /recheck the colorbar/);
 });
+
+test('retry guard: counts attempts, blocks after the limit, stops long failure runs', () => {
+  const g = CM.createRetryGuard({ maxAttempts: 2, maxResolves: 1, maxErrorsInARow: 3 });
+  const bad = { ok: false, error: 'args: bad.' };
+  assert.equal(g.before('add_tick', 'p1'), null);
+  assert.match(g.after('add_tick', 'p1', bad).error, /Attempt 1 of 2/);
+  assert.match(g.after('add_tick', 'p1', bad).error, /now blocked/);
+  assert.match(g.before('add_tick', 'p1').error, /blocked for this panel/);
+  assert.equal(g.before('add_tick', 'p2'), null, 'other panels are not blocked');
+  assert.equal(g.after('set_grid', 'p1', { ok: true }).ok, true);
+  assert.equal(g.before('resolve_questions', 'p1'), null);
+  assert.match(g.before('resolve_questions', 'p1').result, /already resolved 1 times/);
+  assert.equal(g.stop, null);
+  g.after('a', 'p1', bad);
+  g.after('b', 'p1', bad);
+  g.after('c', 'p1', bad);
+  assert.match(g.stop, /3 tool calls in a row failed/);
+});
+
+test('normalizeArgs forgives nulls and at+t on add_tick', () => {
+  const r = CM.normalizeArgs('add_tick', { at: { x: 1, y: 2 }, t: 0.5, value: 3, panelId: null });
+  assert.deepEqual(r.args, { at: { x: 1, y: 2 }, value: 3 });
+  assert.match(r.notes[0], /used at/);
+  assert.deepEqual(CM.validateAction('add_tick', r.args), []);
+  assert.match(CM.validateAction('add_tick', { value: 3 })[0], /"at": \{"x": 606/);
+  assert.deepEqual(CM.normalizeArgs('set_review', { status: null }).args, { status: null }, 'null kept where it is a value');
+});

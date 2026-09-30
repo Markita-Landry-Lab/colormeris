@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, fromDecisionAnswer, decisionAdvice, pruneImages, toolResultText,
+    AGENT_SYSTEM_PROMPT, LLM_ACTIONS, RUNNER_TOOLS, validateRunnerTool, llmTools, toDecisionRequest, fromDecisionAnswer, decisionAdvice, createRetryGuard, pruneImages, toolResultText,
     bilinear, cellSamplePolygon, colorAtT, rgbToHex, ticksWithT, renderPdfPage,
   } = CM;
 
@@ -304,6 +304,7 @@
       ];
       const tools = llmTools();
       let nudges = 0;
+      const guard = createRetryGuard();
       let summary = null;
 
       while (usage.steps < maxSteps && summary === null) {
@@ -334,15 +335,22 @@
           } catch {
             result = { ok: false, error: 'Arguments are not valid JSON.' };
           }
+          const name = call.function.name;
+          // Retries are counted per tool and panel (the one named, else the active one).
+          const panelKey = args?.panelId || (name === 'resolve_questions' ? 'all' : ws.activePanel()?.id);
           if (!result) {
-            emit('tool', { name: call.function.name, args });
-            try {
-              result = await callTool(call.function.name, args);
-            } catch (err) {
-              if (signal?.aborted) throw err;
-              result = { ok: false, error: err.message };
+            emit('tool', { name, args });
+            result = guard.before(name, panelKey);
+            if (!result) {
+              try {
+                result = await callTool(name, args);
+              } catch (err) {
+                if (signal?.aborted) throw err;
+                result = { ok: false, error: err.message };
+              }
             }
           }
+          result = guard.after(name, panelKey, result);
           if (call.function.name === 'finish' && result.ok) summary = args.summary;
           if (result.image) {
             images.push(result.image);
@@ -353,6 +361,10 @@
         }
         if (images.length) {
           messages.push({ role: 'user', content: images.flatMap((im) => [{ type: 'text', text: im.note }, { type: 'image_url', imageUrl: { url: im.dataUrl } }]) });
+        }
+        if (guard.stop) {
+          emit('tool-error', { name: 'run', error: `Stopped: ${guard.stop}` });
+          summary = `Stopped because ${guard.stop}.`;
         }
       }
 

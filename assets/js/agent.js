@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, toolDefinitions, stateSnapshot, heatmapResultJson, ivisResultJson, openQuestions, resultKeyHash,
+    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, normalizeArgs, toolDefinitions, stateSnapshot, heatmapResultJson, ivisResultJson, openQuestions, resultKeyHash,
     createPanel, createRoi, rectCorners, detectGridSize, projectT, pointAtT, readPixel, rgbToLab, sampleColorbar, labToT, makeValueFn, ticksWithT, tickProblem,
     cellAt, centroid, geomToBox, boxLabel, fileKind,
   } = CM;
@@ -375,15 +375,17 @@
     };
 
     // Run one action. Never throws; mutating actions also return the new state.
-    async function run(name, args = {}) {
+    async function run(name, rawArgs = {}) {
+      const { args, notes } = normalizeArgs(name, rawArgs);
       const errs = validateAction(name, args);
       if (errs.length) return { ok: false, error: errs.join('; ') };
       const spec = AGENT_ACTIONS[name];
+      const extra = notes.length ? { notes } : {};
       try {
         if (spec.mutates && app.mode) ws.setMode(null);
         const result = await handlers[name](args);
         if (spec.mutates) actionLog.push({ action: name, args, ok: true, time: new Date().toISOString() });
-        return spec.mutates ? { ok: true, result: result ?? null, state: state() } : { ok: true, result: result ?? null };
+        return spec.mutates ? { ok: true, result: result ?? null, ...extra, state: state() } : { ok: true, result: result ?? null, ...extra };
       } catch (err) {
         if (spec.mutates) actionLog.push({ action: name, args, ok: false, error: err.message, time: new Date().toISOString() });
         return { ok: false, error: err.message };

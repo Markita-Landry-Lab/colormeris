@@ -24,8 +24,7 @@ test('validateAction rejects bad arguments with paths', () => {
 test('extra checks cover either-or arguments', () => {
   assert.match(validateAction('set_grid', {})[0], /corners, or topLeft and bottomRight/);
   assert.deepEqual(validateAction('set_grid', { topLeft: { x: 0, y: 0 }, bottomRight: { x: 9, y: 9 } }), []);
-  assert.match(validateAction('add_tick', { value: 1 })[0], /exactly one of t or at/);
-  assert.match(validateAction('add_tick', { value: 1, t: 0.5, at: { x: 0, y: 0 } })[0], /exactly one/);
+  assert.match(validateAction('add_tick', { value: 1 })[0], /give the tick position as at/);
   assert.deepEqual(validateAction('add_tick', { value: 1, t: 0.5 }), []);
   assert.match(validateAction('add_region', { shape: 'ellipse', geom: { cx: 1, cy: 1 } })[0], /needs cx, cy, rx, ry/);
 });
