@@ -7,7 +7,7 @@ Everything runs in the browser. Files are never uploaded anywhere.
 ## Usage
 
 1. **Open** a PDF, PNG or JPG. You can use *Open file…*, drag and drop, or paste an image from the clipboard. For a PDF, choose the page and the render resolution. The default is 216 dpi.
-2. **Panels**: add one panel for each heatmap in the figure. Each panel has its own grid, labels and colorbar.
+2. **Panels**: add one panel for each heatmap in the figure. Each panel has its own grid, labels and colorbar. In a PDF, panels belong to the page they were made on. Switching pages keeps them and shows the new page's own panels. The Panels card links to other pages that already have panels.
 3. **Grid**: press *Place grid corners* (`G`). Click the outer top-left corner of the heatmap, then the outer bottom-right corner. Colormeris guesses the number of rows and columns from where the colors change and fills them in. Correct them if needed, or press *Detect* to guess again. Then paste the row and column labels. You can drag the corner handles to adjust. Uncheck *Keep rectangular* for skewed or rotated scans.
 4. **Colorbar**: press *Place colorbar ends* (`B`) and click both ends of the bar along its middle. Lines within 3° of vertical or horizontal snap straight; hold Alt to turn snapping off. Next, click at least two labelled ticks on the bar and type their values (`T`). Values between ticks are interpolated linearly, and values beyond the outer ticks are extrapolated. If the tick labels are raw numbers on a logarithmic bar, choose *Log₁₀*.
 5. **Results**: hover a table cell to find it on the image. Turn on *Reconstruct* to repaint each sampled area with the color the matched value predicts, so you can check the match by eye. Cells whose color is far from every colorbar color (ΔE above the threshold) are outlined in red.
@@ -30,12 +30,12 @@ Navigation: scroll to zoom and drag to pan. Space-drag or middle-drag always pan
 project.json            calibration: grid corners, colorbar line and ticks, labels, settings
 README.txt
 source/<original file>  the uploaded PDF/image
-source/page-<n>.png     the rendered page that coordinates refer to
+source/page-<n>.png     the rendered image of each page that has panels
 data/<panel>.csv        matrix of values
-data/<panel>_long.csv   per-cell values with RGB and ΔE
+data/<panel>_long.csv   per-cell values with page, RGB and ΔE
 ```
 
-Coordinates in `project.json` are pixels in `source/page-<n>.png`.
+Each panel in `project.json` records its `page`. Its coordinates are pixels in that page's `source/page-<n>.png`.
 
 ## Development
 

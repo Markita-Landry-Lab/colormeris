@@ -13,10 +13,13 @@
   let nextId = 1;
   const newId = () => `p${nextId++}`;
 
-  function createPanel(name = 'Panel 1') {
+  // `page` is the 1-based PDF page the panel's coordinates refer to (always 1
+  // for images).
+  function createPanel(name = 'Panel 1', page = 1) {
     return {
       id: newId(),
       name,
+      page,
       grid: { corners: null, rows: 4, cols: 4, sampleFraction: 0.5, rowLabels: [], colLabels: [] },
       colorbar: { start: null, end: null, halfWidth: 2, nSamples: 256, ticks: [], scale: 'linear' },
       settings: { distance: 'de2000', maxDeltaE: 10 },
@@ -63,6 +66,7 @@
       source: project.source ? { ...project.source } : null,
       panels: project.panels.map((p) => ({
         name: p.name,
+        page: p.page,
         grid: {
           corners: p.grid.corners ? p.grid.corners.map(pt) : null,
           rows: p.grid.rows,
@@ -112,7 +116,9 @@
     }
     if (!Array.isArray(json.panels) || json.panels.length === 0) fail('no panels');
     const panels = json.panels.map((raw, i) => {
-      const p = createPanel(typeof raw.name === 'string' ? raw.name : `Panel ${i + 1}`);
+      // Version 1 files written before panels had pages refer to source.page.
+      const page = Number.isInteger(raw.page) && raw.page >= 1 ? raw.page : json.source?.page || 1;
+      const p = createPanel(typeof raw.name === 'string' ? raw.name : `Panel ${i + 1}`, page);
       const g = raw.grid || {};
       if (g.corners !== null && g.corners !== undefined) {
         if (!Array.isArray(g.corners) || g.corners.length !== 4) fail(`panel ${i + 1} grid needs 4 corners`);

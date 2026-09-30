@@ -18,6 +18,8 @@
     pdfDoc: null,
     mode: null, // {type: 'grid' | 'colorbar' | 'tick', points: []}
     cache: new Map(), // panel id → {key, result}
+    pages: new Map(), // page number → {canvas, imageData} of rendered pages
+    lastActive: new Map(), // page number → id of the panel last active there
     history: [],
     future: [],
     drag: null,
@@ -30,7 +32,13 @@
   let tickSeq = 1;
   const newTickId = () => `t${tickSeq++}`;
 
-  const activePanel = () => app.project.panels.find((p) => p.id === app.project.activePanelId) || app.project.panels[0];
+  const currentPage = () => app.project.source?.page || 1;
+  // Panels belonging to the page on screen; only these are drawn and edited.
+  const pagePanels = () => app.project.panels.filter((p) => p.page === currentPage());
+  const activePanel = () => {
+    const here = pagePanels();
+    return here.find((p) => p.id === app.project.activePanelId) || here[0] || app.project.panels[0];
+  };
 
   // ---------------------------------------------------------------- history
 
@@ -47,20 +55,30 @@
   function restore(snap) {
     app.project.panels = snap.panels;
     app.project.activePanelId = snap.activePanelId;
+    // Undoing a change made on another page takes you back to that page.
+    const target = app.project.panels.find((p) => p.id === snap.activePanelId);
+    if (target && target.page !== currentPage()) {
+      goToPage(target.page, { keepActive: true });
+      return;
+    }
+    ensurePagePanel(currentPage());
     changed();
   }
 
-  function undo() {
-    if (!app.history.length) return;
-    app.future.push(snapshot());
-    restore(app.history.pop());
+  // Move between two history stacks. The saved counterpart keeps the panel of
+  // the change being undone/redone as active, so both directions land on the
+  // page where the change was made.
+  function step(from, to) {
+    if (!from.length) return;
+    const snap = from.pop();
+    const current = snapshot();
+    current.activePanelId = snap.activePanelId;
+    to.push(current);
+    restore(snap);
   }
 
-  function redo() {
-    if (!app.future.length) return;
-    app.history.push(snapshot());
-    restore(app.future.pop());
-  }
+  const undo = () => step(app.history, app.future);
+  const redo = () => step(app.future, app.history);
 
   // Apply a mutation with an undo point.
   function commit(fn) {
@@ -71,12 +89,15 @@
 
   // ---------------------------------------------------------------- extraction
 
+  // Extract a panel from the image of its own page.
   function resultFor(panel) {
-    if (!app.imageData) return { error: 'Load a file first.' };
-    const key = JSON.stringify([panel.grid, panel.colorbar, panel.settings]);
+    if (!app.sourceCanvas) return { error: 'Load a file first.' };
+    const image = app.pages.get(panel.page)?.imageData;
+    if (!image) return { error: `Page ${panel.page} is not rendered yet.` };
+    const key = JSON.stringify([panel.page, panel.grid, panel.colorbar, panel.settings]);
     const hit = app.cache.get(panel.id);
     if (hit && hit.key === key) return hit.result;
-    const result = extractPanel(app.imageData, panel);
+    const result = extractPanel(image, panel);
     app.cache.set(panel.id, { key, result });
     return result;
   }
@@ -431,7 +452,7 @@
   function drawOverlay(ctx, v) {
     if (app.showOverlay) {
       const active = activePanel();
-      for (const panel of app.project.panels) {
+      for (const panel of pagePanels()) {
         if (panel === active) continue;
         ctx.globalAlpha = 0.35;
         drawGrid(ctx, v, panel, false);
@@ -568,8 +589,10 @@
 
   function renderPanels(active) {
     const list = $('panel-list');
+    const multiPage = (app.project.source?.pageCount || 1) > 1;
+    $('panel-page-note').textContent = multiPage ? `on page ${currentPage()}` : '';
     list.replaceChildren(
-      ...app.project.panels.map((p) => {
+      ...pagePanels().map((p) => {
         const li = document.createElement('li');
         const btn = document.createElement('button');
         btn.className = `btn small${p === active ? ' active' : ''}`;
@@ -589,7 +612,31 @@
       }),
     );
     setValue($('panel-name'), active.name);
-    $('panel-delete').disabled = app.project.panels.length < 2;
+    $('panel-delete').disabled = pagePanels().length < 2;
+    renderOtherPages();
+  }
+
+  // Links to other pages that already have panels.
+  function renderOtherPages() {
+    const byPage = new Map();
+    for (const p of app.project.panels) {
+      if (p.page === currentPage()) continue;
+      if (!byPage.has(p.page)) byPage.set(p.page, []);
+      byPage.get(p.page).push(p.name || '(unnamed)');
+    }
+    const box = $('other-pages');
+    box.hidden = byPage.size === 0;
+    const items = [...byPage.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([page, names]) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn small ghost';
+        btn.textContent = `Page ${page}: ${names.join(', ')}`;
+        btn.title = `Go to page ${page}`;
+        btn.addEventListener('click', () => goToPage(page));
+        return btn;
+      });
+    box.replaceChildren(Object.assign(document.createElement('span'), { className: 'muted small', textContent: 'Other pages:' }), ...items);
   }
 
   let tickKey = '';
@@ -783,7 +830,10 @@
       app.originalFile = file;
       app.history = [];
       app.future = [];
-      setSource(canvas);
+      app.lastActive.clear();
+      app.pages = new Map([[1, { canvas, imageData: canvasImageData(canvas) }]]);
+      app.cache.clear();
+      showPage(1);
       status('');
       sha256Hex(file).then((h) => (project.source.sha256 = h));
     } catch (err) {
@@ -797,24 +847,47 @@
     return app.project.panels.some((p) => p.grid.corners || p.colorbar.start);
   }
 
-  function setSource(canvas, { keepView = false } = {}) {
-    app.sourceCanvas = canvas;
-    app.imageData = canvasImageData(canvas);
-    app.project.source.width = canvas.width;
-    app.project.source.height = canvas.height;
-    app.cache.clear();
-    viewer.setSource(canvas, { keepView });
+  // Display a page that is already in app.pages.
+  function showPage(page, { keepView = false } = {}) {
+    const entry = app.pages.get(page);
+    app.sourceCanvas = entry.canvas;
+    app.imageData = entry.imageData;
+    app.project.source.width = entry.canvas.width;
+    app.project.source.height = entry.canvas.height;
+    viewer.setSource(entry.canvas, { keepView });
     onHover(null);
     updateSourceUi();
     changed();
   }
 
+  // Rendered image of a page, rendering it from the PDF when needed.
+  async function ensurePage(page) {
+    if (app.pages.has(page)) return app.pages.get(page);
+    if (!app.pdfDoc) return null;
+    const { canvas } = await renderPdfPage(app.pdfDoc, page, app.project.source.renderScale);
+    const entry = { canvas, imageData: canvasImageData(canvas) };
+    app.pages.set(page, entry);
+    return entry;
+  }
+
+  function isEmptyPanel(p) {
+    return !p.grid.corners && !p.colorbar.start && !p.grid.rowLabels.length && !p.grid.colLabels.length;
+  }
+
+  // Every page shown gets at least one panel to calibrate.
+  function ensurePagePanel(page) {
+    if (app.project.panels.some((p) => p.page === page)) return;
+    const panel = createPanel(`Panel ${app.project.panels.length + 1}`, page);
+    panel.settings = { ...activePanel().settings };
+    app.project.panels.push(panel);
+  }
   function updateSourceUi() {
     const s = app.project.source;
     $('source-label').textContent = s.fileName;
     $('source-label').title = s.fileName;
     $('source-label').classList.remove('muted');
-    const isPdf = !!app.pdfDoc;
+    // Page controls also work for a reopened project that has several page images but no PDF.
+    const isPdf = !!app.pdfDoc || s.pageCount > 1;
     $('pdf-controls').hidden = !isPdf;
     $('source-info').textContent =
       `${s.fileName} · ${s.width} × ${s.height} px` + (isPdf ? ` · page ${s.page} of ${s.pageCount}` : '');
@@ -829,26 +902,59 @@
     }
   }
 
-  async function rerenderPdf(page, scale) {
-    if (!app.pdfDoc) return;
+  // Switch the view to another PDF page. Panels stay with the page they were
+  // made on; the new page shows its own panels (or a fresh one).
+  async function goToPage(page, { keepActive = false } = {}) {
     const s = app.project.source;
-    page = Math.min(s.pageCount, Math.max(1, page));
-    if (page === s.page && Math.abs(scale - s.renderScale) < 1e-9) return;
+    if (!s) return;
+    page = Math.min(s.pageCount, Math.max(1, Math.round(page) || 1));
+    if (page === s.page) {
+      updateSourceUi();
+      return;
+    }
     try {
       status(`Rendering page ${page}…`);
-      const r = await renderPdfPage(app.pdfDoc, page, scale);
-      const factor = r.scale / s.renderScale;
-      const samePage = page === s.page;
-      if (Math.abs(factor - 1) > 1e-9) {
-        pushHistory();
-        app.project.panels.forEach((p) => rescalePanel(p, factor));
-        app.history = []; // coordinates changed space; older snapshots no longer apply
-        app.future = [];
-      }
+      if (!(await ensurePage(page))) throw new Error('the page image is not available');
+      setMode(null);
+      const oldPage = s.page;
+      app.lastActive.set(oldPage, activePanel().id);
+      // Drop untouched placeholder panels left on the page being left.
+      const keep = app.project.panels.filter((p) => p.page !== oldPage || !isEmptyPanel(p));
+      if (keep.length !== app.project.panels.length && keep.length) app.project.panels = keep;
       s.page = page;
+      ensurePagePanel(page);
+      if (!keepActive || !pagePanels().some((p) => p.id === app.project.activePanelId)) {
+        const remembered = app.lastActive.get(page);
+        app.project.activePanelId = pagePanels().some((p) => p.id === remembered) ? remembered : pagePanels()[0].id;
+      }
+      app.tableCell = null;
+      app.hoverCell = null;
+      showPage(page);
+      status('');
+    } catch (err) {
+      console.error(err);
+      status('');
+      updateSourceUi();
+      toast(`Could not show page ${page}: ${err.message}`, true);
+    }
+  }
+
+  // Re-render at another resolution. All panel coordinates scale with it.
+  async function changeScale(scale) {
+    const s = app.project.source;
+    if (!app.pdfDoc || Math.abs(scale - s.renderScale) < 1e-9) return;
+    try {
+      status('Rendering…');
+      const r = await renderPdfPage(app.pdfDoc, s.page, scale);
+      const factor = r.scale / s.renderScale;
+      app.project.panels.forEach((p) => rescalePanel(p, factor));
+      app.history = []; // coordinates changed space; older snapshots no longer apply
+      app.future = [];
       s.renderScale = r.scale;
-      setSource(r.canvas, { keepView: false });
-      if (samePage && r.scale < scale) toast(`Resolution limited to ${Math.round(72 * r.scale)} dpi by the browser canvas size.`);
+      app.pages = new Map([[s.page, { canvas: r.canvas, imageData: canvasImageData(r.canvas) }]]);
+      app.cache.clear();
+      showPage(s.page);
+      if (r.scale < scale) toast(`Resolution limited to ${Math.round(72 * r.scale)} dpi by the browser canvas size.`);
       status('');
     } catch (err) {
       console.error(err);
@@ -861,9 +967,8 @@
     if (hasCalibration() && !confirm('Opening a project replaces the current one. Continue?')) return;
     setMode(null);
     status(`Opening ${file.name}…`);
-    const { project, pageImage, originalFile } = await readProjectZip(window.JSZip, file);
+    const { project, pageImages, originalFile } = await readProjectZip(window.JSZip, file);
     const src = project.source || {};
-    let canvas;
     app.pdfDoc = null;
     const origFile = originalFile ? new File([originalFile.blob], originalFile.name, { type: src.mime || '' }) : null;
     if (origFile && fileKind(origFile) === 'pdf') {
@@ -873,34 +978,49 @@
         console.warn('Could not reopen the original PDF', err);
       }
     }
-    if (pageImage) canvas = await imageToCanvas(pageImage);
-    else if (app.pdfDoc) canvas = (await renderPdfPage(app.pdfDoc, src.page || 1, src.renderScale || 3)).canvas;
-    else if (origFile) canvas = await imageToCanvas(origFile);
-    else throw new Error('The project zip contains no source image.');
-
+    const pages = new Map();
+    for (const [page, blob] of pageImages) {
+      const canvas = await imageToCanvas(blob);
+      pages.set(page, { canvas, imageData: canvasImageData(canvas) });
+    }
+    const page = src.page || 1;
     project.source = {
       fileName: src.fileName || origFile?.name || 'source.png',
       mime: src.mime || null,
-      page: src.page || 1,
-      pageCount: app.pdfDoc ? app.pdfDoc.numPages : src.pageCount || 1,
+      page,
+      pageCount: app.pdfDoc ? app.pdfDoc.numPages : Math.max(src.pageCount || 1, ...pages.keys()),
       renderScale: src.renderScale || 1,
-      width: src.width || canvas.width,
-      height: src.height || canvas.height,
+      width: src.width || 0,
+      height: src.height || 0,
       sha256: src.sha256 || null,
     };
-    if (project.source.width !== canvas.width) {
-      const factor = canvas.width / project.source.width;
-      project.panels.forEach((p) => rescalePanel(p, factor));
+    app.project = project;
+    app.pages = pages;
+    app.cache.clear();
+    app.lastActive.clear();
+    if (!app.pages.has(page)) {
+      if (app.pdfDoc) await ensurePage(page);
+      else if (origFile) {
+        const canvas = await imageToCanvas(origFile);
+        // An image re-decoded at a different size than recorded: scale the calibration.
+        if (src.width && canvas.width !== src.width) project.panels.forEach((p) => rescalePanel(p, canvas.width / src.width));
+        app.pages.set(page, { canvas, imageData: canvasImageData(canvas) });
+      } else throw new Error('The project zip contains no source image.');
     }
     project.panels.forEach((p) => p.colorbar.ticks.forEach((k) => (k.id = newTickId())));
-    app.project = project;
+    ensurePagePanel(page);
+    project.activePanelId = pagePanels()[0].id;
     app.originalFile = origFile;
     app.history = [];
     app.future = [];
-    setSource(canvas);
+    showPage(page);
     status('');
     if (origFile && !project.source.sha256) sha256Hex(origFile).then((h) => (project.source.sha256 = h));
-    toast(`Opened project with ${project.panels.length} panel${project.panels.length === 1 ? '' : 's'}.`);
+    const pageCount = new Set(project.panels.map((p) => p.page)).size;
+    toast(
+      `Opened project with ${project.panels.length} panel${project.panels.length === 1 ? '' : 's'}` +
+        (pageCount > 1 ? ` on ${pageCount} pages.` : '.'),
+    );
   }
 
   // ---------------------------------------------------------------- export
@@ -927,14 +1047,20 @@
     }
     try {
       status('Building zip…');
+      // Every page that has panels (plus the one on screen) goes into the zip.
+      const pages = [...new Set([currentPage(), ...app.project.panels.map((p) => p.page)])].sort((a, b) => a - b);
+      const pagePngs = new Map();
+      for (const page of pages) {
+        const entry = await ensurePage(page);
+        if (entry) pagePngs.set(page, await canvasToPngBlob(entry.canvas));
+      }
       const results = app.project.panels.map(resultFor);
       const incomplete = results.filter((r) => r.error).length;
-      const pagePng = await canvasToPngBlob(app.sourceCanvas);
       const blob = await buildProjectZip(window.JSZip, {
         project: app.project,
         results,
         sourceFile: app.originalFile,
-        pagePng,
+        pagePngs,
       });
       download(blob, `colormeris-${safeFileName(app.project.name)}.zip`);
       status('');
@@ -1050,16 +1176,16 @@
   $('btn-export-zip').addEventListener('click', exportZip);
 
   // Source
-  $('page-prev').addEventListener('click', () => rerenderPdf(app.project.source.page - 1, app.project.source.renderScale));
-  $('page-next').addEventListener('click', () => rerenderPdf(app.project.source.page + 1, app.project.source.renderScale));
-  $('page-input').addEventListener('change', (e) => rerenderPdf(Math.round(Number(e.target.value)) || 1, app.project.source.renderScale));
-  $('scale-select').addEventListener('change', (e) => rerenderPdf(app.project.source.page, Number(e.target.value)));
+  $('page-prev').addEventListener('click', () => goToPage(currentPage() - 1));
+  $('page-next').addEventListener('click', () => goToPage(currentPage() + 1));
+  $('page-input').addEventListener('change', (e) => goToPage(Number(e.target.value)));
+  $('scale-select').addEventListener('change', (e) => changeScale(Number(e.target.value)));
 
   // Panels
   $('panel-add').addEventListener('click', () => {
     pushHistory();
     const prev = activePanel();
-    const panel = createPanel(`Panel ${app.project.panels.length + 1}`);
+    const panel = createPanel(`Panel ${app.project.panels.length + 1}`, currentPage());
     panel.settings = { ...prev.settings };
     app.project.panels.push(panel);
     app.project.activePanelId = panel.id;
@@ -1070,13 +1196,14 @@
     $('panel-name').select();
   });
   $('panel-delete').addEventListener('click', () => {
-    if (app.project.panels.length < 2) return;
+    const here = pagePanels();
+    if (here.length < 2) return;
     const panel = activePanel();
     if (!confirm(`Delete panel "${panel.name}"?`)) return;
     pushHistory();
-    const i = app.project.panels.indexOf(panel);
-    app.project.panels.splice(i, 1);
-    app.project.activePanelId = app.project.panels[Math.max(0, i - 1)].id;
+    const i = here.indexOf(panel);
+    app.project.panels.splice(app.project.panels.indexOf(panel), 1);
+    app.project.activePanelId = here[i === 0 ? 1 : i - 1].id;
     setMode(null);
     changed();
   });

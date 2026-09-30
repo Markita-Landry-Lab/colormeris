@@ -74,5 +74,17 @@ test('CSV helpers', () => {
   assert.equal(toWideCsv(panel, result), 'row\\col,A,B\nR1,1,2\nR2,3,4.5\n');
   const long = toLongCsv([{ panel, result }]).trim().split('\n');
   assert.equal(long.length, 5);
-  assert.equal(long[4], 'e,R2,B,4.5,1,2,3,0.50,0');
+  assert.equal(long[4], 'e,1,R2,B,4.5,1,2,3,0.50,0');
+});
+
+test('panels keep their page; older files fall back to source.page', () => {
+  const project = createProject();
+  project.source = { fileName: 'fig.pdf', page: 3, renderScale: 3, width: 10, height: 10 };
+  project.panels[0].page = 3;
+  project.panels.push(createPanel('g', 5));
+  const json = JSON.parse(JSON.stringify(serializeProject(project)));
+  assert.deepEqual(json.panels.map((p) => p.page), [3, 5]);
+  assert.deepEqual(parseProject(json).panels.map((p) => p.page), [3, 5]);
+  json.panels.forEach((p) => delete p.page);
+  assert.deepEqual(parseProject(json).panels.map((p) => p.page), [3, 3]);
 });
