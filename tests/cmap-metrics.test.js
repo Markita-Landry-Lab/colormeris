@@ -67,3 +67,15 @@ test('every map gets metrics quickly', () => {
   }
   assert.ok(performance.now() - t0 < 3000);
 });
+
+test('parseCompare keeps known names once, in order, up to the cap', () => {
+  const { parseCompare, COMPARE_MAX } = CM;
+  const names = ['viridis', 'jet', 'RdBu', 'gray'];
+  assert.deepEqual(parseCompare('jet,VIRIDIS, rdbu ,jet,nope,', names), ['jet', 'viridis', 'RdBu']);
+  assert.deepEqual(parseCompare(null, names), []);
+  assert.deepEqual(parseCompare('', names), []);
+  assert.deepEqual(parseCompare('viridis,jet,gray', names, 2), ['viridis', 'jet']);
+  const all = cmapData.maps.map((m) => m.name);
+  assert.equal(parseCompare(all.join(','), all).length, COMPARE_MAX);
+  assert.equal(COMPARE_MAX, 10);
+});

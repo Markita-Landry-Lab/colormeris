@@ -602,7 +602,7 @@ input.cmap-search { width: 260px; max-width: 100%; }
 
 .cmap-head, .cmap-row {
   display: grid;
-  grid-template-columns: 170px 2fr repeat(4, 1fr) 32px;
+  grid-template-columns: 170px 2fr repeat(4, 1fr) var(--cmap-actions, 66px);
   align-items: center;
   gap: 8px;
 }
@@ -657,6 +657,71 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cmap-toggle svg { width: 16px; height: 16px; transition: transform 0.15s; }
 .cmap-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.cmap-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.cmap-toggle.cmap-sm { width: 28px; }
+.cmap-toggle:disabled { opacity: 0.35; cursor: not-allowed; background: transparent; color: var(--muted); }
+.cmap-cmp .i-on, .cmap-cmp[aria-pressed="true"] .i-add { display: none; }
+.cmap-cmp[aria-pressed="true"] .i-on { display: inline; }
+.cmap-cmp[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.cmap-cmp[aria-pressed="true"]:hover { background: var(--accent-soft); }
+/* The shadow widens the tint sideways without moving the grid. */
+.cmap-item.compared { background: var(--accent-soft); box-shadow: -6px 0 0 var(--accent-soft), 6px 0 0 var(--accent-soft); }
+.cmap-item.compared .cmap-cmp[aria-pressed="true"] { background: var(--surface); }
+
+/* Comparison panel: strips, one overlay plot and a numbers table. */
+.cmap-compare {
+  --cmap-actions: 90px;
+  min-width: 0; scroll-margin-top: 130px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px 16px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+}
+.cmap-compare-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cmap-compare-head h2 { margin: 0 auto 0 0; font-size: 16px; }
+.cmap-compare > h3 { margin: 10px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cmap-tabs { align-self: flex-start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.cmap-tabs button {
+  padding: 5px 12px; border: 0; border-right: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.cmap-tabs button:last-child { border-right: 0; }
+.cmap-tabs button:hover { background: var(--surface-2); }
+.cmap-tabs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.cmap-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cmap-plot-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cmap-plot-scroll { overflow-x: auto; }
+/* A thin outline in a mid tone: light segments (white centers of diverging maps)
+   stay visible on the surface, and crossing lines stay apart. */
+.cmap-plot .cmap-halo { stroke: color-mix(in srgb, var(--text) 40%, var(--surface)); stroke-width: 5; stroke-linecap: round; }
+.cmap-plot .cmap-pt-halo { stroke: var(--surface); stroke-width: 0.8; }
+.cmap-plot .cmap-series { transition: opacity 0.12s; }
+.cmap-plot.has-active .cmap-series:not(.active) { opacity: 0.2; }
+.cmap-plot .cmap-label { fill: var(--text); font-size: 11px; font-family: var(--font); }
+.cmap-plot .cmap-leader { stroke: var(--muted); stroke-width: 0.8; }
+.cmap-plot .cmap-ring { fill: none; stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
+.cmap-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+.cmap-legend li { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px; }
+.cmap-legend li.active { background: var(--accent-soft); }
+.cmap-legend-name { font-family: var(--mono); font-size: 12px; }
+.cmap-mini { display: inline-block; width: 64px; height: 12px; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; vertical-align: middle; flex: none; }
+.cmap-mini svg { display: block; width: 100%; height: 100%; }
+/* position: relative so absolutely positioned screen-reader text inside is
+   clipped by this scroller instead of widening the page on phones. */
+.cmap-table-wrap { position: relative; overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+.cmap-nums { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.cmap-nums th, .cmap-nums td { text-align: left; padding: 5px 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); white-space: nowrap; vertical-align: middle; }
+.cmap-nums tbody tr:last-child > * { border-bottom: 0; }
+.cmap-nums thead th { font-size: 11px; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+.cmap-nums tbody th { position: sticky; left: 0; background: var(--surface); font-weight: 500; }
+.cmap-nums tbody th .cmap-mini { display: block; margin-top: 3px; }
+.cmap-nums td { font-family: var(--mono); font-size: 12px; }
+.cmap-nums td.best { font-weight: 700; color: var(--good-text); }
+.cmap-nums td .cmap-badges { margin: 0; flex-wrap: nowrap; font-family: var(--font); }
+.cmap-th { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.cmap-th:hover { color: var(--text); }
+.cmap-th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cmap-nums th[aria-sort="ascending"] .cmap-th::after { content: " ▲"; font-size: 9px; }
+.cmap-nums th[aria-sort="descending"] .cmap-th::after { content: " ▼"; font-size: 9px; }
 
 .cmap-panel { padding: 10px 0 8px 178px; display: flex; flex-direction: column; gap: 8px; }
 .cmap-plots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 920px; }
@@ -712,10 +777,10 @@ input.cmap-search { width: 260px; max-width: 100%; }
   .cmap-head { display: none; }
   .cmap-top { padding-bottom: 10px; }
 
-  .cmap-section { scroll-margin-top: 12px; }
+  .cmap-section, .cmap-compare { scroll-margin-top: 12px; }
   .cmap-row { grid-template-columns: 1fr 1fr; gap: 6px 10px; }
   .cmap-name { grid-column: 1; grid-row: 1; }
-  .cmap-toggle { grid-column: 2; grid-row: 1; justify-self: end; }
+  .cmap-actions { grid-column: 2; grid-row: 1; justify-self: end; }
   .cmap-cell.main { grid-column: 1 / -1; grid-row: 2; }
   .cmap-cap { display: block; }
   .cmap-panel { padding-left: 0; }
@@ -726,6 +791,9 @@ input.cmap-search { width: 260px; max-width: 100%; }
 
 @media (max-width: 700px) {
   .cmap-plots { grid-template-columns: 1fr; }
+  /* Keep the compare plot's text readable; it scrolls sideways inside its box. */
+  .cmap-plot-wide { min-width: 600px; }
+  .cmap-compare { padding: 10px 10px 14px; }
 }
 
 /* Below 820px the document scrolls (body overflow: auto), not .cmap-page, so

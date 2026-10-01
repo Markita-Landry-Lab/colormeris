@@ -149,7 +149,24 @@
     };
   }
 
+  // The maps chosen for side-by-side comparison, from the page URL
+  // (?compare=viridis,jet). Unknown names and repeats are dropped, matching
+  // ignores case, and at most `max` are kept, so a hand-edited or old link
+  // still opens a valid comparison.
+  const COMPARE_MAX = 10;
+
+  function parseCompare(param, names, max = COMPARE_MAX) {
+    const byLower = new Map(names.map((n) => [n.toLowerCase(), n]));
+    const out = [];
+    for (const part of String(param ?? '').split(',')) {
+      const name = byLower.get(part.trim().toLowerCase());
+      if (name && !out.includes(name)) out.push(name);
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
   Object.assign(CM, {
-    perceptualSteps, stepStats, resample, lchOf, lchProfile, minSeparation, separations, colormapMetrics, CMAP_RATING: RATING,
+    perceptualSteps, stepStats, resample, lchOf, lchProfile, minSeparation, separations, colormapMetrics, CMAP_RATING: RATING, COMPARE_MAX, parseCompare,
   });
 })((globalThis.Colormeris ??= {}));

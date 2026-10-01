@@ -97,6 +97,8 @@ await colormeris.run('get_results');   // → { ok, result } or { ok: false, err
 - Hover a strip to see the hex, RGB, position and lightness (L*) of that color. Click to copy the hex. With the keyboard, focus a strip and use the arrow keys (Shift moves by 10).
 - Three pills under each name rate the map as uniform, CVD-safe and grayscale-safe (yes, partly, no). Hover a pill for the numbers. "How the ratings work" at the top gives the thresholds.
 - Open a row to see plots of L*, the perceptual step size (ΔE2000), chroma and hue. Below them are the L* stats and a table of the smallest differences between values at least 10% apart, in each view. Hover a table row to mark the two positions on that strip.
+- Press the + button on a row to compare up to 10 colormaps. A panel under the top bar shows them side by side: strips, one plot of L*, ΔE2000 steps, chroma or hue with all maps on the same axes, and a sortable table of the numbers (the best value in each column is bold). You can reorder or remove maps there.
+- The comparison is stored in the page link (`colormaps.html?compare=viridis,cividis`). Use *Copy link* to share it.
 - *Reversed* flips every colormap. The search box filters by name, the *Sort* menu orders rows inside each group (for example by CVD safety), and the *Only* boxes keep maps rated yes.
 - Colormap data is generated from matplotlib by `uv run --with matplotlib python scripts/export-mpl-colormaps.py`. The CVD views use the Machado et al. (2009) model. References are listed at the bottom of the page.
 
