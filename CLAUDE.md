@@ -55,6 +55,7 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 
 - Match the surrounding code: small functions, comments that explain *why*, and the existing naming. README and docs use short, plain sentences.
 - Commit only when the user says "commit". Messages have a short title and a body explaining why, ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The branch is `main`; nothing has been pushed by Claude.
+- Scripts and the stylesheet in `app.html` carry `?v=N`. Bump N (for example `sed -i '' 's/\.js?v=1"/.js?v=2"/' app.html`) with every deploy so browsers never mix old and new files.
 - Add a unit test for pure logic (`tests/*.test.js`); browser behaviour is checked in the preview.
 
 ## Browser testing tips (Claude's built-in browser)
