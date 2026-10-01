@@ -6,7 +6,7 @@
   <title>Colormeris</title>
   <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and in vivo imaging (IVIS) signal.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/css/style.css?v=1">
+  <link rel="stylesheet" href="assets/css/style.css?v=2">
 </head>
 <body>
   <header class="topbar">
@@ -17,6 +17,7 @@
     <nav class="tool-switch" aria-label="Tools">
       <a href="app.html#heatmap">Heatmap</a>
       <a href="app.html#ivis">IVIS</a>
+      <a href="colormaps.html">Colormaps</a>
     </nav>
   </header>
   <main class="landing">
@@ -73,6 +74,29 @@
             <li>Total, mean, max and signal area; optional scale bar</li>
           </ul>
           <span class="go">Open the IVIS tool →</span>
+        </a>
+
+        <a class="tool-card" href="colormaps.html">
+          <svg viewBox="0 0 240 120" aria-hidden="true">
+            <defs>
+              <linearGradient id="cm1"><stop offset="0" stop-color="#440154"/><stop offset="0.25" stop-color="#3b528b"/><stop offset="0.5" stop-color="#21918c"/><stop offset="0.75" stop-color="#5ec962"/><stop offset="1" stop-color="#fde725"/></linearGradient>
+              <linearGradient id="cm2"><stop offset="0" stop-color="#000004"/><stop offset="0.3" stop-color="#721f81"/><stop offset="0.6" stop-color="#f1605d"/><stop offset="1" stop-color="#fcfdbf"/></linearGradient>
+              <linearGradient id="cm3"><stop offset="0" stop-color="#3b4cc0"/><stop offset="0.5" stop-color="#dddddd"/><stop offset="1" stop-color="#b40426"/></linearGradient>
+              <linearGradient id="cm4"><stop offset="0" stop-color="#30123b"/><stop offset="0.25" stop-color="#28bbec"/><stop offset="0.5" stop-color="#a2fc3c"/><stop offset="0.75" stop-color="#fb7e21"/><stop offset="1" stop-color="#7a0403"/></linearGradient>
+            </defs>
+            <rect x="24" y="16" width="192" height="16" rx="2" fill="url(#cm1)"/>
+            <rect x="24" y="40" width="192" height="16" rx="2" fill="url(#cm2)"/>
+            <rect x="24" y="64" width="192" height="16" rx="2" fill="url(#cm3)"/>
+            <rect x="24" y="88" width="192" height="16" rx="2" fill="url(#cm4)"/>
+          </svg>
+          <h2>Colormaps</h2>
+          <p>Browse matplotlib colormaps and how they look to everyone.</p>
+          <ul>
+            <li>Color-vision-deficiency views and grayscale</li>
+            <li>Lightness (L*) profile of each colormap</li>
+            <li>Hover any strip for its hex and RGB values</li>
+          </ul>
+          <span class="go">Open the colormap viewer →</span>
         </a>
       </div>
 

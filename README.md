@@ -90,6 +90,15 @@ await colormeris.run('get_results');   // → { ok, result } or { ok: false, err
 
 **[docs/agent.md](docs/agent.md)** is the full reference: every action and argument, typed questions and reviews, the heatmap agent's tools, limits and system prompt. It is generated from the code with `node scripts/agent-docs.mjs`, and a test fails when it is out of date.
 
+## Colormaps
+
+`colormaps.html` is a viewer for the 87 matplotlib colormaps. Each one is drawn as vector strips: as seen, as simulated for protanopia, deuteranopia and tritanopia, and in grayscale.
+
+- Hover a strip to see the hex, RGB, position and lightness (L*) of that color. Click to copy the hex. With the keyboard, focus a strip and use the arrow keys (Shift moves by 10).
+- Open a row to see its L* profile, with its monotonicity, linearity (R²) and range.
+- *Reversed* flips every colormap. The search box filters by name.
+- Colormap data is generated from matplotlib by `uv run --with matplotlib python scripts/export-mpl-colormaps.py`. The CVD views use the Machado et al. (2009) model. References are listed at the bottom of the page.
+
 ## How heatmap values are computed
 
 - **Cell color**: each channel's median over the central part of the cell. The *Sampled area* setting controls how much, 50% by default. Using the center avoids grid lines, anti-aliased edges and JPEG noise.

@@ -129,5 +129,5 @@
     return '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   }
 
-  Object.assign(CM, { rgbToLab, labToRgb, deltaE76, deltaE2000, colorDistance, rgbToHex });
+  Object.assign(CM, { srgbToLinear, linearToSrgb, rgbToLab, labToRgb, deltaE76, deltaE2000, colorDistance, rgbToHex });
 })((globalThis.Colormeris ??= {}));
