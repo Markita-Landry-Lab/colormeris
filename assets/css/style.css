@@ -850,7 +850,8 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-plot .cmap-series { transition: opacity 0.12s; }
 .cmap-plot.has-active .cmap-series:not(.active) { opacity: 0.2; }
 .cmap-plot .cmap-ring { fill: none; stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
-.cmap-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+/* Centered under the plots, which stop at 1180 px. */
+.cmap-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; max-width: 1180px; font-size: 12px; }
 .cmap-legend li { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px; }
 .cmap-legend li.active { background: var(--accent-soft); }
 .cmap-legend-name { font-family: var(--mono); font-size: 12px; }
@@ -877,7 +878,8 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-panel { padding: 10px 0 12px; }
 .cmap-plots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; max-width: 1180px; }
 /* Subgrid keeps the plots level when one title wraps to two lines. */
-.cmap-fig { min-width: 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
+.cmap-fig { min-width: 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; grid-template-columns: minmax(0, 1fr); row-gap: 3px; }
+/* The fixed column keeps a one-line title from widening its own plot. */
 /* One line, centered over the x axis; a long title spills evenly into the
    margins and gap (flex centering overflows on both sides). */
 .cmap-fig-title { font-size: 12px; font-weight: 600; display: flex; justify-content: center; gap: 0.25em; white-space: nowrap; }
@@ -944,7 +946,7 @@ input.cmap-search { width: 260px; max-width: 100%; }
 :root { --cmap-drawer-w: clamp(420px, 34vw, 560px); }
 .cmap-drawer-open .cmap-page { margin-right: var(--cmap-drawer-w); }
 .cmap-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.cmap-panel .cmap-detail { max-width: 760px; }
+.cmap-panel .cmap-detail { max-width: 760px; margin-inline: auto; }
 .cmap-detail-head { display: flex; align-items: center; gap: 8px; }
 .cmap-detail-head h2 { margin-right: auto; font-size: 18px; text-transform: none; letter-spacing: 0; }
 .cmap-detail-head h2 code { font-size: 18px; }
