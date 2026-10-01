@@ -353,8 +353,9 @@
       entry.panel.replaceChildren(buildPlot(entry.map), statsList(entry.map));
     }
 
-    function toggle(entry) {
-      entry.open = !entry.open;
+    function toggle(entry, open = !entry.open) {
+      if (open === entry.open) return;
+      entry.open = open;
       entry.button.setAttribute('aria-expanded', String(entry.open));
       entry.panel.hidden = !entry.open;
       if (entry.open) fillPanel(entry);
@@ -408,7 +409,7 @@
       item.append(row, panel);
       item.dataset.name = map.name.toLowerCase();
       const entry = { map, item, strips, panel, button, open: false };
-      button.addEventListener('click', () => toggle(entry));
+      button.addEventListener('click', () => { toggle(entry); syncAll(); });
       items.push(entry);
       return item;
     }
@@ -424,13 +425,21 @@
     function buildControls() {
       const bar = el('div', { class: 'cmap-controls' });
       const search = el('input', { type: 'search', placeholder: 'Search colormaps…', 'aria-label': 'Search colormaps', class: 'cmap-search' });
-      const revLabel = el('label', { class: 'cmap-rev' });
+      const revLabel = el('label', { class: 'check' });
       const rev = el('input', { type: 'checkbox' });
-      revLabel.append(rev, ' Reversed');
+      revLabel.append(rev, 'Reversed');
+      // One button for all L* plots: it expands the visible rows unless they are all open.
+      const all = el('button', { type: 'button', class: 'btn small' }, 'Expand all');
       const jump = el('nav', { class: 'cmap-jump', 'aria-label': 'Sections' });
       for (const [g, title] of SECTIONS) jump.append(el('a', { href: `#cmap-sec-${g}` }, title));
-      bar.append(search, revLabel, jump);
-      search.addEventListener('input', applyFilter);
+      bar.append(search, revLabel, all, jump);
+      search.addEventListener('input', () => { applyFilter(); syncAll(); });
+      all.addEventListener('click', () => {
+        const visible = items.filter((e) => !e.item.hidden);
+        const open = !visible.every((e) => e.open);
+        for (const e of visible) toggle(e, open);
+        syncAll();
+      });
       rev.addEventListener('change', () => {
         reversed = rev.checked;
         for (const entry of items) {
@@ -439,7 +448,12 @@
         }
         hideTip();
       });
-      return { bar, search };
+      return { bar, search, all };
+    }
+
+    function syncAll() {
+      const visible = items.filter((e) => !e.item.hidden);
+      ui.all.textContent = visible.length && visible.every((e) => e.open) ? 'Collapse all' : 'Expand all';
     }
 
     function applyFilter() {
@@ -487,13 +501,17 @@
     inner.append(el('h1', {}, 'Colormaps'));
     inner.append(el('p', { class: 'cmap-intro' }, 'Each colormap is shown as seen, as simulated for three kinds of color-vision deficiency, and in grayscale. Hover a strip for its hex and RGB values, click to copy the hex, or open a row to see its lightness (L*) profile. A colormap that is not monotonic in L* makes the figure harder to read, in grayscale and in color.'));
     const ui = buildControls();
-    inner.append(ui.bar);
+    // Controls and column names share one sticky bar, so they stay readable
+    // while scrolling instead of one floating header per section.
+    const top = el('div', { class: 'cmap-top' });
+    top.append(ui.bar, headerRow());
+    inner.append(top);
 
     for (const [group, title] of SECTIONS) {
       const maps = data.maps.filter((m) => m.group === group);
       if (!maps.length) continue;
       const sec = el('section', { class: 'cmap-section', id: `cmap-sec-${group}` });
-      sec.append(el('h2', {}, title), headerRow());
+      sec.append(el('h2', {}, title));
       const subs = [];
       for (const m of maps) if (!subs.includes(m.sub)) subs.push(m.sub);
       for (const sub of subs) {
