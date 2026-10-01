@@ -115,11 +115,14 @@
         hideTip();
       });
 
+      // Same tooltips as the plots of one map, so the plot row stays short.
       const caps = {
-        step: 'A flat line means equal steps in the data look like equal steps in color.',
-        h: `Colors with C* < ${HUE_MIN_CHROMA} (grays) are left out, since their hue is not defined.`,
+        L: 'A straight rising or falling line reads best, in color and in grayscale.',
+        step: 'ΔE2000 between neighboring colors. A flat line means equal steps in the data look like equal steps in color.',
+        C: 'Colorfulness: 0 is gray.',
+        h: `Hue wraps around at 360°, so it is drawn as dots. Colors with C* < ${HUE_MIN_CHROMA} (grays) are left out, since their hue is not defined.`,
       };
-      return { fig: figure(metric.label, svg, caps[key]), svg, groups };
+      return { fig: figure(metric.label, svg, caps[key], { compact: true }), svg, groups };
     }
 
     // The four quantities side by side, with one legend for all of them.

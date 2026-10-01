@@ -472,6 +472,10 @@
         head.title = caption;
         head.append(el('span', { class: 'cmap-fig-info', 'aria-hidden': 'true' }, ' ⓘ'));
         svg.setAttribute('aria-description', caption);
+        // The same tooltip when hovering the plot itself, not only its title.
+        const tip = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        tip.textContent = caption;
+        svg.prepend(tip);
       } else if (caption) {
         fig.append(el('div', { class: 'cmap-fig-cap muted' }, caption));
       }
