@@ -21,6 +21,7 @@
     const drawer = el('aside', { class: 'cmap-drawer', id: 'cmap-drawer', hidden: '', 'aria-label': 'Colormap details' });
     const folds = new Set(); // folds the user opened; kept when another map is opened
     let current = null; // { entry, box, strips, cmpBtn }
+    let mode = null; // where the open detail is shown: 'drawer', 'inline' or null
 
     // ---- plots ----
 
@@ -300,13 +301,30 @@
       return { box, strips, cmpBtn, title };
     }
 
+    // The part of the detail at the top of the drawer's visible area, with its
+    // offset from there, so the same part can be shown after a move.
+    function drawerAnchor() {
+      if (drawer.hidden || !current) return null;
+      const y = drawer.getBoundingClientRect().top + (parseFloat(getComputedStyle(drawer).paddingTop) || 0);
+      for (const el of current.box.children) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom > y) return { el, offset: r.top - y, height: r.height };
+      }
+      return null;
+    }
+
     // Drawer on wide screens (only on the Browse tab), under the row otherwise.
+    // Returns { to: 'drawer' | 'inline', el, offset } when the open detail
+    // moved (el, offset: what was at the top of the drawer), else null.
     function place() {
       const inDrawer = !!current && wide.matches;
+      const from = mode;
+      const top = from === 'drawer' && !inDrawer ? drawerAnchor() : null;
       drawer.hidden = !(inDrawer && state.tab === 'browse');
       document.body.classList.toggle('cmap-drawer-open', !drawer.hidden);
-      if (!current) { drawer.replaceChildren(); return; }
+      if (!current) { mode = null; drawer.replaceChildren(); return null; }
       const { entry, box } = current;
+      mode = inDrawer ? 'drawer' : 'inline';
       if (inDrawer) {
         entry.panel.hidden = true;
         if (box.parentNode !== drawer) drawer.replaceChildren(box);
@@ -319,6 +337,7 @@
         entry.panel.hidden = false;
         entry.button.setAttribute('aria-controls', entry.panel.id);
       }
+      return from && from !== mode ? { to: mode, ...top } : null;
     }
 
     function teardown() {
@@ -328,6 +347,7 @@
       entry.panel.hidden = true;
       box.remove();
       current = null;
+      mode = null;
       hideTip();
     }
 
@@ -365,13 +385,22 @@
       syncCompare() {
         if (current) cmpLabel(current.cmpBtn, current.entry.map.name);
       },
+      // The open map's row in the list, or null.
+      openItem: () => current?.entry.item ?? null,
+      // Scroll the drawer so `el` (part of the detail) sits `offset` below its
+      // top; a negative offset scales with el's change in height, as in the list.
+      revealInDrawer(el, offset = 0, height = 0) {
+        if (drawer.hidden || !drawer.contains(el)) return;
+        const y = drawer.getBoundingClientRect().top + (parseFloat(getComputedStyle(drawer).paddingTop) || 0);
+        const r = el.getBoundingClientRect();
+        if (offset < 0 && height > 0) offset *= r.height / height;
+        drawer.scrollTop += r.top - y - offset;
+      },
       place,
     };
 
-    wide.addEventListener('change', place);
-    // Also on resize: the media query alone can miss a change (some emulated
-    // viewports), and the drawer's top follows the top bar's height.
-    window.addEventListener('resize', () => { if (current) place(); });
+    // place() runs on every resize from the viewer, which also keeps the
+    // reader's place in the page (the media query alone can miss a change).
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || !current || e.defaultPrevented) return;
       if (e.target.closest?.('input, select, textarea') || document.querySelector(':popover-open')) return;
