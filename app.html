@@ -345,7 +345,7 @@
       <section class="settings-pane" data-settings-pane="agent">
         <h3>Agent</h3>
         <p class="muted small">Used by the <i>Agent</i> card of the heatmap tool. Settings are saved in this browser as you change them.</p>
-        <label class="field">OpenRouter API key
+        <label class="field">OpenRouter API key (required)
           <input id="agent-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-…">
         </label>
         <label class="check small"><input id="agent-remember" type="checkbox"> Remember the key in this browser</label>
@@ -353,7 +353,7 @@
           <label class="field" title="Reviewer answers below this confidence are left for you under Needs review">Min. confidence <input id="agent-minconf" type="number" min="0" max="1" step="0.01" class="num"></label>
           <label class="field" title="The run stops after this many LLM calls">Max. steps <input id="agent-steps" type="number" min="5" max="400" class="num"></label>
         </div>
-        <label class="field">API base URL <input id="agent-base" type="url" spellcheck="false" placeholder="https://openrouter.ai/api/v1"></label>
+        <label class="field">API base URL (optional) <input id="agent-base" type="url" spellcheck="false" placeholder="https://openrouter.ai/api/v1"></label>
         <p class="muted small">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Without <i>Remember</i>, the key is forgotten when you close the page. The base URL is for OpenRouter-compatible proxies (such as <code>npm run proxy</code> at <code>http://localhost:8787/api/v1</code>, which adds the key itself); leave it empty otherwise.</p>
       </section>
 
