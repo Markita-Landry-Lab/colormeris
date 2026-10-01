@@ -850,7 +850,7 @@
     const strong = document.createElement('code');
     strong.textContent = name;
     const link = document.createElement('a');
-    link.href = `colormaps.html?compare=${encodeURIComponent(m.name)}`;
+    link.href = `colormaps.html?map=${encodeURIComponent(m.name)}#browse`;
     link.target = '_blank';
     link.rel = 'noopener';
     link.textContent = 'View';

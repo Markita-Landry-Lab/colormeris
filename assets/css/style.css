@@ -579,11 +579,6 @@ kbd {
 input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-sort, .cmap-filters { display: inline-flex; align-items: center; gap: 6px 10px; font-size: 13px; flex-wrap: wrap; }
 .cmap-sort select { width: auto; padding: 4px 8px; }
-.cmap-method { max-width: 80ch; font-size: 13px; }
-.cmap-method summary { cursor: pointer; font-weight: 600; color: var(--accent); }
-.cmap-method ul { margin: 6px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
-.cmap-method p { margin: 6px 0; }
-.cmap-method a { color: var(--accent); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .cmap-top {
   position: sticky; top: 0; z-index: 5;
@@ -592,25 +587,87 @@ input.cmap-search { width: 260px; max-width: 100%; }
   border-bottom: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 10px;
 }
-.cmap-jump { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-left: auto; }
-.cmap-jump a { color: var(--accent); text-decoration: none; font-weight: 550; }
-.cmap-jump a:hover { text-decoration: underline; }
+
+/* Tabs: Browse, Compare, Identify. */
+.cmap-viewtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 0 -16px; padding: 0 16px; }
+.cmap-viewtabs a {
+  padding: 6px 14px 8px; margin-bottom: -1px;
+  color: var(--muted); text-decoration: none; font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+.cmap-viewtabs a:hover { color: var(--text); }
+.cmap-viewtabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+.cmap-viewtabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.cmap-viewsel { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.cmap-controls .btn.active { border-color: var(--accent); }
+
+/* Popovers (filters, more, how the ratings work), placed under their button by script. */
+.cmap-pop {
+  position: fixed; inset: auto; margin: 0;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 10px 12px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.cmap-pop:popover-open { display: flex; flex-direction: column; gap: 8px; }
+.cmap-pop-wide { max-width: min(460px, calc(100vw - 16px)); max-height: 70vh; overflow-y: auto; }
+.cmap-pop-title { font-weight: 650; }
+.cmap-pop-row { display: flex; gap: 6px; }
+.cmap-pop p, .cmap-pop ul { margin: 0; }
+.cmap-pop ul { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.cmap-pop a { color: var(--accent); }
+
+/* Sections fold; Rainbow and Others start folded. */
 .cmap-section { padding-top: 10px; }
-.cmap-section > h2 { font-size: 16px; margin-bottom: 6px; }
-/* Section links target the section; keep its heading clear of the sticky bar. */
-.cmap-section { scroll-margin-top: 130px; }
+.cmap-section > summary { display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none; padding: 2px 0 6px; }
+.cmap-section > summary::-webkit-details-marker { display: none; }
+.cmap-section > summary::before { content: "▸"; color: var(--muted); font-size: 15px; width: 12px; transition: transform 0.15s; }
+.cmap-section[open] > summary::before { transform: rotate(90deg); }
+.cmap-section > summary h2 { font-size: 16px; }
+.cmap-section > summary:hover h2 { color: var(--accent); }
+.cmap-count { color: var(--muted); font-size: 12px; }
 .cmap-sub > h3 { margin: 14px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 
+/* Name, five strips (or one), four rating glyphs, actions. */
 .cmap-head, .cmap-row {
   display: grid;
-  grid-template-columns: 240px 2fr repeat(4, 1fr) var(--cmap-actions, 66px);
+  grid-template-columns: minmax(96px, 170px) 2fr repeat(4, 1fr) repeat(4, 30px) var(--cmap-actions, 66px);
   align-items: center;
   gap: 8px;
+}
+.cmap-single .cmap-head, .cmap-single .cmap-row {
+  grid-template-columns: minmax(96px, 170px) 1fr repeat(4, 30px) var(--cmap-actions, 66px);
 }
 .cmap-head {
   padding: 0 0 6px;
   font-size: 11px; font-weight: 600; color: var(--muted);
 }
+.cmap-head .cmap-th { font-weight: 600; justify-self: start; }
+.cmap-head-rc .cmap-th { width: 100%; }
+.cmap-head .cmap-th[data-dir="first"]::after { content: " ▼"; font-size: 9px; }
+.cmap-head .cmap-th[data-dir="last"]::after { content: " ▲"; font-size: 9px; }
+.cmap-head .cmap-th[aria-pressed="true"] { color: var(--accent); }
+.cmap-head-rc { text-align: center; }
+.cmap-head-end { display: flex; justify-content: flex-end; }
+.cmap-help {
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.cmap-help:hover, .cmap-help[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+.cmap-rc { text-align: center; font-size: 12px; font-weight: 700; line-height: 20px; border-radius: 4px; cursor: help; }
+.cmap-rc.yes { color: var(--good-text); background: var(--good-bg); }
+.cmap-rc.partly { color: var(--warn-text); background: var(--warn-bg); }
+.cmap-rc.no, .cmap-rc.na { color: var(--muted); font-weight: 500; }
+/* Pills under the name are for phones; wide screens have the rating columns. */
+@media (min-width: 901px) {
+  .cmap-row .cmap-name .cmap-badges { display: none; }
+}
+.cmap-name-link { cursor: pointer; }
+.cmap-name-link:hover { color: var(--accent); text-decoration: underline; }
+.cmap-item.open { background: var(--surface-2); box-shadow: -6px 0 0 var(--surface-2), 6px 0 0 var(--surface-2); }
+.cmap-item.open .cmap-open-btn { color: var(--accent); }
 .cmap-item { padding: 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
 .cmap-name { font-size: 12.5px; min-width: 0; overflow-wrap: anywhere; }
 .cmap-name code { font-family: var(--mono); font-size: 12.5px; }
@@ -672,14 +729,21 @@ input.cmap-search { width: 260px; max-width: 100%; }
 /* Comparison panel: strips, one overlay plot and a numbers table. */
 .cmap-compare {
   --cmap-actions: 90px;
-  min-width: 0; scroll-margin-top: 130px;
+  min-width: 0;
   display: flex; flex-direction: column; gap: 10px;
   padding: 12px 14px 16px;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
 }
 .cmap-compare-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cmap-compare-head h2 { margin: 0 auto 0 0; font-size: 16px; }
-.cmap-compare > h3 { margin: 10px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cmap-compare-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cmap-compare-body h3 { margin: 10px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cmap-compare > p { margin: 0; }
+.cmap-compare a { color: var(--accent); }
+.cmap-nums-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.cmap-nums-head h3 { margin: 0 !important; }
+.cmap-nums .cmap-groups th { text-align: center; font-size: 10.5px; letter-spacing: 0.03em; text-transform: uppercase; border-left: 1px solid var(--border); }
+.cmap-nums .cmap-groups th:first-child { border-left: 0; }
 .cmap-tabs { align-self: flex-start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .cmap-tabs button {
   padding: 5px 12px; border: 0; border-right: 1px solid var(--border); background: var(--surface);
@@ -721,7 +785,7 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-nums th[aria-sort="ascending"] .cmap-th::after { content: " ▲"; font-size: 9px; }
 .cmap-nums th[aria-sort="descending"] .cmap-th::after { content: " ▼"; font-size: 9px; }
 
-.cmap-panel { padding: 10px 0 8px 178px; display: flex; flex-direction: column; gap: 8px; }
+.cmap-panel { padding: 10px 0 12px; }
 .cmap-plots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; max-width: 1180px; }
 /* Subgrid keeps the plots level when one title wraps to two lines. */
 .cmap-fig { min-width: 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
@@ -766,25 +830,89 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-tip-hex { font-weight: 600; }
 .cmap-tip-copied { margin-top: 4px; color: var(--accent); font-weight: 600; }
 
-.cmap-refs { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
-.cmap-refs h3 { margin: 14px 0 4px; font-size: 13px; }
-.cmap-refs ol { margin: 8px 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.cmap-refs li:target { background: var(--accent-soft); }
-.cmap-refs a { color: var(--accent); }
+/* Footer: how the ratings work, methods and references. */
+.cmap-about { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; max-width: 90ch; }
+.cmap-about > summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.cmap-about h3 { margin: 14px 0 4px; font-size: 13px; }
+.cmap-about p { margin: 6px 0; }
+.cmap-about ul { margin: 6px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.cmap-about ol { margin: 8px 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; }
+.cmap-about li:target { background: var(--accent-soft); }
+.cmap-about a { color: var(--accent); }
+
+/* Detail view: in a drawer on wide screens, under the row otherwise. */
+.cmap-drawer {
+  position: fixed; z-index: 6; right: 0; bottom: 0; top: var(--cmap-drawer-top, 52px);
+  width: var(--cmap-drawer-w);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 16px 32px;
+  background: var(--bg); border-left: 1px solid var(--border);
+  box-shadow: -4px 0 16px rgba(20, 24, 32, 0.06);
+}
+:root { --cmap-drawer-w: clamp(420px, 34vw, 560px); }
+.cmap-drawer-open .cmap-page { margin-right: var(--cmap-drawer-w); }
+.cmap-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cmap-panel .cmap-detail { max-width: 760px; }
+.cmap-detail-head { display: flex; align-items: center; gap: 8px; }
+.cmap-detail-head h2 { margin-right: auto; font-size: 18px; text-transform: none; letter-spacing: 0; }
+.cmap-detail-head h2 code { font-size: 18px; }
+.cmap-detail-head h2:focus { outline: none; }
+.cmap-detail-strips { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 10px; font-size: 11.5px; }
+.cmap-cap-side { color: var(--muted); }
+.cmap-detail-strips .cmap-strip { height: 18px; }
+.cmap-notes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 10px; align-items: baseline; font-size: 13px; }
+.cmap-notes li { display: contents; }
+.cmap-notes li.muted { display: block; grid-column: 1 / -1; }
+.cmap-notes .cmap-pill { justify-self: start; font-size: 11px; line-height: 17px; padding: 0 6px; cursor: default; }
+/* One figure alone: no subgrid parent to line up with. */
+.cmap-detail-lead { max-width: 340px; display: grid; }
+.cmap-plots-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cmap-panel .cmap-plots-2 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cmap-fold { border-top: 1px solid var(--border); padding-top: 8px; }
+.cmap-fold > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.cmap-fold > summary:hover { color: var(--accent); }
+.cmap-fold[open] > summary { margin-bottom: 8px; }
+.cmap-fold > * + * { margin-top: 8px; }
+.cmap-detail .cmap-table-wrap { border: 0; }
+.cmap-detail .cmap-sep { max-width: none; }
+.cmap-detail .cmap-sep th, .cmap-detail .cmap-sep td { white-space: nowrap; }
+.cmap-detail .cmap-sep caption { white-space: normal; }
+.cmap-detail-refs { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.cmap-detail-refs a { color: var(--accent); }
+
+/* Comparison tray at the bottom of the Browse tab. */
+.cmap-tray {
+  position: fixed; z-index: 7; left: 50%; bottom: 14px; transform: translateX(-50%);
+  width: max-content; max-width: calc(100vw - 24px);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(20, 24, 32, 0.16);
+  font-size: 13px;
+}
+.cmap-drawer-open .cmap-tray { left: calc((100vw - var(--cmap-drawer-w)) / 2); }
+.cmap-tray-label { font-weight: 600; }
+.cmap-tray-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.cmap-chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 2px 1px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); }
+.cmap-chip .cmap-mini { width: 28px; height: 10px; }
+.cmap-chip code { font-size: 12px; }
+.cmap-chip-x { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.cmap-chip-x:hover { background: var(--border); color: var(--text); }
+.cmap-tray a.btn { text-decoration: none; }
+.cmap-tray-on .cmap-inner { padding-bottom: 72px; }
 
 @media (max-width: 900px) {
   .cmap-head { display: none; }
   .cmap-top { padding-bottom: 10px; }
 
-  .cmap-section, .cmap-compare { scroll-margin-top: 12px; }
-  .cmap-row { grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .cmap-row, .cmap-single .cmap-row { grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .cmap-rc { display: none; }
+  .cmap-single .cmap-cell { grid-column: 1 / -1; }
   .cmap-name { grid-column: 1; grid-row: 1; }
   .cmap-actions { grid-column: 2; grid-row: 1; justify-self: end; }
   .cmap-cell.main { grid-column: 1 / -1; grid-row: 2; }
   .cmap-cap { display: block; }
-  .cmap-panel { padding-left: 0; }
   .cmap-badges { margin-top: 2px; }
-  .cmap-jump { margin-left: 0; }
   .cmap-item { padding: 8px 0; }
 }
 
@@ -814,8 +942,9 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-track.ambiguous span { background: var(--danger); }
 
 /* Identify a colormap from a figure. */
-.cmap-identify { max-width: 920px; }
+.cmap-identify { max-width: 920px; font-size: 13px; }
 .cmap-identify > * { margin-top: 8px; }
+.cmap-identify > h2 { margin-top: 4px; font-size: 16px; }
 .cmap-drop { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .cmap-drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .cmap-id-bar { display: flex; flex-wrap: wrap; gap: 6px; }

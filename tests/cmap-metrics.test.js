@@ -81,6 +81,30 @@ test('parseCompare keeps known names once, in order, up to the cap', () => {
   assert.equal(COMPARE_MAX, 10);
 });
 
+test('parseViewerRoute: tab from the hash, map and comparison from the query', () => {
+  const { parseViewerRoute } = CM;
+  const names = ['viridis', 'jet', 'RdBu'];
+  assert.deepEqual(parseViewerRoute('', '', names), { tab: 'browse', map: null, compare: [] });
+  assert.deepEqual(parseViewerRoute('?map=JET', '#browse', names), { tab: 'browse', map: 'jet', compare: [] });
+  assert.equal(parseViewerRoute('?map=nope', '', names).map, null);
+  // Old shared links have only ?compare=, so they open the comparison.
+  assert.deepEqual(parseViewerRoute('?compare=jet,viridis', '', names), { tab: 'compare', map: null, compare: ['jet', 'viridis'] });
+  assert.equal(parseViewerRoute('?compare=jet&map=rdbu', '', names).tab, 'browse');
+  assert.equal(parseViewerRoute('?compare=jet', '#Identify', names).tab, 'identify');
+  // Reference links leave the tab alone.
+  assert.equal(parseViewerRoute('', '#ref-viridis', names).tab, null);
+});
+
+test('ratingNotes: one sentence per rating that applies', () => {
+  const { ratingNotes, ratingMethod } = CM;
+  const v = ratingNotes(metricsOf('viridis'));
+  assert.deepEqual(v.map((n) => [n.key, n.rating]), [['uniform', 'yes'], ['cvdSafe', 'yes'], ['graySafe', 'yes'], ['readable', 'yes']]);
+  for (const n of v) assert.ok(n.text.length > 10 && n.label);
+  // Qualitative maps have no uniform or readable rating.
+  assert.deepEqual(ratingNotes(metricsOf('tab10'), { qual: true }).map((n) => n.key), ['cvdSafe', 'graySafe']);
+  assert.deepEqual(Object.keys(ratingMethod()), ['uniform', 'cvdSafe', 'graySafe', 'readable']);
+});
+
 test('readability: flat zones, ambiguity and levels', () => {
   const ramp = (n, f) => Array.from({ length: n }, (_, i) => f(i / (n - 1)));
   const grayRamp = ramp(256, (t) => [255 * t, 255 * t, 255 * t].map(Math.round));

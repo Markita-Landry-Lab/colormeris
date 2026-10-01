@@ -252,7 +252,67 @@
     return out;
   }
 
+  const pct = (v) => `${Math.round(v * 100)}%`;
+
+  // The CVD view that keeps the least separation.
+  function worstCvd(m) {
+    return CVD_TYPES.reduce((a, b) => (m.separations[b].min < m.separations[a].min ? b : a), CVD_TYPES[0]);
+  }
+
+  // One sentence per rating, shared by the pill tooltips, the rating columns
+  // and the detail summary, so the numbers read the same everywhere.
+  // Ratings that do not apply (null) are left out.
+  function ratingNotes(m, { qual = false } = {}) {
+    const out = [];
+    if (!qual && m.rating.uniform) {
+      out.push({ key: 'uniform', label: 'Uniform', rating: m.rating.uniform,
+        text: `ΔE2000 steps vary by ${Math.round(m.stepStats.cv * 100)}% (CV ${m.stepStats.cv.toFixed(2)}).` });
+    }
+    out.push({ key: 'cvdSafe', label: 'CVD-safe', rating: m.rating.cvdSafe,
+      text: `The worst view (${worstCvd(m)}) keeps ${pct(m.cvdRatio)} of the separation (min ΔE ${m.cvdWorst.toFixed(1)}).` });
+    const g = m.separations.gray;
+    out.push({ key: 'graySafe', label: 'Grayscale-safe', rating: m.rating.graySafe,
+      text: `${qual ? 'Two colors differ' : 'Two values 10% apart differ'} by only ${g.min.toFixed(1)} L*.` });
+    if (m.readability && m.rating.readable) {
+      const { orig } = m.readability;
+      out.push({ key: 'readable', label: 'Readable', rating: m.rating.readable,
+        text: `${pct(orig.flat)} of the map is flat, ${pct(orig.ambiguous)} has a look-alike color elsewhere, ${orig.levels} distinguishable levels.` });
+    }
+    return out;
+  }
+
+  // How each rating is made, with the thresholds. Shown in the "?" popovers
+  // and in the footer of the viewer.
+  function ratingMethod() {
+    const R = RATING;
+    const RD = R.readable;
+    return {
+      uniform: `We measure the color difference (ΔE2000) between neighbors among ${SAMPLES} evenly spaced colors. The rating uses how much these steps vary, as the coefficient of variation (CV = standard deviation / mean): yes at CV ≤ ${R.uniform.yes}, partly up to ${R.uniform.partly}. A uniform map shows equal steps in the data as equal steps in color. Qualitative maps are not rated.`,
+      cvdSafe: `For the map and for each CVD view we find the smallest ΔE2000 between two values at least 10% of the map apart (cyclic maps count around the circle, qualitative maps compare all pairs). The worst CVD view must keep at least ${pct(R.cvd.yes.ratio)} of the map’s own smallest difference and at least ${R.cvd.yes.min} ΔE for yes, or ${pct(R.cvd.partly.ratio)} and ${R.cvd.partly.min} ΔE for partly.`,
+      graySafe: `The same search on L* alone: values 10% apart differ by at least ${R.gray.yes} L* for yes, or ${R.gray.partly} L* for partly.`,
+      readable: `Can you read a value back from a color, as Colormeris does? A color in a figure is off by a few ΔE (compression, print, blending), so differences under ${READ_DE} ΔE2000 are not relied on. Flat is the share of the map where values ${pct(FLAT_WINDOW)} of the range apart differ by less than that. Ambiguous is the share whose color has a look-alike (under ${READ_DE} ΔE) at a value at least 10% away. Yes needs at most ${pct(RD.flat.yes)} flat and ${pct(RD.ambiguous.yes)} ambiguous; partly at most ${pct(RD.flat.partly)} and ${pct(RD.ambiguous.partly)}. This is not the same as Uniform: jet is readable, since its colors are all different, but not uniform. Qualitative maps are not rated.`,
+    };
+  }
+
+  // What the viewer opens on, from its URL: the tab (#browse, #compare,
+  // #identify), the map whose details are open (?map=) and the compared maps
+  // (?compare=). Other hashes (#ref-…) leave the tab alone (tab: null). Old
+  // shared links have only ?compare=, so they open on the comparison.
+  const VIEWER_TABS = ['browse', 'compare', 'identify'];
+
+  function parseViewerRoute(search, hash, names) {
+    const params = new URLSearchParams(search || '');
+    const compare = parseCompare(params.get('compare'), names);
+    const want = String(params.get('map') ?? '').trim().toLowerCase();
+    const map = want ? names.find((n) => n.toLowerCase() === want) ?? null : null;
+    const h = String(hash || '').replace(/^#/, '').toLowerCase();
+    let tab = VIEWER_TABS.includes(h) ? h : null;
+    if (!h) tab = compare.length && !map ? 'compare' : 'browse';
+    return { tab, map, compare };
+  }
+
   Object.assign(CM, {
     perceptualSteps, stepStats, resample, lchOf, lchProfile, minSeparation, separations, readability, READ_DE, READ_WINDOW: FLAT_WINDOW, colormapMetrics, CMAP_RATING: RATING, COMPARE_MAX, parseCompare,
+    worstCvd, ratingNotes, ratingMethod, VIEWER_TABS, parseViewerRoute,
   });
 })((globalThis.Colormeris ??= {}));
