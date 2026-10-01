@@ -4,7 +4,7 @@
   // The Recolor tab of the colormap viewer (colormaps.html): load a figure,
   // drag along its colorbar, pick another colormap, and the figure is redrawn
   // in it (cmap-recolor.js). Pixels far from the bar's colors (background,
-  // text, axes) keep theirs. Hovering a color in the figure or on the strips
+  // text, axes) keep theirs. Hovering a color in the figure, its recolored copy or the strips
   // flashes every pixel with a similar value to its complementary color. The image never leaves the browser.
 
   const GROUPS = [
@@ -48,17 +48,9 @@
     const bandOut = el('output', {}, pct(BAND));
     const bandField = field('Similar within', 'On hover, pixels whose place on the colorbar is this close to the hovered one flash', band, bandOut);
 
-    const views = el('div', { class: 'cmap-tabs', role: 'group', 'aria-label': 'Image to show' });
-    const viewBtns = ['original', 'recolored'].map((v) => {
-      const b = el('button', { type: 'button', 'aria-pressed': 'false' }, v === 'original' ? 'Original' : 'Recolored');
-      b.dataset.view = v;
-      b.addEventListener('click', () => setView(v));
-      views.append(b);
-      return b;
-    });
     const download = el('button', { type: 'button', class: 'btn small primary' }, 'Download PNG');
     const actions = el('div', { class: 'cmap-id-bar cmap-rc-actions' });
-    actions.append(views, download);
+    actions.append(download);
     const fieldsRow = el('div', { class: 'cmap-rc-fields' });
     fieldsRow.append(mapField, tolField, bandField);
     controls.append(fieldsRow, actions);
@@ -71,20 +63,21 @@
       el('span', { class: 'muted' }, 'New colors'), newStrip);
     const readout = el('p', { class: 'cmap-rc-readout muted', 'aria-live': 'polite' });
 
-    // ---- the figure, with the highlight on top ----
-    const stack = el('div', { class: 'cmap-rc-stack' });
+    // ---- the figure and its recolored copy side by side, each with the highlight on top ----
     const overlay = el('canvas', { class: 'cmap-rc-overlay', 'aria-hidden': 'true' });
+    const overlay2 = el('canvas', { class: 'cmap-rc-overlay', 'aria-hidden': 'true' });
 
     let samples = null; // the calibrated bar
     let flip = false; // the line was drawn from the old map's high end
     let index = null; // per-pixel t and ΔE
-    let out = null; // offscreen canvas with the recolored image
+    const out = el('canvas', { class: 'cmap-id-canvas cmap-rc-canvas', role: 'img', 'aria-label': 'Your figure, recolored. Hover a color to see where it is.' }); // the recolored image
     let outData = null; // its RGBA bytes, for the highlight's colors
-    let view = 'recolored';
+    let outImage = null; // the same as ImageData, to put back after a peek
+    let peek = null; // { canvas pressed, x, y }: it shows the other version while held
     let job = 0; // the indexing run in progress; a new one cancels it
     let hoverT = null;
     let mask = null;
-    let overlayData = null;
+    let overlayData = null; // one buffer per overlay
     let pending = null; // the latest hover, drawn at the next frame
     let frame = 0;
 
@@ -95,16 +88,16 @@
       label: 'Your figure. Drag along the colorbar from its low end to its high end, then hover a color to see where it is.',
       hints: {
         empty: EMPTY_HINT,
-        loaded: 'Drag along the colorbar from one end to the other. The figure is then redrawn in the new colormap. Hover a color to see where it appears; press and hold the figure to see the other version.',
+        loaded: 'Drag along the colorbar from one end to the other. The figure is then redrawn in the new colormap next to the original. Hover a color in either to see where it appears; press and hold one to see the other version in its place.',
       },
-      base: () => (view === 'recolored' && out ? out : null),
-      showLine: () => view === 'original' || !out,
+      base: () => (peek?.canvas === fig.canvas ? out : null),
+      showLine: () => peek?.canvas !== fig.canvas,
       keepLineOnClick: true,
       onReset: (keepImage) => {
         job++;
         samples = null;
         index = null;
-        out = null;
+        outPanel.hidden = true;
         outData = null;
         mask = null;
         overlayData = null;
@@ -114,14 +107,25 @@
         oldNote.hidden = true;
         status.textContent = '';
         readout.textContent = '';
-        if (!keepImage) overlay.hidden = true;
+        if (!keepImage) { overlay.hidden = true; origPanel.hidden = true; }
       },
-      onLoad: () => { overlay.hidden = false; },
+      onLoad: () => { overlay.hidden = false; origPanel.hidden = false; },
       onError: (msg) => { status.textContent = msg; },
       onLine: (a, b) => calibrate(a, b),
     });
-    stack.append(fig.canvas, overlay);
-    d.append(fig.zone, fig.file, oldNote, controls, stack, status, readout, strips);
+    fig.canvas.classList.add('cmap-rc-canvas');
+    function panel(caption, canvas, ov) {
+      const f = el('figure', { class: 'cmap-rc-panel', hidden: '' });
+      const stack = el('div', { class: 'cmap-rc-stack' });
+      stack.append(canvas, ov);
+      f.append(el('figcaption', {}, caption), stack);
+      return f;
+    }
+    const origPanel = panel('Original', fig.canvas, overlay);
+    const outPanel = panel('Recolored', out, overlay2);
+    const grid = el('div', { class: 'cmap-rc-grid' });
+    grid.append(origPanel, outPanel);
+    d.append(fig.zone, fig.file, oldNote, controls, status, grid, readout, strips);
 
     // A text field that filters the colormaps as you type (an ARIA combobox).
     // Empty, it lists them all in their groups. Typing "name_r" also turns on
@@ -264,14 +268,6 @@
     const bandWidth = () => Number(band.value) / 100;
     const mapLabel = () => `${chosen}${revBox.checked ? '_r' : ''}`;
 
-    function setView(v) {
-      view = v;
-      for (const b of viewBtns) b.setAttribute('aria-pressed', String(b.dataset.view === v));
-      fig.redraw();
-      // The highlight's colors are the complements of what is shown.
-      if (hoverT != null) highlight(hoverT, true);
-    }
-
     // ---- calibration ----
 
     function calibrate(a, b) {
@@ -282,7 +278,7 @@
       let half = 2;
       if (k) { ({ start, end } = k); half = k.halfWidth; }
       fig.line = { start, end };
-      out = null;
+      outPanel.hidden = true;
       fig.redraw();
       const s = CM.sampleColorbar(img, start, end, half, 256);
       if (s.length < 2) { status.textContent = 'That line is too short.'; return; }
@@ -327,7 +323,6 @@
         controls.hidden = false;
         strips.hidden = false;
         render();
-        setView('recolored');
       };
       setTimeout(tick, 0);
     }
@@ -338,11 +333,12 @@
       if (!index) return;
       const img = fig.img;
       const r = CM.recolorPixels(img, index, newMap(), { tolerance: tolerance(), reversed: revBox.checked, flip });
-      out ??= document.createElement('canvas');
       out.width = img.width;
       out.height = img.height;
-      out.getContext('2d').putImageData(new ImageData(r.data, img.width, img.height), 0, 0);
+      outImage = new ImageData(r.data, img.width, img.height);
+      out.getContext('2d').putImageData(outImage, 0, 0);
       outData = r.data;
+      outPanel.hidden = false;
       oldStrip.innerHTML = stripSvg(samples.map((s) => roundRgb(s.rgb)), false);
       const m = newMap();
       const opt = { reversed: revBox.checked, flip };
@@ -350,7 +346,6 @@
       newStrip.innerHTML = stripSvg(colors, m.kind === 'qualitative');
       for (const s of [oldStrip, newStrip]) s.append(el('span', { class: 'cmap-rc-mark', hidden: '' }));
       readout.textContent = `${pct(r.changed / (img.width * img.height))} of the pixels have a color of the bar and are recolored. Hover a color to see where it is.`;
-      fig.redraw();
       if (hoverT != null) highlight(hoverT, true);
     }
 
@@ -378,31 +373,33 @@
       const res = CM.similarMask(index, t, bandWidth(), tolerance(), { step, mask });
       mask = res.mask;
       const n = mask.length;
-      if (overlay.width !== res.width || overlay.height !== res.height) {
-        overlay.width = res.width;
-        overlay.height = res.height;
-      }
-      if (!overlayData || overlayData.width !== res.width || overlayData.height !== res.height) overlayData = new ImageData(res.width, res.height);
-      const px = new Uint32Array(overlayData.data.buffer);
       const calm = reduceMotion();
-      // Little-endian RGBA as one word.
-      const dim = (180 << 24) | (255 << 16) | (255 << 8) | 255; // white veil over the rest
-      if (calm) {
-        for (let i = 0; i < n; i++) px[i] = mask[i] ? 0 : dim;
-      } else {
-        // Each pixel flashes to the complement (255 − r, 255 − g, 255 − b) of the color shown
-        // under it, which stands out whatever the map.
-        const shown = view === 'recolored' && outData ? outData : fig.img.data;
-        const w = res.width;
-        for (let j = 0; j < n; j++) {
-          if (!mask[j]) { px[j] = 0; continue; }
-          const o = ((((j / w) | 0) * step) * index.width + (j % w) * step) * 4;
-          px[j] = (255 << 24) | ((255 - shown[o + 2]) << 16) | ((255 - shown[o + 1]) << 8) | (255 - shown[o]);
+      overlayData ??= [];
+      [[overlay, fig.img.data], [overlay2, outData]].forEach(([ov, shown], i) => {
+        if (ov.width !== res.width || ov.height !== res.height) {
+          ov.width = res.width;
+          ov.height = res.height;
         }
-      }
-      overlay.getContext('2d').putImageData(overlayData, 0, 0);
-      overlay.classList.toggle('flash', !calm);
-      overlay.classList.add('on');
+        if (!overlayData[i] || overlayData[i].width !== res.width || overlayData[i].height !== res.height) overlayData[i] = new ImageData(res.width, res.height);
+        const px = new Uint32Array(overlayData[i].data.buffer);
+        // Little-endian RGBA as one word.
+        const dim = (180 << 24) | (255 << 16) | (255 << 8) | 255; // white veil over the rest
+        if (calm) {
+          for (let j = 0; j < n; j++) px[j] = mask[j] ? 0 : dim;
+        } else {
+          // Each pixel flashes to the complement (255 − r, 255 − g, 255 − b) of the color shown
+          // under it, which stands out whatever the map.
+          const w = res.width;
+          for (let j = 0; j < n; j++) {
+            if (!mask[j]) { px[j] = 0; continue; }
+            const o = ((((j / w) | 0) * step) * index.width + (j % w) * step) * 4;
+            px[j] = (255 << 24) | ((255 - shown[o + 2]) << 16) | ((255 - shown[o + 1]) << 8) | (255 - shown[o]);
+          }
+        }
+        ov.getContext('2d').putImageData(overlayData[i], 0, 0);
+        ov.classList.toggle('flash', !calm);
+        ov.classList.add('on');
+      });
       for (const s of [oldStrip, newStrip]) {
         const mk = s.querySelector('.cmap-rc-mark');
         if (mk) { mk.hidden = false; mk.style.left = `${(t * 100).toFixed(2)}%`; }
@@ -416,40 +413,56 @@
     function clearHighlight() {
       hoverT = null;
       pending = null;
-      overlay.classList.remove('on', 'flash');
+      for (const ov of [overlay, overlay2]) ov.classList.remove('on', 'flash');
       for (const s of [oldStrip, newStrip]) {
         const mk = s.querySelector('.cmap-rc-mark');
         if (mk) mk.hidden = true;
       }
     }
 
-    fig.canvas.addEventListener('pointermove', (e) => {
-      if (!index || fig.dragging) return;
-      const p = fig.pointAt(e);
-      const hit = CM.tAtPixel(index, p.x, p.y, tolerance());
-      if (hit) hover(hit.t);
-      else if (hoverT != null || pending != null) clearHighlight();
-    });
-    // Press and hold the figure to see the other version (original or
-    // recolored); it comes back on release, or once the press becomes a drag.
-    let peek = null; // { view to return to, x, y }
+    // Both images have the same size, so a point on either is a point on both.
+    const pointOn = (c, e) => {
+      const r = c.getBoundingClientRect();
+      const k = c.width / (c.clientWidth || c.width);
+      return {
+        x: Math.max(0, Math.min(c.width - 1, (e.clientX - r.left - c.clientLeft) * k)),
+        y: Math.max(0, Math.min(c.height - 1, (e.clientY - r.top - c.clientTop) * k)),
+      };
+    };
+    for (const c of [fig.canvas, out]) {
+      c.addEventListener('pointermove', (e) => {
+        if (!index || fig.dragging) return;
+        const p = pointOn(c, e);
+        const hit = CM.tAtPixel(index, p.x, p.y, tolerance());
+        if (hit) hover(hit.t);
+        else if (hoverT != null || pending != null) clearHighlight();
+      });
+      c.addEventListener('pointerleave', () => clearHighlight());
+    }
+    // Press and hold either image to see the other version in its place; it
+    // comes back on release, or once the press becomes a drag.
+    const showPeek = () => {
+      if (peek?.canvas === out) out.getContext('2d').putImageData(fig.img, 0, 0);
+      else if (outImage) out.getContext('2d').putImageData(outImage, 0, 0);
+      fig.redraw();
+    };
     const endPeek = () => {
       if (!peek) return;
-      const back = peek.view;
       peek = null;
-      setView(back);
+      showPeek();
     };
-    fig.canvas.addEventListener('pointerdown', (e) => {
-      clearHighlight();
-      if (!out || e.button > 0) return;
-      peek = { view, x: e.clientX, y: e.clientY };
-      setView(view === 'original' ? 'recolored' : 'original');
-    });
-    fig.canvas.addEventListener('pointermove', (e) => {
-      if (peek && Math.hypot(e.clientX - peek.x, e.clientY - peek.y) >= 8) endPeek();
-    });
-    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) fig.canvas.addEventListener(t, endPeek);
-    fig.canvas.addEventListener('pointerleave', () => clearHighlight());
+    for (const c of [fig.canvas, out]) {
+      c.addEventListener('pointerdown', (e) => {
+        clearHighlight();
+        if (!index || e.button > 0) return;
+        peek = { canvas: c, x: e.clientX, y: e.clientY };
+        showPeek();
+      });
+      c.addEventListener('pointermove', (e) => {
+        if (peek && Math.hypot(e.clientX - peek.x, e.clientY - peek.y) >= 8) endPeek();
+      });
+      for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) c.addEventListener(t, endPeek);
+    }
 
     for (const s of [oldStrip, newStrip]) {
       const tOf = (e) => {
@@ -478,7 +491,7 @@
     });
 
     download.addEventListener('click', () => {
-      if (!out) return;
+      if (!index) return;
       out.toBlob((blob) => {
         if (!blob) { status.textContent = 'Could not make the PNG.'; return; }
         const a = el('a', { href: URL.createObjectURL(blob), download: `${fig.name}-${mapLabel()}.png` });

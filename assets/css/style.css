@@ -1074,10 +1074,18 @@ input.cmap-search { width: 260px; max-width: 100%; }
 /* Recolor a figure into another colormap. The highlight canvas lies exactly
    over the image (inside its 1px border) and flashes between the pixels' own
    color and its complement. */
-.cmap-recolor { max-width: 920px; font-size: 13px; }
+.cmap-recolor { max-width: 1200px; font-size: 13px; container-type: inline-size; }
 .cmap-recolor > * { margin-top: 8px; }
 .cmap-recolor > h2 { margin-top: 4px; font-size: 16px; }
 .cmap-rc-old { margin: 0; }
+.cmap-rc-grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+@container (min-width: 600px) {
+  .cmap-rc-grid { grid-template-columns: 1fr 1fr; }
+}
+.cmap-rc-panel { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cmap-rc-panel[hidden] { display: none; }
+.cmap-rc-panel figcaption { font-size: 12px; font-weight: 600; }
+.cmap-recolor .cmap-rc-canvas { max-height: min(70vh, 640px); }
 .cmap-rc-controls { display: flex; flex-direction: column; gap: 8px; }
 .cmap-rc-fields { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-end; }
 .cmap-rc-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
