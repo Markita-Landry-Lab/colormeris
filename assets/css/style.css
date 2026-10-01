@@ -152,6 +152,7 @@ input[type="text"], input[type="search"], input[type="number"], select, textarea
 }
 textarea { resize: vertical; font-family: var(--mono); font-size: 12px; }
 input.num { width: 84px; }
+#scale-unit { width: auto; min-width: 64px; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
