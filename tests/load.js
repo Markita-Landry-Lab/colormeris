@@ -4,6 +4,7 @@ import '../assets/js/color.js';
 import '../assets/js/grid.js';
 import '../assets/js/colormap.js';
 import '../assets/js/cvd.js';
+import '../assets/js/cmap-metrics.js';
 import '../assets/js/cmap-refs.js';
 import '../assets/js/cmap-data.js';
 import '../assets/js/state.js';

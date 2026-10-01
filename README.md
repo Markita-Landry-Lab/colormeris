@@ -95,8 +95,9 @@ await colormeris.run('get_results');   // → { ok, result } or { ok: false, err
 `colormaps.html` is a viewer for the 87 matplotlib colormaps. Each one is drawn as vector strips: as seen, as simulated for protanopia, deuteranopia and tritanopia, and in grayscale.
 
 - Hover a strip to see the hex, RGB, position and lightness (L*) of that color. Click to copy the hex. With the keyboard, focus a strip and use the arrow keys (Shift moves by 10).
-- Open a row to see its L* profile, with its monotonicity, linearity (R²) and range.
-- *Reversed* flips every colormap. The search box filters by name.
+- Three pills under each name rate the map as uniform, CVD-safe and grayscale-safe (yes, partly, no). Hover a pill for the numbers. "How the ratings work" at the top gives the thresholds.
+- Open a row to see plots of L*, the perceptual step size (ΔE2000), chroma and hue. Below them are the L* stats and a table of the smallest differences between values at least 10% apart, in each view. Hover a table row to mark the two positions on that strip.
+- *Reversed* flips every colormap. The search box filters by name, the *Sort* menu orders rows inside each group (for example by CVD safety), and the *Only* boxes keep maps rated yes.
 - Colormap data is generated from matplotlib by `uv run --with matplotlib python scripts/export-mpl-colormaps.py`. The CVD views use the Machado et al. (2009) model. References are listed at the bottom of the page.
 
 ## How heatmap values are computed

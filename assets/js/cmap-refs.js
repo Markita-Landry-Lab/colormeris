@@ -79,6 +79,10 @@
       text: 'CIE (1976), ISO/CIE 11664-4. CIELAB L* lightness, D65 white point. Grayscale shows each color as the gray of the same L*.',
       url: null,
     },
+    ciede2000: {
+      text: 'Sharma G, Wu W, Dalal EN (2005). The CIEDE2000 color-difference formula: implementation notes, supplementary test data, and mathematical observations. Color Research & Application 30(1):21–30. Used for ΔE2000.',
+      url: 'https://doi.org/10.1002/col.20070',
+    },
   };
 
   const BY_NAME = {};
