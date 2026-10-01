@@ -1663,6 +1663,14 @@
 
   Object.assign(CM, { setupColormapViewer });
 
+  // Below 820px the document scrolls; above it only inner panes do. Widening
+  // would leave the document scrolled with no scrollbar, hiding the whole page.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 820 && window.scrollY) window.scrollTo(0, 0);
+    });
+  }
+
   // Scripts are deferred, so the DOM is parsed when this runs.
   const root = typeof document !== 'undefined' && document.getElementById('cmap-root');
   if (root) {

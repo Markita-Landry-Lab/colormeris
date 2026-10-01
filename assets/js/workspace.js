@@ -1557,5 +1557,13 @@
   return ws;
   }
 
+  // Below 820px the document scrolls; above it only inner panes do. Widening
+  // would leave the document scrolled with no scrollbar, hiding the whole page.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 820 && window.scrollY) window.scrollTo(0, 0);
+    });
+  }
+
   Object.assign(CM, { createWorkspace });
 })((globalThis.Colormeris ??= {}));

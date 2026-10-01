@@ -602,7 +602,7 @@ input.cmap-search { width: 260px; max-width: 100%; }
 
 .cmap-head, .cmap-row {
   display: grid;
-  grid-template-columns: 170px 2fr repeat(4, 1fr) var(--cmap-actions, 66px);
+  grid-template-columns: 240px 2fr repeat(4, 1fr) var(--cmap-actions, 66px);
   align-items: center;
   gap: 8px;
 }
@@ -722,7 +722,8 @@ input.cmap-search { width: 260px; max-width: 100%; }
 
 .cmap-panel { padding: 10px 0 8px 178px; display: flex; flex-direction: column; gap: 8px; }
 .cmap-plots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; max-width: 1180px; }
-.cmap-fig { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Subgrid keeps the plots level when one title wraps to two lines. */
+.cmap-fig { min-width: 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
 .cmap-fig-title { font-size: 12px; font-weight: 600; }
 .cmap-fig-cap { font-size: 11.5px; }
 .cmap-plot { width: 100%; height: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); touch-action: pan-y; }
@@ -787,11 +788,11 @@ input.cmap-search { width: 260px; max-width: 100%; }
 }
 
 @media (max-width: 900px) {
-  .cmap-plots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cmap-plots { gap: 8px; }
 }
 
-@media (max-width: 480px) {
-  .cmap-plots { grid-template-columns: 1fr; }
+@media (max-width: 560px) {
+  .cmap-plots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 }
 
 @media (max-width: 700px) {
