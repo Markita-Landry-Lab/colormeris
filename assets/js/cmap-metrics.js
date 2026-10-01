@@ -112,6 +112,9 @@
     cvd: { yes: { ratio: 0.4, min: 2.5 }, partly: { ratio: 0.25, min: 1.5 } },
     // Min ΔL* between points 10% apart; a full black-to-white ramp has ≈ 10.
     gray: { yes: 5, partly: 2 },
+    // Reading values back (as seen): share of the map in flat zones and share
+    // with a look-alike elsewhere. yes allows one ambiguous sample of 64.
+    readable: { flat: { yes: 0.05, partly: 0.2 }, ambiguous: { yes: 0.02, partly: 0.1 } },
   };
 
   const gradeLow = (v, { yes, partly }) => (v <= yes ? 'yes' : v <= partly ? 'partly' : 'no');
@@ -119,11 +122,91 @@
   const gradeCvd = (ratio, min, { yes, partly }) =>
     ratio >= yes.ratio && min >= yes.min ? 'yes' : ratio >= partly.ratio && min >= partly.min ? 'partly' : 'no';
 
+  // How well values can be read back from colors, as Colormeris does. A color
+  // seen in a figure is off by a few ΔE (compression, print, blending), so a
+  // difference of READ_DE (3 ΔE2000) is taken as the smallest one that can be
+  // relied on. Per view (as seen, CVD, grayscale by ΔL*):
+  //   levels      distinguishable steps from one end to the other (each READ_DE
+  //               from the last), i.e. how many values the map can tell apart
+  //   flat        share of the map where values 5% of the range apart differ by
+  //               less than READ_DE: there a color pins the value down poorly
+  //   ambiguous   share of the map whose color has a look-alike (< READ_DE)
+  //               at least 10% away: one color could mean two values
+  //   flatSpans, ambiguousSpans   the same as [t0, t1] intervals, for drawing
+  // Qualitative maps have no order and return null.
+  const READ_DE = 3;
+  const FLAT_WINDOW = 0.05;
+
+  function mergeSpans(spans) {
+    const out = [];
+    for (const [a, b] of spans.sort((x, y) => x[0] - y[0])) {
+      const last = out[out.length - 1];
+      if (last && a <= last[1] + 1e-9) last[1] = Math.max(last[1], b);
+      else out.push([a, b]);
+    }
+    return out;
+  }
+
+  function readView(feats, dist, cyclic, gap = 0.1) {
+    const n = feats.length;
+    let levels = 1;
+    let anchor = feats[0];
+    for (let i = 1; i < n; i++) {
+      if (dist(anchor, feats[i]) >= READ_DE) { levels++; anchor = feats[i]; }
+    }
+    const w = Math.max(1, Math.round(FLAT_WINDOW * (n - 1)));
+    const flatSpans = [];
+    let flatCount = 0;
+    let windows = 0;
+    for (let i = 0; i + w < n; i++) {
+      windows++;
+      if (dist(feats[i], feats[i + w]) < READ_DE) {
+        flatCount++;
+        flatSpans.push([i / (n - 1), (i + w) / (n - 1)]);
+      }
+    }
+    // Ambiguity on 64 samples, like the separations.
+    const m = Math.min(n, SAMPLES);
+    const idx = Array.from({ length: m }, (_, k) => Math.round((k * (n - 1)) / (m - 1)));
+    const minIdx = Math.max(1, Math.ceil(gap * (cyclic ? m : m - 1) - 1e-9));
+    const amb = new Array(m).fill(false);
+    for (let i = 0; i < m; i++) {
+      for (let j = i + minIdx; j < m; j++) {
+        if (cyclic && m - (j - i) < minIdx) continue;
+        if (dist(feats[idx[i]], feats[idx[j]]) < READ_DE) amb[i] = amb[j] = true;
+      }
+    }
+    const half = 0.5 / (m - 1);
+    const ambiguousSpans = mergeSpans(amb.flatMap((on, k) => (on ? [[Math.max(0, k / (m - 1) - half), Math.min(1, k / (m - 1) + half)]] : [])));
+    return {
+      levels,
+      flat: windows ? flatCount / windows : 0,
+      ambiguous: amb.filter(Boolean).length / m,
+      flatSpans: mergeSpans(flatSpans),
+      ambiguousSpans,
+    };
+  }
+
+  function readability(rgbs, { kind = 'continuous', cyclic = false } = {}) {
+    if (kind === 'qualitative' || rgbs.length < 2) return null;
+    const out = { orig: readView(rgbs.map(rgbToLab), labDist, cyclic) };
+    for (const type of CVD_TYPES) out[type] = readView(rgbs.map((c) => rgbToLab(simulateCvd(c, type))), labDist, cyclic);
+    out.gray = readView(rgbs.map((c) => rgbToLab(c)[0]), lDist, cyclic);
+    return out;
+  }
+
+  function gradeReadable({ flat, ambiguous }, { flat: f, ambiguous: a }) {
+    if (flat <= f.yes && ambiguous <= a.yes) return 'yes';
+    if (flat <= f.partly && ambiguous <= a.partly) return 'partly';
+    return 'no';
+  }
+
   // Everything the viewer shows for one map, computed once. steps are between
   // 64 evenly spaced samples, so step i spans t = i/63 to (i+1)/63.
   //   uniform    perceptually uniform: even ΔE steps (null for qualitative maps)
   //   cvdSafe    distinct values stay distinct in all three CVD views
   //   graySafe   distinct values stay distinct in grayscale (prints in black and white)
+  //   readable   values can be read back from the colors as seen (null for qualitative maps)
   function colormapMetrics(rgbs, { kind = 'continuous', cyclic = false } = {}) {
     const discrete = kind === 'qualitative';
     // 64 samples: 8-bit rounding makes neighboring steps of 256 samples noisy.
@@ -134,6 +217,7 @@
     const origMin = sep.orig?.min ?? 0;
     const cvdRatio = origMin > 1e-9 ? cvdWorst / origMin : 0;
     const grayMin = sep.gray?.min ?? 0;
+    const read = readability(rgbs, { kind, cyclic });
     return {
       steps,
       stepStats: st,
@@ -141,10 +225,12 @@
       separations: sep,
       cvdWorst,
       cvdRatio,
+      readability: read,
       rating: {
         uniform: discrete ? null : gradeLow(st.cv, RATING.uniform),
         cvdSafe: gradeCvd(cvdRatio, cvdWorst, RATING.cvd),
         graySafe: gradeHigh(grayMin, RATING.gray),
+        readable: read ? gradeReadable(read.orig, RATING.readable) : null,
       },
     };
   }
@@ -167,6 +253,6 @@
   }
 
   Object.assign(CM, {
-    perceptualSteps, stepStats, resample, lchOf, lchProfile, minSeparation, separations, colormapMetrics, CMAP_RATING: RATING, COMPARE_MAX, parseCompare,
+    perceptualSteps, stepStats, resample, lchOf, lchProfile, minSeparation, separations, readability, READ_DE, READ_WINDOW: FLAT_WINDOW, colormapMetrics, CMAP_RATING: RATING, COMPARE_MAX, parseCompare,
   });
 })((globalThis.Colormeris ??= {}));

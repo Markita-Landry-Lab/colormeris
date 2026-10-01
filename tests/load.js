@@ -7,6 +7,7 @@ import '../assets/js/cvd.js';
 import '../assets/js/cmap-metrics.js';
 import '../assets/js/cmap-refs.js';
 import '../assets/js/cmap-data.js';
+import '../assets/js/cmap-identify.js';
 import '../assets/js/state.js';
 import '../assets/js/settings.js';
 import '../assets/js/extract.js';

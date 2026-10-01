@@ -27,12 +27,14 @@
     ['cvd', 'Most CVD-safe'],
     ['gray', 'Most grayscale-safe'],
     ['linear', 'Most linear L*'],
+    ['readable', 'Most readable'],
   ];
   // [id, label, hint, key in rating]
   const FILTERS = [
     ['uniform', 'Uniform', 'Only colormaps rated uniform', 'uniform'],
     ['cvd', 'CVD-safe', 'Only colormaps rated CVD-safe', 'cvdSafe'],
     ['gray', 'Gray-safe', 'Only colormaps rated grayscale-safe', 'graySafe'],
+    ['readable', 'Readable', 'Only colormaps rated readable (values can be read back from the colors)', 'readable'],
   ];
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -569,9 +571,83 @@
       return ul;
     }
 
+    // Spans are on the original map; flip them with the Reversed toggle.
+    const spansOf = (spans) => (reversed ? spans.map(([a, b]) => [1 - b, 1 - a]).reverse() : spans);
+
+    function readTable(map) {
+      const r = metrics(map).readability;
+      const table = el('table', { class: 'cmap-sep' });
+      table.append(el('caption', {}, `Differences under ${CM.READ_DE} ΔE (ΔL* for grayscale) are too small to rely on when reading values back`));
+      const head = el('tr');
+      for (const t of ['View', 'Distinguishable levels', 'Flat zones', 'Ambiguous']) head.append(el('th', { scope: 'col' }, t));
+      const thead = el('thead');
+      thead.append(head);
+      const tbody = el('tbody');
+      for (const v of VIEWS) {
+        const x = r[v.key];
+        const tr = el('tr');
+        tr.append(el('th', { scope: 'row' }, v.label));
+        for (const t of [String(x.levels), pct(x.flat), pct(x.ambiguous)]) tr.append(el('td', {}, t));
+        tbody.append(tr);
+      }
+      table.append(thead, tbody);
+      return table;
+    }
+
+    // The strip with two thin tracks below it: where values are flat, and where
+    // a color has a look-alike elsewhere. Positions are percentages, so it scales.
+    function readTracks(map, viewKey) {
+      const r = metrics(map).readability[viewKey];
+      const box = el('div', { class: 'cmap-tracks' });
+      const strip = el('div', { class: 'cmap-track-strip', role: 'img', 'aria-label': `${map.name} ${VIEWS.find((v) => v.key === viewKey).label}` });
+      strip.innerHTML = stripSvg(viewData(map, viewKey).colors, false);
+      const track = (label, cls, spans, what) => {
+        box.append(el('span', { class: 'cmap-track-label' }, label));
+        const t = el('div', { class: `cmap-track ${cls}`, role: 'img', 'aria-label': spans.length ? `${label}: ${spans.map(([a, b]) => `${a.toFixed(2)} to ${b.toFixed(2)}`).join(', ')}` : `${label}: none` });
+        for (const [a, b] of spans) {
+          const s = el('span', { title: `${what}: t = ${a.toFixed(2)}–${b.toFixed(2)}` });
+          s.style.left = `${a * 100}%`;
+          s.style.width = `${(b - a) * 100}%`;
+          t.append(s);
+        }
+        box.append(t);
+      };
+      box.append(el('span'), strip);
+      track('Flat', 'flat', spansOf(r.flatSpans), 'Flat');
+      track('Ambiguous', 'ambiguous', spansOf(r.ambiguousSpans), 'Look-alike elsewhere');
+      return box;
+    }
+
+    function readBlock(entry) {
+      const { map } = entry;
+      const sec = el('div', { class: 'cmap-read' });
+      sec.append(el('h4', {}, 'Reading values back'));
+      if (map.kind === 'qualitative') {
+        sec.append(el('p', { class: 'muted' }, 'This does not apply to qualitative colormaps, since their colors have no order.'));
+        return sec;
+      }
+      sec.append(readTable(map));
+      const tabs = el('div', { class: 'cmap-tabs', role: 'group', 'aria-label': 'View for the zones' });
+      const holder = el('div');
+      const show = () => holder.replaceChildren(readTracks(map, entry.readView));
+      for (const v of VIEWS) {
+        const b = el('button', { type: 'button', 'aria-pressed': String(v.key === entry.readView) }, v.label);
+        b.addEventListener('click', () => {
+          entry.readView = v.key;
+          for (const x of tabs.children) x.setAttribute('aria-pressed', String(x === b));
+          show();
+        });
+        tabs.append(b);
+      }
+      show();
+      sec.append(tabs, holder);
+      sec.append(el('p', { class: 'cmap-fig-cap muted' }, `Flat: values ${pct(CM.READ_WINDOW)} of the range apart look almost the same. Ambiguous: the color also appears at a value at least 10% away, so it could mean either.`));
+      return sec;
+    }
+
     function fillPanel(entry) {
       for (const s of entry.strips) clearPair(s);
-      entry.panel.replaceChildren(buildPlots(entry.map), statsList(entry.map), sepTable(entry));
+      entry.panel.replaceChildren(buildPlots(entry.map), statsList(entry.map), sepTable(entry), readBlock(entry));
     }
 
     function toggle(entry, open = !entry.open) {
@@ -602,6 +678,11 @@
         `CVD-safe: ${m.rating.cvdSafe}. Worst view (${worst}) keeps ${Math.round(m.cvdRatio * 100)}% of the separation (min ΔE ${m.cvdWorst.toFixed(1)}).`]);
       pills.push(['Gray', m.rating.graySafe,
         `Grayscale-safe: ${m.rating.graySafe}. ${qual ? 'Two colors differ' : 'Two values 10% apart differ'} by only ${g.min.toFixed(1)} L*.`]);
+      if (m.readability) {
+        const { orig } = m.readability;
+        pills.push(['Readable', m.rating.readable,
+          `Readable: ${m.rating.readable}. ${pct(orig.flat)} of the map is flat (values ${pct(CM.READ_WINDOW)} apart differ by < ${CM.READ_DE} ΔE); ${pct(orig.ambiguous)} has a look-alike color elsewhere; ${orig.levels} distinguishable levels.`]);
+      }
       const wrap = el('div', { class: 'cmap-badges' });
       for (const [label, r, title] of pills) {
         const b = el('span', { class: `cmap-pill ${r}`, title });
@@ -786,6 +867,12 @@
         get: (f) => f.m.cvdWorst, show: (f) => `${f.worstLabel} ${f.m.cvdWorst.toFixed(1)} ΔE (${pct(f.m.cvdRatio)})` },
       { id: 'gray', label: 'Gray min ΔL*', hint: 'Smallest L* difference in grayscale. Higher is better.', best: 'max',
         get: (f) => f.m.separations.gray?.min ?? null, show: (f) => (f.m.separations.gray ? f.m.separations.gray.min.toFixed(1) : '—') },
+      { id: 'levels', label: 'Levels', hint: `Distinguishable levels from end to end (each ${CM.READ_DE} ΔE apart). Higher is better.`, best: 'max',
+        get: (f) => f.m.readability?.orig.levels ?? null, show: (f) => (f.m.readability ? String(f.m.readability.orig.levels) : '—') },
+      { id: 'flat', label: 'Flat %', hint: 'Share of the map where values 5% apart look almost the same. Lower is better.', best: 'min',
+        get: (f) => f.m.readability?.orig.flat ?? null, show: (f) => (f.m.readability ? pct(f.m.readability.orig.flat) : '—') },
+      { id: 'amb', label: 'Ambiguous %', hint: 'Share of the map whose color has a look-alike elsewhere. Lower is better.', best: 'min',
+        get: (f) => f.m.readability?.orig.ambiguous ?? null, show: (f) => (f.m.readability ? pct(f.m.readability.orig.ambiguous) : '—') },
       { id: 'rating', label: 'Ratings', noSort: true },
     ];
 
@@ -1076,7 +1163,7 @@
       const panel = el('div', { class: 'cmap-panel', id: panelId, hidden: '' });
       item.append(row, panel);
       item.dataset.name = map.name.toLowerCase();
-      const entry = { map, item, strips, panel, button, cmpBtn, open: false, order: items.length };
+      const entry = { map, item, strips, panel, button, cmpBtn, open: false, readView: 'orig', order: items.length };
       button.addEventListener('click', () => { toggle(entry); syncAll(); });
       cmpBtn.addEventListener('click', () => setCompared(map.name, cmpBtn.getAttribute('aria-pressed') !== 'true'));
       items.push(entry);
@@ -1152,6 +1239,12 @@
       cvd: (a, b) => metrics(b.map).cvdRatio - metrics(a.map).cvdRatio || metrics(b.map).cvdWorst - metrics(a.map).cvdWorst,
       gray: (a, b) => (metrics(b.map).separations.gray?.min ?? -1) - (metrics(a.map).separations.gray?.min ?? -1),
       linear: (a, b) => linearity(b) - linearity(a),
+      readable: (a, b) => {
+        const ra = metrics(a.map).readability;
+        const rb = metrics(b.map).readability;
+        if (!ra || !rb) return (ra == null) - (rb == null); // qualitative last
+        return (ra.orig.flat + ra.orig.ambiguous) - (rb.orig.flat + rb.orig.ambiguous) || rb.orig.levels - ra.orig.levels;
+      },
     };
 
     function linearity(entry) {
@@ -1202,12 +1295,319 @@
       return sec;
     }
 
+    // ---- identify a colormap from a figure ----
+
+    const ID_MAX_SIDE = 4000; // larger images are scaled down before sampling
+    const ID_MAX_PIXELS = 40000; // whole-image mode looks at about this many pixels
+    const ID_TIE = 0.01; // maps whose scores differ by less than this have the same colors
+
+    function identifyMaps() {
+      return data.maps.map((m) => ({ name: m.name, kind: m.kind, rgbs: base(m) }));
+    }
+
+    // Matches within ID_TIE of the best remaining one are the same colors (gray,
+    // gist_gray, binary reversed), so they share one entry.
+    function groupTies(list, max = 5) {
+      const groups = [];
+      for (const r of list) {
+        const g = groups[groups.length - 1];
+        if (g && Math.abs(r.score - g.lead.score) < ID_TIE) g.ties.push(r);
+        else if (groups.length < max) groups.push({ lead: r, ties: [] });
+        else break;
+      }
+      return groups;
+    }
+
+    function miniOf(map, flip) {
+      const d = el('span', { class: 'cmap-mini' });
+      const colors = flip ? base(map).slice().reverse() : base(map);
+      d.innerHTML = stripSvg(colors, map.kind === 'qualitative');
+      return d;
+    }
+
+    // Show a map's row: clear any search and filters that hide it, open it, scroll to it.
+    function showRow(name) {
+      const entry = items.find((e) => e.map.name === name);
+      if (!entry) return;
+      if (entry.item.hidden) {
+        ui.search.value = '';
+        for (const b of Object.values(ui.boxes)) b.checked = false;
+        applyFilter();
+      }
+      toggle(entry, true);
+      syncAll();
+      entry.item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function buildIdentify() {
+      const d = el('details', { class: 'cmap-method cmap-identify' });
+      d.append(el('summary', {}, 'Identify a colormap from a figure'));
+      d.append(el('p', { class: 'muted' }, 'Give an image of a figure and find which colormap it uses. The image stays in your browser.'));
+
+      const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
+      const choose = el('button', { type: 'button', class: 'btn small' }, 'Choose image…');
+      const whole = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Use the whole image');
+      const clear = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Clear');
+      const bar = el('div', { class: 'cmap-id-bar' });
+      bar.append(choose, whole, clear);
+      const hint = el('p', { class: 'cmap-id-hint' }, 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).');
+      const zone = el('div', { class: 'cmap-drop' });
+      zone.append(bar, hint);
+
+      const canvas = el('canvas', { class: 'cmap-id-canvas', hidden: '', role: 'img', tabindex: '0', 'aria-label': 'Your figure. Drag along the colorbar from one end to the other.' });
+      const sampled = el('div', { class: 'cmap-id-sampled', hidden: '' });
+      const status = el('p', { class: 'cmap-id-status', 'aria-live': 'polite' });
+      const verdict = el('p', { class: 'cmap-id-verdict', 'aria-live': 'polite' });
+      const explain = el('p', { class: 'cmap-fig-cap muted', hidden: '' }, 'The score is the average ΔE2000 between the sampled colors and the map (the worst 10% are ignored). Below 3 is the same map; 3 to 6 is a close relative.');
+      const list = el('ol', { class: 'cmap-id-list' });
+      d.append(zone, file, canvas, sampled, status, verdict, list, explain);
+
+      let src = null; // offscreen canvas with the full-resolution image
+      let img = null; // its ImageData
+      let line = null; // { start, end } in image pixels
+      let drag = null;
+
+      // Pointer positions are relative to the content box: the border is not part of the image.
+      const scale = () => canvas.width / (canvas.clientWidth || canvas.width);
+
+      function redraw() {
+        const g = canvas.getContext('2d');
+        g.drawImage(src, 0, 0);
+        if (!line) return;
+        const k = scale();
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--bar-color').trim() || '#f29900';
+        g.lineCap = 'round';
+        for (const [w, c] of [[4.5 * k, 'rgba(0,0,0,0.75)'], [2 * k, accent]]) {
+          g.strokeStyle = c;
+          g.lineWidth = w;
+          g.beginPath();
+          g.moveTo(line.start.x, line.start.y);
+          g.lineTo(line.end.x, line.end.y);
+          g.stroke();
+        }
+        // Circle at the start, so the direction is clear.
+        g.fillStyle = accent;
+        g.strokeStyle = 'rgba(0,0,0,0.75)';
+        g.lineWidth = 1.5 * k;
+        g.beginPath();
+        g.arc(line.start.x, line.start.y, 4.5 * k, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillRect(line.end.x - 3 * k, line.end.y - 3 * k, 6 * k, 6 * k);
+        g.strokeRect(line.end.x - 3 * k, line.end.y - 3 * k, 6 * k, 6 * k);
+      }
+
+      function reset(keepImage) {
+        line = null;
+        drag = null;
+        sampled.hidden = true;
+        sampled.replaceChildren();
+        list.replaceChildren();
+        verdict.textContent = '';
+        explain.hidden = true;
+        status.textContent = '';
+        if (!keepImage) {
+          src = null;
+          img = null;
+          canvas.hidden = true;
+          whole.disabled = true;
+          clear.disabled = true;
+          file.value = '';
+        } else if (src) redraw();
+      }
+
+      function fail(msg) {
+        reset(false);
+        status.textContent = msg;
+      }
+
+      function load(f) {
+        if (!f || !/^image\//.test(f.type)) { fail('That file is not an image. Use a PNG, JPEG, WebP or GIF.'); return; }
+        const url = URL.createObjectURL(f);
+        const im = new Image();
+        im.onload = () => {
+          URL.revokeObjectURL(url);
+          try {
+            const k = Math.min(1, ID_MAX_SIDE / Math.max(im.naturalWidth, im.naturalHeight));
+            const w = Math.max(1, Math.round(im.naturalWidth * k));
+            const h = Math.max(1, Math.round(im.naturalHeight * k));
+            src = document.createElement('canvas');
+            src.width = w;
+            src.height = h;
+            const g = src.getContext('2d', { willReadFrequently: true });
+            g.fillStyle = '#fff'; // transparent pixels count as white, as readPixel does
+            g.fillRect(0, 0, w, h);
+            g.drawImage(im, 0, 0, w, h);
+            img = g.getImageData(0, 0, w, h);
+            canvas.width = w;
+            canvas.height = h;
+            reset(true);
+            canvas.hidden = false;
+            whole.disabled = false;
+            clear.disabled = false;
+            hint.textContent = 'Drag along the colorbar from one end to the other. Drag from the low end to the high end to read the direction. Or use the whole image if there is no colorbar.';
+            redraw();
+          } catch (err) {
+            console.warn('Could not read the image', err);
+            fail('Could not read that image.');
+          }
+        };
+        im.onerror = () => { URL.revokeObjectURL(url); fail('Could not open that image.'); };
+        im.src = url;
+      }
+
+      function pointAt(e) {
+        const r = canvas.getBoundingClientRect();
+        const k = scale();
+        return {
+          x: Math.max(0, Math.min(canvas.width - 1, (e.clientX - r.left - canvas.clientLeft) * k)),
+          y: Math.max(0, Math.min(canvas.height - 1, (e.clientY - r.top - canvas.clientTop) * k)),
+        };
+      }
+
+      const hexOf = (rgb) => CM.rgbToHex(rgb.map(clamp8));
+
+      function showVerdict(best, level, extra) {
+        const nm = best.reversed ? `${best.name} (reversed)` : best.name;
+        const sc = best.score.toFixed(1);
+        verdict.replaceChildren();
+        if (level === 'exact') verdict.append('Best match: ', el('strong', {}, nm), ` (ΔE ${sc}).`);
+        else if (level === 'close') verdict.append('Closest: ', el('strong', {}, nm), ` (ΔE ${sc}). Not an exact match; it may be a relative or a map from another library.`);
+        else verdict.append(`No good match among the matplotlib colormaps (best ΔE ${sc}).`);
+        if (extra) verdict.append(' ', extra);
+      }
+
+      function renderResults(results, { dir }) {
+        list.replaceChildren();
+        explain.hidden = !results.length;
+        if (!results.length) { verdict.textContent = 'Could not find any colors to match.'; return; }
+        const groups = groupTies(results);
+        const best = groups[0].lead;
+        showVerdict(best, CM.matchLevel(best.score));
+        if (dir && best.reversed) {
+          const last = base(mapByName.get(best.name)).slice(-1)[0];
+          const sw = el('span', { class: 'cmap-sw', style: `background:${hexOf(last)}`, title: hexOf(last) });
+          status.replaceChildren('Reversed means the end where you started is the map’s last color ', sw, '.');
+        }
+        for (const { lead, ties } of groups) {
+          const map = mapByName.get(lead.name);
+          const li = el('li', { class: 'cmap-id-item' });
+          const name = el('span', { class: 'cmap-id-name' });
+          name.append(el('code', {}, lead.name));
+          if (lead.reversed) name.append(' (reversed)');
+          if (ties.length) {
+            name.append(el('span', { class: 'muted' }, ` (same colors: ${ties.map((t) => (t.reversed ? `${t.name} reversed` : t.name)).join(', ')})`));
+          }
+          const nums = el('span', { class: 'cmap-id-score' }, `ΔE ${lead.score.toFixed(1)}${lead.coverage != null ? `, covers ${pct(lead.coverage)}` : ''}`);
+          const act = el('span', { class: 'cmap-id-actions' });
+          const show = el('button', { type: 'button', class: 'btn small' }, 'Show');
+          show.setAttribute('aria-label', `Show ${lead.name} in the list`);
+          show.addEventListener('click', () => {
+            showRow(lead.name);
+            if (lead.reversed && !reversed) status.textContent = `${lead.name} matches reversed. Turn on Reversed to see it that way.`;
+          });
+          const cmpB = el('button', { type: 'button', class: 'btn small' });
+          const syncCmp = () => {
+            const on = selected.includes(lead.name);
+            cmpB.textContent = on ? 'In comparison' : 'Compare';
+            cmpB.disabled = on || selected.length >= MAX_CMP;
+            cmpB.setAttribute('aria-label', `Compare ${lead.name}`);
+          };
+          syncCmp();
+          cmpB.addEventListener('click', () => { setCompared(lead.name, true); syncCmp(); });
+          act.append(show, cmpB);
+          li.append(miniOf(map, lead.reversed), name, nums, act);
+          list.append(li);
+        }
+      }
+
+      function runColorbar(a, b) {
+        const k = CM.refineColorbar(img, a, b);
+        let start = a;
+        let end = b;
+        let half = 2;
+        if (k) { ({ start, end } = k); half = k.halfWidth; }
+        line = { start, end };
+        redraw();
+        const samples = CM.sampleColorbar(img, start, end, half, 256);
+        if (samples.length < 2) { fail('That line is too short.'); return; }
+        const rgbs = samples.map((s) => s.rgb);
+        sampled.hidden = false;
+        sampled.replaceChildren(el('span', { class: 'muted' }, k ? 'Colors along the line (snapped to the colorbar)' : 'Colors along the line'));
+        const strip = el('div', { class: 'cmap-id-strip', role: 'img', 'aria-label': 'Sampled colors' });
+        strip.innerHTML = stripSvg(rgbs.map(roundRgb), false);
+        sampled.append(strip);
+        status.textContent = '';
+        renderResults(CM.identifyColorbar(rgbs, identifyMaps()), { dir: true });
+      }
+
+      function runWhole() {
+        if (!img) return;
+        line = null;
+        redraw();
+        const step = Math.max(1, Math.ceil(Math.sqrt((img.width * img.height) / ID_MAX_PIXELS)));
+        const px = [];
+        for (let y = 0; y < img.height; y += step) for (let x = 0; x < img.width; x += step) px.push(CM.readPixel(img, x, y));
+        sampled.hidden = true;
+        status.textContent = 'The direction cannot be known this way. A line along the colorbar is more reliable.';
+        renderResults(CM.identifyColors(px, identifyMaps()), { dir: false });
+        verdict.append(' Whole image: the score is how close the image’s colors are to the nearest color of each map.');
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        if (!img || e.button > 0) return;
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        drag = { start: pointAt(e), px: e.clientX, py: e.clientY };
+        line = null;
+      });
+      canvas.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        line = { start: drag.start, end: pointAt(e) };
+        redraw();
+      });
+      const finish = (e) => {
+        if (!drag) return;
+        const { start, px, py } = drag;
+        drag = null;
+        if (e.type === 'pointercancel' || Math.hypot(e.clientX - px, e.clientY - py) < 8) { line = null; redraw(); return; }
+        runColorbar(start, pointAt(e));
+      };
+      canvas.addEventListener('pointerup', finish);
+      canvas.addEventListener('pointercancel', finish);
+
+      choose.addEventListener('click', () => file.click());
+      file.addEventListener('change', () => { if (file.files[0]) load(file.files[0]); });
+      whole.addEventListener('click', runWhole);
+      clear.addEventListener('click', () => { reset(false); hint.textContent = 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).'; });
+
+      const fileOf = (dt) => [...(dt?.files || [])].find((f) => /^image\//.test(f.type)) || [...(dt?.files || [])][0];
+      for (const t of [zone, canvas]) {
+        t.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('over'); });
+        t.addEventListener('dragleave', () => zone.classList.remove('over'));
+        t.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('over');
+          load(fileOf(e.dataTransfer));
+        });
+      }
+      // Paste works anywhere on the page while the panel is open.
+      document.addEventListener('paste', (e) => {
+        if (!d.open || e.target.closest?.('input[type="search"], textarea')) return;
+        const f = fileOf(e.clipboardData);
+        if (!f) return;
+        e.preventDefault();
+        load(f);
+      });
+      return d;
+    }
+
     function buildMethod() {
       const R = CM.CMAP_RATING;
       const pc = (v) => `${Math.round(v * 100)}%`;
       const d = el('details', { class: 'cmap-method' });
       d.append(el('summary', {}, 'How the ratings work'));
-      d.append(el('p', {}, 'Each colormap gets three ratings: yes (✓), partly (~) or no (✕). They are rules of thumb tuned on the matplotlib maps, not standards. Hover a pill for the numbers.'));
+      d.append(el('p', {}, 'Each colormap gets up to four ratings: yes (✓), partly (~) or no (✕). They are rules of thumb tuned on the matplotlib maps, not standards. Hover a pill for the numbers.'));
       const ul = el('ul');
       const li = (head, ...parts) => {
         const x = el('li');
@@ -1217,6 +1617,8 @@
       li('Uniform.', `We measure the color difference (ΔE2000) between neighbors among 64 evenly spaced colors. The rating uses how much these steps vary, as the coefficient of variation (CV = standard deviation / mean): yes at CV ≤ ${R.uniform.yes}, partly up to ${R.uniform.partly}. A uniform map shows equal steps in the data as equal steps in color. Qualitative maps are not rated.`);
       li('CVD-safe.', `For the map and for each CVD view we find the smallest ΔE2000 between two values at least 10% of the map apart (cyclic maps count around the circle, qualitative maps compare all pairs). The worst CVD view must keep at least ${pc(R.cvd.yes.ratio)} of the map’s own smallest difference and at least ${R.cvd.yes.min} ΔE for yes, or ${pc(R.cvd.partly.ratio)} and ${R.cvd.partly.min} ΔE for partly.`);
       li('Grayscale-safe.', `The same search on L* alone: values 10% apart differ by at least ${R.gray.yes} L* for yes, or ${R.gray.partly} L* for partly.`);
+      const RD = R.readable;
+      li('Readable.', `Can you read a value back from a color, as Colormeris does? A color in a figure is off by a few ΔE (compression, print, blending), so differences under ${CM.READ_DE} ΔE2000 are not relied on. Flat is the share of the map where values ${pc(CM.READ_WINDOW)} of the range apart differ by less than that. Ambiguous is the share whose color has a look-alike (under ${CM.READ_DE} ΔE) at a value at least 10% away. Yes needs at most ${pc(RD.flat.yes)} flat and ${pc(RD.ambiguous.yes)} ambiguous; partly at most ${pc(RD.flat.partly)} and ${pc(RD.ambiguous.partly)}. This is not the same as Uniform: jet is readable, since its colors are all different, but not uniform. Qualitative maps are not rated.`);
       d.append(ul);
       const p = el('p', { class: 'muted' }, 'A ΔE2000 of about 2 is roughly the smallest difference you notice side by side. Color differences use CIEDE2000 (');
       p.append(el('a', { href: '#ref-ciede2000' }, 'Sharma, Wu & Dalal 2005'), ').');
@@ -1238,8 +1640,8 @@
     root.replaceChildren();
     const inner = el('div', { class: 'cmap-inner' });
     inner.append(el('h1', {}, 'Colormaps'));
-    inner.append(el('p', { class: 'cmap-intro' }, 'Each colormap is shown as seen, as simulated for three kinds of color-vision deficiency, and in grayscale. Hover a strip for its hex and RGB values, click to copy the hex, or open a row to see its lightness (L*), step, chroma and hue profiles and how far apart its values stay in each view. The pills under each name rate it as uniform, CVD-safe and grayscale-safe. A colormap that is not monotonic in L* makes the figure harder to read, in grayscale and in color.'));
-    inner.append(buildMethod());
+    inner.append(el('p', { class: 'cmap-intro' }, 'Each colormap is shown as seen, as simulated for three kinds of color-vision deficiency, and in grayscale. Hover a strip for its hex and RGB values, click to copy the hex, or open a row to see its lightness (L*), step, chroma and hue profiles and how far apart its values stay in each view. The pills under each name rate it as uniform, CVD-safe, grayscale-safe and readable. A colormap that is not monotonic in L* makes the figure harder to read, in grayscale and in color.'));
+    inner.append(buildMethod(), buildIdentify());
     const ui = buildControls();
     // Controls and column names share one sticky bar, so they stay readable
     // while scrolling instead of one floating header per section.

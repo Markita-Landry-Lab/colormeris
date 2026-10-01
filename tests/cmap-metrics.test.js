@@ -45,10 +45,11 @@ test('minSeparation skips near neighbors and wraps for cyclic maps', () => {
 
 test('ratings match the usual verdicts', () => {
   const v = metricsOf('viridis');
-  assert.deepEqual(v.rating, { uniform: 'yes', cvdSafe: 'yes', graySafe: 'yes' });
+  assert.deepEqual(v.rating, { uniform: 'yes', cvdSafe: 'yes', graySafe: 'yes', readable: 'yes' });
   assert.equal(v.steps.length, 63);
+  // jet is uneven but its colors still pin values down: readable, not uniform.
   const j = metricsOf('jet');
-  assert.deepEqual(j.rating, { uniform: 'no', cvdSafe: 'no', graySafe: 'no' });
+  assert.deepEqual(j.rating, { uniform: 'no', cvdSafe: 'no', graySafe: 'no', readable: 'yes' });
   assert.equal(metricsOf('cividis').rating.cvdSafe, 'yes');
   assert.equal(metricsOf('turbo').rating.cvdSafe, 'no');
   assert.equal(metricsOf('RdBu').rating.graySafe, 'no'); // diverging: both ends equally dark
@@ -78,4 +79,29 @@ test('parseCompare keeps known names once, in order, up to the cap', () => {
   const all = cmapData.maps.map((m) => m.name);
   assert.equal(parseCompare(all.join(','), all).length, COMPARE_MAX);
   assert.equal(COMPARE_MAX, 10);
+});
+
+test('readability: flat zones, ambiguity and levels', () => {
+  const ramp = (n, f) => Array.from({ length: n }, (_, i) => f(i / (n - 1)));
+  const grayRamp = ramp(256, (t) => [255 * t, 255 * t, 255 * t].map(Math.round));
+  const r = CM.readability(grayRamp);
+  assert.equal(r.gray.flat, 0);
+  assert.equal(r.gray.ambiguous, 0);
+  assert.ok(r.gray.levels > 25 && r.gray.levels < 40, `levels ${r.gray.levels}`);
+  // A map that goes up and back down: every color has a twin on the other side.
+  const tent = ramp(256, (t) => { const v = Math.round(255 * (1 - Math.abs(2 * t - 1))); return [v, 0, 255 - v]; });
+  assert.ok(CM.readability(tent).orig.ambiguous > 0.8);
+  // Constant first half: flat there, and spans say where.
+  const half = ramp(256, (t) => (t < 0.5 ? [0, 0, 128] : [255 * t, 0, 128].map(Math.round)));
+  const h = CM.readability(half).orig;
+  assert.ok(h.flat > 0.4);
+  assert.equal(h.flatSpans[0][0], 0);
+  assert.ok(h.flatSpans[0][1] > 0.45); // up to where the jump at t = 0.5 comes within 5%
+  assert.equal(CM.readability(grayRamp, { kind: 'qualitative' }), null);
+});
+
+test('readable rating separates the usual suspects', () => {
+  for (const n of ['viridis', 'cividis', 'RdBu', 'turbo']) assert.equal(metricsOf(n).rating.readable, 'yes', n);
+  for (const n of ['summer', 'Wistia', 'flag', 'Greys']) assert.equal(metricsOf(n).rating.readable, 'no', n);
+  assert.equal(metricsOf('tab10').rating.readable, null);
 });
