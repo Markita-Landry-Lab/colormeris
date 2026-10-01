@@ -58,17 +58,15 @@
       ['machado', 'Machado 2009'],
     ]) model.append(el('option', { value: v }, label));
     syncKinds();
-    const download = el('button', { type: 'button', class: 'btn small primary' }, 'Download PNG');
+    const download = el('button', { type: 'button', class: 'btn small primary', hidden: '' }, 'Download PNG');
     const fieldsRow = el('div', { class: 'cmap-rc-fields' });
     fieldsRow.append(
       field('Deficiency', 'Which kind of cone is missing (or shifted, below full severity). Gray is achromatopsia: no color at all.', kinds),
       field('Severity', '1 is dichromacy (protanopia, deuteranopia, tritanopia): one kind of cone is missing. Below 1 is anomalous trichromacy (protanomaly etc.): the cone is shifted, a milder and more common form. 0 is normal vision.', sev, sevOut),
       field('Model', 'Recommended follows the DaltonLens review: Brettel 1997 for tritan, Machado 2009 for protan and deutan (it models partial severity best). Viénot 1999 does not model tritan; Brettel 1997 is used instead. Gray needs no model.', model),
     );
-    const actions = el('div', { class: 'cmap-id-bar cmap-rc-actions' });
-    actions.append(download);
     const controls = el('div', { class: 'cmap-rc-controls', hidden: '' });
-    controls.append(fieldsRow, actions);
+    controls.append(fieldsRow);
 
     function field(label, title, ...inputs) {
       const f = el('div', { class: 'cmap-rc-field', title });
@@ -80,6 +78,7 @@
 
     // ---- figure input; its canvas is the Original panel ----
     const fig = CM.createFigureInput({
+      buttons: [download], // beside the other buttons, before Clear
       el,
       state,
       tab: 'cvd',
@@ -94,7 +93,7 @@
           ? 'Showing the example, a heatmap in jet. Drop, paste or choose your own image to check it.'
           : 'Drop, paste or choose another image, or Clear to go back to the example.';
         cache.clear();
-        controls.hidden = false;
+        controls.hidden = download.hidden = false;
         grid.hidden = false;
         note.hidden = false;
         render();
@@ -103,7 +102,7 @@
         job++;
         clearMarks();
         readout.textContent = '';
-        if (!keepImage) { controls.hidden = true; grid.hidden = true; note.hidden = true; }
+        if (!keepImage) { controls.hidden = download.hidden = true; grid.hidden = true; note.hidden = true; }
       },
       onError: (msg) => { status.textContent = msg; },
     });

@@ -48,12 +48,15 @@
     const bandOut = el('output', {}, pct(BAND));
     const bandField = field('Similar within', 'On hover, pixels whose place on the colorbar is this close to the hovered one flash', band, bandOut);
 
-    const download = el('button', { type: 'button', class: 'btn small primary' }, 'Download PNG');
-    const actions = el('div', { class: 'cmap-id-bar cmap-rc-actions' });
-    actions.append(download);
+    const flashBox = el('input', { type: 'checkbox', checked: '' });
+    const flashLabel = el('label', { class: 'cmap-rc-check' });
+    flashLabel.append(flashBox, ' Flash');
+    const flashField = field('Highlight', 'On: the pixels at the hovered value flash to their complementary color. Off: they stay as they are and the rest is veiled in white.', flashLabel);
+
+    const download = el('button', { type: 'button', class: 'btn small primary', hidden: '' }, 'Download PNG');
     const fieldsRow = el('div', { class: 'cmap-rc-fields' });
-    fieldsRow.append(mapField, tolField, bandField);
-    controls.append(fieldsRow, actions);
+    fieldsRow.append(mapField, tolField, bandField, flashField);
+    controls.append(fieldsRow);
 
     // ---- strips: the sampled bar over the new colors, both hoverable ----
     const strips = el('div', { class: 'cmap-rc-strips', hidden: '' });
@@ -82,6 +85,7 @@
     let frame = 0;
 
     const fig = CM.createFigureInput({
+      buttons: [download], // beside the other buttons, before Clear
       el,
       state,
       tab: 'recolor',
@@ -102,7 +106,7 @@
         mask = null;
         overlayData = null;
         clearHighlight();
-        controls.hidden = true;
+        controls.hidden = download.hidden = true;
         strips.hidden = true;
         oldNote.hidden = true;
         status.textContent = '';
@@ -125,7 +129,7 @@
     const outPanel = panel('Recolored', out, overlay2);
     const grid = el('div', { class: 'cmap-rc-grid' });
     grid.append(origPanel, outPanel);
-    d.append(fig.zone, fig.file, oldNote, controls, status, grid, readout, strips);
+    d.append(fig.zone, fig.file, controls, status, grid, readout, oldNote, strips);
 
     // A text field that filters the colormaps as you type (an ARIA combobox).
     // Empty, it lists them all in their groups. Typing "name_r" also turns on
@@ -320,7 +324,7 @@
         index = ix.index;
         mask = null;
         status.textContent = '';
-        controls.hidden = false;
+        controls.hidden = download.hidden = false;
         strips.hidden = false;
         render();
       };
@@ -373,7 +377,7 @@
       const res = CM.similarMask(index, t, bandWidth(), tolerance(), { step, mask });
       mask = res.mask;
       const n = mask.length;
-      const calm = reduceMotion();
+      const calm = reduceMotion() || !flashBox.checked;
       overlayData ??= [];
       [[overlay, fig.img.data], [overlay2, outData]].forEach(([ov, shown], i) => {
         if (ov.width !== res.width || ov.height !== res.height) {
@@ -483,6 +487,7 @@
       });
     }
 
+    flashBox.addEventListener('change', () => { if (hoverT != null) highlight(hoverT, true); });
     revBox.addEventListener('change', render);
     tol.addEventListener('input', () => { tolOut.textContent = tol.value; render(); });
     band.addEventListener('input', () => {
