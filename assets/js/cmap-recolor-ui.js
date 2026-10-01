@@ -5,7 +5,7 @@
   // drag along its colorbar, pick another colormap, and the figure is redrawn
   // in it (cmap-recolor.js). Pixels far from the bar's colors (background,
   // text, axes) keep theirs. Hovering a color in the figure or on the strips
-  // flashes every pixel with a similar value. The image never leaves the browser.
+  // flashes every pixel with a similar value to its complementary color. The image never leaves the browser.
 
   const GROUPS = [
     ['sequential', 'Sequential'],
@@ -18,7 +18,6 @@
   const TOLERANCE = 12; // ΔE76: JPEG noise stays inside, white and gray outside
   const BAND = 0.02; // share of the bar that counts as "similar" on hover
   const CHUNK = 300000; // pixels indexed between pauses
-  const FLASH = [255, 0, 255]; // magenta; the CSS animation inverts it to green
   const OVERLAY_MAX = 1600; // the highlight is drawn at about screen size, not image size
 
   function setupCmapRecolor(ctx) {
@@ -34,17 +33,12 @@
 
     // ---- controls ----
     const controls = el('div', { class: 'cmap-rc-controls', hidden: '' });
-    const pick = el('select', { 'aria-label': 'New colormap' });
-    for (const [group, title] of GROUPS) {
-      const og = el('optgroup', { label: title });
-      for (const m of data.maps.filter((x) => x.group === group)) og.append(el('option', { value: m.name }, m.name));
-      if (og.children.length) pick.append(og);
-    }
-    pick.value = DEFAULT_MAP;
+    let chosen = DEFAULT_MAP;
     const revBox = el('input', { type: 'checkbox' });
     const revLabel = el('label', { class: 'cmap-rc-check' });
     revLabel.append(revBox, ' Reversed');
-    const mapField = field('New colormap', 'The colormap the figure is redrawn in', pick, revLabel);
+    const picker = mapPicker();
+    const mapField = field('New colormap', 'The colormap the figure is redrawn in. Type to search; leave empty to see them all.', picker.box, revLabel);
 
     const tol = el('input', { type: 'range', min: '2', max: '40', step: '1', value: String(TOLERANCE) });
     const tolOut = el('output', {}, String(TOLERANCE));
@@ -85,6 +79,7 @@
     let flip = false; // the line was drawn from the old map's high end
     let index = null; // per-pixel t and ΔE
     let out = null; // offscreen canvas with the recolored image
+    let outData = null; // its RGBA bytes, for the highlight's colors
     let view = 'recolored';
     let job = 0; // the indexing run in progress; a new one cancels it
     let hoverT = null;
@@ -110,6 +105,7 @@
         samples = null;
         index = null;
         out = null;
+        outData = null;
         mask = null;
         overlayData = null;
         clearHighlight();
@@ -127,6 +123,131 @@
     stack.append(fig.canvas, overlay);
     d.append(fig.zone, fig.file, oldNote, controls, stack, status, readout, strips);
 
+    // A text field that filters the colormaps as you type (an ARIA combobox).
+    // Empty, it lists them all in their groups. Typing "name_r" also turns on
+    // Reversed. Leaving it with text that names no map puts the choice back.
+    function mapPicker() {
+      const box = el('div', { class: 'cmap-rc-pick' });
+      const input = el('input', {
+        type: 'text', role: 'combobox', 'aria-label': 'New colormap', 'aria-autocomplete': 'list',
+        'aria-expanded': 'false', 'aria-controls': 'cmap-rc-maps', autocomplete: 'off', spellcheck: 'false', placeholder: 'Type to search',
+      });
+      input.value = chosen;
+      const list = el('ul', { class: 'cmap-rc-maps', id: 'cmap-rc-maps', role: 'listbox', 'aria-label': 'Colormaps', hidden: '' });
+      box.append(input, list);
+      const groupOf = new Map(GROUPS);
+      let options = []; // the li elements shown, in order
+      let active = -1;
+
+      const optionFor = (m) => {
+        const li = el('li', { role: 'option', id: `cmap-rc-opt-${m.name}`, 'aria-selected': String(m.name === chosen) });
+        li.dataset.name = m.name;
+        const mini = el('span', { class: 'cmap-mini' });
+        mini.innerHTML = stripSvg(base(m), m.kind === 'qualitative');
+        li.append(mini, el('span', { class: 'cmap-rc-opt-name' }, m.name));
+        // mousedown, not click, so the input keeps the focus.
+        li.addEventListener('mousedown', (e) => { e.preventDefault(); choose(m.name); });
+        return li;
+      };
+
+      // Name matches first that start with the text, then any that contain it.
+      function fill(text) {
+        const q = text.trim().toLowerCase().replace(/_r$/, '');
+        list.replaceChildren();
+        options = [];
+        if (!q) {
+          for (const [group, title] of GROUPS) {
+            const maps = data.maps.filter((m) => m.group === group);
+            if (!maps.length) continue;
+            list.append(el('li', { class: 'cmap-rc-group', role: 'presentation' }, title));
+            for (const m of maps) options.push(list.appendChild(optionFor(m)));
+          }
+        } else {
+          const lower = (m) => m.name.toLowerCase();
+          const hits = [
+            ...data.maps.filter((m) => lower(m).startsWith(q)),
+            ...data.maps.filter((m) => !lower(m).startsWith(q) && lower(m).includes(q)),
+          ];
+          for (const m of hits) {
+            const li = optionFor(m);
+            li.append(el('span', { class: 'cmap-rc-opt-group' }, groupOf.get(m.group) || ''));
+            options.push(list.appendChild(li));
+          }
+          if (!hits.length) list.append(el('li', { class: 'cmap-rc-none', role: 'presentation' }, 'No colormap matches'));
+        }
+        const at = options.findIndex((o) => o.dataset.name === chosen);
+        setActive(q ? 0 : at);
+      }
+
+      function setActive(i) {
+        options[active]?.classList.remove('active');
+        active = options.length ? Math.max(-1, Math.min(options.length - 1, i)) : -1;
+        const o = options[active];
+        if (o) {
+          o.classList.add('active');
+          input.setAttribute('aria-activedescendant', o.id);
+          o.scrollIntoView({ block: 'nearest' });
+        } else input.removeAttribute('aria-activedescendant');
+      }
+
+      function open(text) {
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        fill(text);
+      }
+
+      function close() {
+        list.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+      }
+
+      function choose(name) {
+        const typedReversed = /_r$/i.test(input.value.trim()) && !mapByName.has(input.value.trim());
+        const changed = name !== chosen || (typedReversed && !revBox.checked);
+        chosen = name;
+        if (typedReversed) revBox.checked = true;
+        input.value = name;
+        close();
+        if (changed) render();
+      }
+
+      // An exact name (any case, with or without _r) counts as chosen.
+      function exact(text) {
+        const q = text.trim().toLowerCase();
+        const find = (n) => data.maps.find((m) => m.name.toLowerCase() === n);
+        return find(q) || find(q.replace(/_r$/, ''));
+      }
+
+      // Focused with the current name in it: show all, so the list is a menu.
+      input.addEventListener('focus', () => { input.select(); open(''); });
+      input.addEventListener('click', () => { if (list.hidden) open(''); });
+      input.addEventListener('input', () => open(input.value));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (list.hidden) { open(input.value === chosen ? '' : input.value); return; }
+          setActive(active + (e.key === 'ArrowDown' ? 1 : -1));
+        } else if (e.key === 'Enter') {
+          if (list.hidden) return;
+          e.preventDefault();
+          const m = options[active] ? mapByName.get(options[active].dataset.name) : exact(input.value);
+          if (m) choose(m.name);
+        } else if (e.key === 'Escape') {
+          if (list.hidden) return;
+          e.preventDefault();
+          input.value = chosen;
+          close();
+        }
+      });
+      input.addEventListener('blur', () => {
+        const m = exact(input.value);
+        if (m) choose(m.name);
+        else { input.value = chosen; close(); }
+      });
+      return { box, input };
+    }
+
     function field(label, title, ...inputs) {
       const f = el('div', { class: 'cmap-rc-field', title });
       const row = el('div', { class: 'cmap-rc-input' });
@@ -136,17 +257,19 @@
     }
 
     const newMap = () => {
-      const m = mapByName.get(pick.value) || mapByName.get(DEFAULT_MAP);
+      const m = mapByName.get(chosen) || mapByName.get(DEFAULT_MAP);
       return { name: m.name, kind: m.kind, rgbs: base(m) };
     };
     const tolerance = () => Number(tol.value);
     const bandWidth = () => Number(band.value) / 100;
-    const mapLabel = () => `${pick.value}${revBox.checked ? '_r' : ''}`;
+    const mapLabel = () => `${chosen}${revBox.checked ? '_r' : ''}`;
 
     function setView(v) {
       view = v;
       for (const b of viewBtns) b.setAttribute('aria-pressed', String(b.dataset.view === v));
       fig.redraw();
+      // The highlight's colors are the complements of what is shown.
+      if (hoverT != null) highlight(hoverT, true);
     }
 
     // ---- calibration ----
@@ -219,6 +342,7 @@
       out.width = img.width;
       out.height = img.height;
       out.getContext('2d').putImageData(new ImageData(r.data, img.width, img.height), 0, 0);
+      outData = r.data;
       oldStrip.innerHTML = stripSvg(samples.map((s) => roundRgb(s.rgb)), false);
       const m = newMap();
       const opt = { reversed: revBox.checked, flip };
@@ -260,11 +384,22 @@
       }
       if (!overlayData || overlayData.width !== res.width || overlayData.height !== res.height) overlayData = new ImageData(res.width, res.height);
       const px = new Uint32Array(overlayData.data.buffer);
-      // Little-endian RGBA as one word.
-      const on = (255 << 24) | (FLASH[2] << 16) | (FLASH[1] << 8) | FLASH[0];
       const calm = reduceMotion();
+      // Little-endian RGBA as one word.
       const dim = (180 << 24) | (255 << 16) | (255 << 8) | 255; // white veil over the rest
-      for (let i = 0; i < n; i++) px[i] = mask[i] ? (calm ? 0 : on) : (calm ? dim : 0);
+      if (calm) {
+        for (let i = 0; i < n; i++) px[i] = mask[i] ? 0 : dim;
+      } else {
+        // Each pixel flashes to the complement (255 − r, 255 − g, 255 − b) of the color shown
+        // under it, which stands out whatever the map.
+        const shown = view === 'recolored' && outData ? outData : fig.img.data;
+        const w = res.width;
+        for (let j = 0; j < n; j++) {
+          if (!mask[j]) { px[j] = 0; continue; }
+          const o = ((((j / w) | 0) * step) * index.width + (j % w) * step) * 4;
+          px[j] = (255 << 24) | ((255 - shown[o + 2]) << 16) | ((255 - shown[o + 1]) << 8) | (255 - shown[o]);
+        }
+      }
       overlay.getContext('2d').putImageData(overlayData, 0, 0);
       overlay.classList.toggle('flash', !calm);
       overlay.classList.add('on');
@@ -317,7 +452,6 @@
       });
     }
 
-    pick.addEventListener('change', render);
     revBox.addEventListener('change', render);
     tol.addEventListener('input', () => { tolOut.textContent = tol.value; render(); });
     band.addEventListener('input', () => {
