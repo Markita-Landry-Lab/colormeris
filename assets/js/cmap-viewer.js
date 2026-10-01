@@ -78,7 +78,6 @@
     const mapByName = new Map(data.maps.map((m) => [m.name, m]));
     // Maps chosen for comparison, in the order they were added. Lives in ?compare=.
     const selected = CM.parseCompare(new URLSearchParams(location.search).get('compare'), data.maps.map((m) => m.name));
-    let cmpMetric = 'L';
     let cmpSort = null; // { id, dir } for the numbers table; null = selection order
 
     // ---- colors per view (computed once per map and direction) ----
@@ -306,9 +305,11 @@
 
     // ---- plots ----
 
-    const PW = 420;
-    const PH = 200;
+    // The four plots sit in one row, each with a square plot box (as
+    // matplotlib's set_box_aspect(1)): PH − M.t − M.b equals PW − M.l − M.r.
     const M = { l: 42, r: 12, t: 10, b: 34 };
+    const PW = 240;
+    const PH = PW - M.l - M.r + M.t + M.b;
     const px = (t) => M.l + t * (PW - M.l - M.r);
 
     // A "nice" axis maximum and tick step for values from 0 to `max`.
@@ -696,13 +697,14 @@
     // ---- comparison ----
 
     const MAX_CMP = CM.COMPARE_MAX;
-    const CP = { W: 760, H: 300, m: { l: 46, r: 112, t: 12, b: 36 } };
-    const LABEL_GAP = 11;
+    // Same size and square plot box as the plots of one map, so the four
+    // quantities sit in one row; names are in the shared legend below.
+    const CP = { W: PW, H: PH, m: M };
     const CMP_METRICS = [
       { key: 'L', label: 'Lightness L*', yLabel: 'L*' },
-      { key: 'step', label: 'Perceptual step ΔE2000', tab: 'Step ΔE2000', yLabel: 'ΔE2000 per step' },
-      { key: 'C', label: 'Chroma C*', tab: 'Chroma C*', yLabel: 'C*' },
-      { key: 'h', label: 'Hue h°', tab: 'Hue h°', yLabel: 'h (°)' },
+      { key: 'step', label: 'Perceptual step ΔE2000', yLabel: 'ΔE2000 per step' },
+      { key: 'C', label: 'Chroma C*', yLabel: 'C*' },
+      { key: 'h', label: 'Hue h°', yLabel: 'h (°)' },
     ];
     const cmp = {}; // elements of the compare panel, set by buildCompare
 
@@ -727,31 +729,20 @@
       return { yMax: axis.top, yTicks: axis.ticks };
     }
 
-    // Label y positions that keep `gap` between neighbors inside [lo, hi]:
-    // sort by y, push down where they touch, then pull the overflow back up.
-    function spreadLabels(ys, gap, lo, hi) {
-      const order = ys.map((y, i) => i).sort((a, b) => ys[a] - ys[b]);
-      const out = ys.slice();
-      let prev = lo - gap;
-      for (const i of order) { out[i] = Math.max(ys[i], prev + gap); prev = out[i]; }
-      let next = hi + gap;
-      for (let k = order.length - 1; k >= 0; k--) { const i = order[k]; out[i] = Math.min(out[i], next - gap); next = out[i]; }
-      return out;
-    }
-
     function miniStrip(map) {
       const d = el('span', { class: 'cmap-mini' });
       d.innerHTML = stripSvg(viewData(map, 'orig').colors, map.kind === 'qualitative');
       return d;
     }
 
-    function comparePlot(list, key) {
+    // One plot of one quantity with every compared map. `setActive(i)`
+    // highlights map i in all four plots and the legend.
+    function compareFigure(list, metric, setActive) {
       const { W, H, m } = CP;
-      const metric = CMP_METRICS.find((x) => x.key === key);
+      const key = metric.key;
       const series = list.map((map) => ({ map, ...cmpSeries(map, key) }));
-      const shown = series.filter((s) => s.points);
       const svg = svgEl('svg', {
-        class: 'cmap-plot cmap-plot-wide', viewBox: `0 0 ${W} ${H}`, role: 'img',
+        class: 'cmap-plot', viewBox: `0 0 ${W} ${H}`, role: 'img',
         'aria-label': `${metric.label} of ${list.map((x) => x.name).join(', ')} against position`,
       });
       const { px, py } = drawAxes(svg, { W, H, m, ...cmpAxis(key, series), xTicks: POS_TICKS, xLabel: 'Position', yLabel: metric.yLabel });
@@ -764,39 +755,9 @@
         return g;
       });
 
-      // Name at the right end of each line; spread apart when they would overlap.
-      const ends = shown.map((s) => s.points.filter((p) => p.y != null).pop());
-      const want = ends.map((p) => py(p.y));
-      const placed = spreadLabels(want, LABEL_GAP, m.t + 4, H - m.b - 2);
-      shown.forEach((s, k) => {
-        const g = groups[series.indexOf(s)];
-        const x0 = px(1);
-        if (Math.abs(placed[k] - want[k]) > 1.5) {
-          g.append(svgEl('line', { class: 'cmap-leader', x1: x0 + 1, y1: want[k], x2: x0 + 8, y2: placed[k] }));
-        }
-        g.append(svgText('cmap-label', { x: x0 + 10, y: placed[k] + 3.5 }, s.map.name));
-      });
-
       const guide = svgEl('line', { class: 'cmap-guide', y1: m.t, y2: H - m.b, visibility: 'hidden' });
-      const ring = svgEl('circle', { class: 'cmap-ring', r: 5, visibility: 'hidden' });
+      const ring = svgEl('circle', { class: 'cmap-ring', r: 4, visibility: 'hidden' });
       svg.append(guide, ring);
-
-      const legend = el('ul', { class: 'cmap-legend' });
-      const lis = series.map((s) => {
-        const li = el('li');
-        li.append(el('span', { class: 'cmap-legend-name' }, s.map.name), miniStrip(s.map));
-        legend.append(li);
-        return li;
-      });
-      const setActive = (gi) => {
-        svg.classList.toggle('has-active', gi >= 0);
-        groups.forEach((g, i) => g && g.classList.toggle('active', i === gi));
-        lis.forEach((li, i) => li.classList.toggle('active', i === gi));
-      };
-      lis.forEach((li, i) => {
-        li.addEventListener('pointerenter', () => setActive(i));
-        li.addEventListener('pointerleave', () => setActive(-1));
-      });
 
       // The line closest to the pointer (by y), at the sample closest in x.
       svg.addEventListener('pointermove', (e) => {
@@ -834,18 +795,45 @@
         hideTip();
       });
 
-      const wrap = el('div', { class: 'cmap-plot-wrap' });
-      const scroll = el('div', { class: 'cmap-plot-scroll' });
-      scroll.append(svg);
-      wrap.append(scroll, legend);
-      const notes = [];
-      if (series.some((s) => s.map.kind === 'qualitative')) {
-        notes.push('Qualitative maps have no order; their colors are spread evenly from 0 to 1 as dots.');
+      const caps = {
+        step: 'A flat line means equal steps in the data look like equal steps in color.',
+        h: `Colors with C* < ${HUE_MIN_CHROMA} (grays) are left out, since their hue is not defined.`,
+      };
+      return { fig: figure(metric.label, svg, caps[key]), svg, groups };
+    }
+
+    // The four quantities side by side, with one legend for all of them.
+    function comparePlot(list) {
+      const figs = [];
+      const legend = el('ul', { class: 'cmap-legend' });
+      const lis = list.map((map, i) => {
+        const li = el('li');
+        li.append(el('span', { class: 'cmap-legend-name' }, map.name), miniStrip(map));
+        li.addEventListener('pointerenter', () => setActive(i));
+        li.addEventListener('pointerleave', () => setActive(-1));
+        legend.append(li);
+        return li;
+      });
+      function setActive(gi) {
+        for (const f of figs) {
+          f.svg.classList.toggle('has-active', gi >= 0);
+          f.groups.forEach((g, i) => g && g.classList.toggle('active', i === gi));
+        }
+        lis.forEach((li, i) => li.classList.toggle('active', i === gi));
       }
-      const skipped = series.filter((s) => !s.points).map((s) => s.map.name);
-      if (skipped.length) notes.push(`No step plot for ${skipped.join(', ')} (qualitative).`);
-      if (key === 'h') notes.push(`Colors with C* < ${HUE_MIN_CHROMA} (grays) are left out, since their hue is not defined.`);
-      if (notes.length) wrap.append(el('p', { class: 'cmap-fig-cap muted' }, notes.join(' ')));
+      const grid = el('div', { class: 'cmap-plots' });
+      for (const metric of CMP_METRICS) {
+        const f = compareFigure(list, metric, setActive);
+        figs.push(f);
+        grid.append(f.fig);
+      }
+
+      const wrap = el('div', { class: 'cmap-plot-wrap' });
+      wrap.append(grid, legend);
+      const qual = list.filter((map) => map.kind === 'qualitative').map((map) => map.name);
+      if (qual.length) {
+        wrap.append(el('p', { class: 'cmap-fig-cap muted' }, `Qualitative maps (${qual.join(', ')}) have no order: their colors are spread evenly from 0 to 1 as dots, and they have no step plot.`));
+      }
       return wrap;
     }
 
@@ -992,7 +980,7 @@
       cmp.strips.replaceChildren(box);
     }
 
-    const renderComparePlot = (list) => cmp.plot.replaceChildren(comparePlot(list, cmpMetric));
+    const renderComparePlot = (list) => cmp.plot.replaceChildren(comparePlot(list));
 
     function renderCompareTable(list) {
       const wrap = el('div', { class: 'cmap-table-wrap' });
@@ -1096,18 +1084,8 @@
       const strips = el('div');
       const plot = el('div');
       const table = el('div');
-      const tabs = el('div', { class: 'cmap-tabs', role: 'group', 'aria-label': 'Plot quantity' });
-      for (const mt of CMP_METRICS) {
-        const b = el('button', { type: 'button', 'aria-pressed': String(mt.key === cmpMetric), title: mt.label }, mt.tab || mt.label);
-        b.addEventListener('click', () => {
-          cmpMetric = mt.key;
-          for (const x of tabs.children) x.setAttribute('aria-pressed', String(x === b));
-          renderComparePlot(selected.map((n) => mapByName.get(n)));
-        });
-        tabs.append(b);
-      }
       const h3 = (t) => el('h3', {}, t);
-      sec.append(head, h3('Colormaps'), strips, h3('Profiles'), tabs, plot, h3('Numbers'), table);
+      sec.append(head, h3('Colormaps'), strips, h3('Profiles'), plot, h3('Numbers'), table);
       Object.assign(cmp, { sec, count, strips, plot, table });
       return sec;
     }

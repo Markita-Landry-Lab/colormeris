@@ -689,15 +689,12 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-tabs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
 .cmap-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cmap-plot-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.cmap-plot-scroll { overflow-x: auto; }
 /* A thin outline in a mid tone: light segments (white centers of diverging maps)
    stay visible on the surface, and crossing lines stay apart. */
 .cmap-plot .cmap-halo { stroke: color-mix(in srgb, var(--text) 40%, var(--surface)); stroke-width: 5; stroke-linecap: round; }
 .cmap-plot .cmap-pt-halo { stroke: var(--surface); stroke-width: 0.8; }
 .cmap-plot .cmap-series { transition: opacity 0.12s; }
 .cmap-plot.has-active .cmap-series:not(.active) { opacity: 0.2; }
-.cmap-plot .cmap-label { fill: var(--text); font-size: 11px; font-family: var(--font); }
-.cmap-plot .cmap-leader { stroke: var(--muted); stroke-width: 0.8; }
 .cmap-plot .cmap-ring { fill: none; stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
 .cmap-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
 .cmap-legend li { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px; }
@@ -724,7 +721,7 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-nums th[aria-sort="descending"] .cmap-th::after { content: " ▼"; font-size: 9px; }
 
 .cmap-panel { padding: 10px 0 8px 178px; display: flex; flex-direction: column; gap: 8px; }
-.cmap-plots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 920px; }
+.cmap-plots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; max-width: 1180px; }
 .cmap-fig { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .cmap-fig-title { font-size: 12px; font-weight: 600; }
 .cmap-fig-cap { font-size: 11.5px; }
@@ -789,10 +786,15 @@ input.cmap-search { width: 260px; max-width: 100%; }
   .cmap-item { padding: 8px 0; }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 900px) {
+  .cmap-plots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
   .cmap-plots { grid-template-columns: 1fr; }
-  /* Keep the compare plot's text readable; it scrolls sideways inside its box. */
-  .cmap-plot-wide { min-width: 600px; }
+}
+
+@media (max-width: 700px) {
   .cmap-compare { padding: 10px 10px 14px; }
 }
 
