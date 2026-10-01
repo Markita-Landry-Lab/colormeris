@@ -953,10 +953,22 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-notes li { display: contents; }
 .cmap-notes li.muted { display: block; grid-column: 1 / -1; }
 .cmap-notes .cmap-pill { justify-self: start; font-size: 11px; line-height: 17px; padding: 0 6px; cursor: default; }
-/* One figure alone: no subgrid parent to line up with. */
-.cmap-detail-lead { max-width: 340px; display: grid; }
-.cmap-plots-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.cmap-panel .cmap-plots-2 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* All four plots at once as one centered group, with square plot boxes at
+   about their drawn size (160 × 150) so they stay short. One row of four when
+   the detail is wide enough for four 160 px plots, else 2 × 2 (never 3 + 1).
+   Columns are capped, so the group keeps its shape between the steps. */
+.cmap-detail { container-type: inline-size; }
+.cmap-detail .cmap-detail-plots {
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  justify-content: center;
+  gap: 8px 14px;
+}
+@container (min-width: 690px) {
+  .cmap-detail .cmap-detail-plots { grid-template-columns: repeat(4, minmax(0, 180px)); }
+}
+.cmap-detail-plots .cmap-fig-title { font-size: 11.5px; }
+.cmap-fig-title[title] { cursor: help; }
+.cmap-fig-info { color: var(--muted); font-weight: 400; }
 .cmap-fold { border-top: 1px solid var(--border); padding-top: 8px; }
 .cmap-fold > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
 .cmap-fold > summary:hover { color: var(--accent); }

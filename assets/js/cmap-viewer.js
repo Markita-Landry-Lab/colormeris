@@ -358,7 +358,6 @@
     const M = { l: 42, r: 12, t: 10, b: 34 };
     const PW = 240;
     const PH = PW - M.l - M.r + M.t + M.b;
-    const px = (t) => M.l + t * (PW - M.l - M.r);
 
     // A "nice" axis maximum and tick step for values from 0 to `max`.
     function niceAxis(max) {
@@ -421,12 +420,14 @@
     //   points  [{ x, y (null = skip), color: rgb, pos, value }]  value is the tooltip line
     //   mode    'line' (segments in the sample colors) or 'dots'
     //   ref     optional dashed line { x1, y1, x2, y2, label }
-    function linePlot({ map, title, yLabel, xLabel = 'Position', yMax, yTicks, xTicks, points, mode, ref, dotR = 3 }) {
+    //   W, H    size; the defaults give a square plot box (the detail view
+    //           passes a smaller, still square one)
+    function linePlot({ map, title, yLabel, xLabel = 'Position', yMax, yTicks, xTicks, points, mode, ref, dotR = 3, W = PW, H = PH }) {
       const svg = svgEl('svg', {
-        class: 'cmap-plot', viewBox: `0 0 ${PW} ${PH}`, role: 'img',
+        class: 'cmap-plot', viewBox: `0 0 ${W} ${H}`, role: 'img',
         'aria-label': `${title} of ${map.name} against position`,
       });
-      const { py } = drawAxes(svg, { W: PW, H: PH, m: M, yMax, yTicks, xTicks, xLabel, yLabel });
+      const { px, py } = drawAxes(svg, { W, H, m: M, yMax, yTicks, xTicks, xLabel, yLabel });
 
       if (ref) {
         svg.append(svgEl('line', { class: 'cmap-linear', x1: px(ref.x1), y1: py(ref.y1), x2: px(ref.x2), y2: py(ref.y2) }));
@@ -434,12 +435,12 @@
         svg.append(svgText('cmap-linear-label', { x: px(ref.x2) - 4, y: py(ref.y2) + (low ? 14 : -6), 'text-anchor': 'end' }, ref.label));
       }
       drawSeries(svg, { points, mode, dotR }, px, py);
-      const guide = svgEl('line', { class: 'cmap-guide', y1: M.t, y2: PH - M.b, visibility: 'hidden' });
+      const guide = svgEl('line', { class: 'cmap-guide', y1: M.t, y2: H - M.b, visibility: 'hidden' });
       svg.append(guide);
 
       svg.addEventListener('pointermove', (e) => {
         const r = svg.getBoundingClientRect();
-        const x = ((e.clientX - r.left) / r.width * PW - M.l) / (PW - M.l - M.r);
+        const x = ((e.clientX - r.left) / r.width * W - M.l) / (W - M.l - M.r);
         let p = points[0];
         for (const q of points) if (Math.abs(q.x - x) < Math.abs(p.x - x)) p = q;
         guide.setAttribute('x1', px(p.x));
@@ -455,10 +456,18 @@
       return svg;
     }
 
-    function figure(title, svg, caption) {
+    // `compact` puts the caption in a tooltip on the title, to keep plots short.
+    function figure(title, svg, caption, { compact = false } = {}) {
       const fig = el('div', { class: 'cmap-fig' });
-      fig.append(el('div', { class: 'cmap-fig-title' }, title), svg);
-      if (caption) fig.append(el('div', { class: 'cmap-fig-cap muted' }, caption));
+      const head = el('div', { class: 'cmap-fig-title' }, title);
+      fig.append(head, svg);
+      if (caption && compact) {
+        head.title = caption;
+        head.append(el('span', { class: 'cmap-fig-info', 'aria-hidden': 'true' }, ' ⓘ'));
+        svg.setAttribute('aria-description', caption);
+      } else if (caption) {
+        fig.append(el('div', { class: 'cmap-fig-cap muted' }, caption));
+      }
       return fig;
     }
 

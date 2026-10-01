@@ -4,15 +4,18 @@
   // The detail view of one colormap in the viewer (colormaps.html). On wide
   // screens it opens in a drawer at the right, so the list stays in place; on
   // narrower ones it opens under its row. One map at a time. The rating
-  // sentences and the L* plot come first; the other plots, the numbers per
-  // view, where values get confused and the references are folded.
+  // sentences and the four plots (short, captions in tooltips) come first;
+  // the numbers, where values get confused and the references are folded.
 
   const WIDE = '(min-width: 1200px)';
+  // Plot height in viewBox units, drawn at 1:1: short enough for the four
+  // plots to fit above the folds. The width follows, for a square plot box.
+  const PLOT_H = 150;
 
   function setupCmapDetail(ctx) {
     const {
       el, pct, VIEWS, GLYPH, state, items, metrics, viewData, sepOf, profile, stepPoints, niceAxis,
-      linePlot, figure, POS_TICKS, HUE_MIN_CHROMA, stripSvg, makeStrip, refNumber, refItem, hideTip,
+      linePlot, figure, POS_TICKS, M, HUE_MIN_CHROMA, stripSvg, makeStrip, refNumber, refItem, hideTip,
     } = ctx;
     const wide = window.matchMedia(WIDE);
     const drawer = el('aside', { class: 'cmap-drawer', id: 'cmap-drawer', hidden: '', 'aria-label': 'Colormap details' });
@@ -25,7 +28,8 @@
       const { colors, Ls, m, C, h, n, qual, xOf, pts } = profile(map);
       const mode = qual ? 'dots' : 'line';
       const dotR = qual ? 4.5 : 1.8;
-      let xTicks = POS_TICKS;
+      // Three position ticks: five crowd the small square plots.
+      let xTicks = POS_TICKS.filter((t) => t.x % 0.5 === 0);
       let xLabel = 'Position';
       if (qual) {
         const every = Math.ceil(n / 10);
@@ -34,11 +38,14 @@
         xLabel = 'Color number';
       }
       const out = {};
+      const H = PLOT_H;
+      const W = PLOT_H - M.t - M.b + M.l + M.r; // plot box as wide as it is tall
+      const opt = { compact: true };
       const lin = qual ? null : { x1: 0, y1: Ls[0], x2: 1, y2: Ls[n - 1], label: 'linear' };
       out.L = figure('Lightness L*', linePlot({
         map, title: 'Lightness L*', yLabel: 'L*', yMax: 100, yTicks: [0, 20, 40, 60, 80, 100], xTicks, xLabel,
-        points: pts(Ls, (v) => `L* = ${v.toFixed(1)}`), mode, ref: lin, dotR,
-      }), qual ? null : 'A straight rising or falling line reads best, in color and in grayscale.');
+        points: pts(Ls, (v) => `L* = ${v.toFixed(1)}`), mode, ref: lin, dotR, W, H,
+      }), qual ? null : 'A straight rising or falling line reads best, in color and in grayscale.', opt);
 
       if (!qual) {
         const stepPts = stepPoints(map, { colors, n });
@@ -46,21 +53,21 @@
         const axis = niceAxis(Math.max(...stepPts.map((p) => p.y)) * 1.05);
         const mean = m.stepStats.mean;
         out.step = figure('Perceptual step ΔE2000', linePlot({
-          map, title: 'Perceptual step ΔE2000', yLabel: `ΔE2000 per 1/${k} step`, yMax: axis.top, yTicks: axis.ticks, xTicks,
-          points: stepPts, mode: 'line', ref: { x1: 0, y1: mean, x2: 1, y2: mean, label: 'mean' },
-        }), 'A flat line means equal steps in the data look like equal steps in color.');
+          map, title: 'Perceptual step ΔE2000', yLabel: 'ΔE2000 per step', yMax: axis.top, yTicks: axis.ticks, xTicks,
+          points: stepPts, mode: 'line', ref: { x1: 0, y1: mean, x2: 1, y2: mean, label: 'mean' }, W, H,
+        }), `ΔE2000 between neighbors, in steps of 1/${k} of the map. A flat line means equal steps in the data look like equal steps in color.`, opt);
       }
 
       const cAxis = niceAxis(Math.max(100, Math.max(...C) * 1.05));
       out.C = figure('Chroma C*', linePlot({
         map, title: 'Chroma C*', yLabel: 'C*', yMax: cAxis.top, yTicks: cAxis.ticks, xTicks, xLabel,
-        points: pts(C, (v) => `C* = ${v.toFixed(1)}`), mode, dotR,
-      }));
+        points: pts(C, (v) => `C* = ${v.toFixed(1)}`), mode, dotR, W, H,
+      }), 'Colorfulness: 0 is gray.', opt);
 
       out.h = figure('Hue h°', linePlot({
         map, title: 'Hue h°', yLabel: 'h (°)', yMax: 360, yTicks: [0, 90, 180, 270, 360], xTicks, xLabel,
-        points: pts(h, (v) => `h = ${v.toFixed(0)}°`, (i) => C[i] < HUE_MIN_CHROMA), mode: 'dots', dotR: qual ? 4.5 : 1.8,
-      }), `Hue wraps around at 360°, so it is drawn as dots. Colors with C* < ${HUE_MIN_CHROMA} (grays) are left out, since their hue is not defined.`);
+        points: pts(h, (v) => `h = ${v.toFixed(0)}°`, (i) => C[i] < HUE_MIN_CHROMA), mode: 'dots', dotR: qual ? 4.5 : 1.8, W, H,
+      }), `Hue wraps around at 360°, so it is drawn as dots. Colors with C* < ${HUE_MIN_CHROMA} (grays) are left out, since their hue is not defined.`, opt);
       return out;
     }
 
@@ -239,7 +246,8 @@
       const close = el('button', { type: 'button', class: 'cmap-toggle', 'aria-label': 'Close details', title: 'Close (Esc)' });
       close.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
       close.addEventListener('click', () => api.close({ focus: true }));
-      head.append(title, cmpBtn, close);
+      const expand = el('button', { type: 'button', class: 'btn small subtle' });
+      head.append(title, expand, cmpBtn, close);
 
       // All five views, whatever the list shows; the table below marks pairs on them.
       const stripBox = el('div', { class: 'cmap-detail-strips' });
@@ -261,11 +269,8 @@
       if (qual) notes.append(el('li', { class: 'muted' }, 'Qualitative maps are not rated for uniformity or readability, since their colors have no order.'));
 
       const figs = plotFigs(map);
-      const lead = el('div', { class: 'cmap-detail-lead' });
-      lead.append(figs.L);
-
-      const more = el('div', { class: 'cmap-plots cmap-plots-2' });
-      for (const f of [figs.step, figs.C, figs.h]) if (f) more.append(f);
+      const plots = el('div', { class: 'cmap-plots cmap-detail-plots' });
+      for (const f of [figs.L, figs.step, figs.C, figs.h]) if (f) plots.append(f);
 
       const keys = CM.citeFor(map.name);
       const refs = el('ol', { class: 'cmap-detail-refs' });
@@ -275,11 +280,23 @@
         refs.append(li);
       }
 
-      box.append(head, stripBox, notes, lead,
-        fold('plots', 'More plots: step, chroma, hue', [more, statsList(map)]),
-        fold('views', 'Numbers per view', [viewTable(map, strips)]));
-      if (!qual) box.append(fold('zones', 'Where values get confused', [zones(map)]));
-      if (keys.length) box.append(fold('refs', 'References', [refs]));
+      const fs = [fold('views', 'Numbers: lightness and per view', [statsList(map), viewTable(map, strips)])];
+      if (!qual) fs.push(fold('zones', 'Where values get confused', [zones(map)]));
+      if (keys.length) fs.push(fold('refs', 'References', [refs]));
+      box.append(head, stripBox, notes, plots, ...fs);
+
+      // One button for all folds: it opens them unless they are all open.
+      const sync = () => {
+        const all = fs.every((d) => d.open);
+        expand.textContent = all ? 'Collapse all' : 'Expand all';
+        expand.setAttribute('aria-expanded', String(all));
+      };
+      expand.addEventListener('click', () => {
+        const open = !fs.every((d) => d.open);
+        for (const d of fs) d.open = open;
+      });
+      for (const d of fs) d.addEventListener('toggle', sync);
+      sync();
       return { box, strips, cmpBtn, title };
     }
 
@@ -352,7 +369,9 @@
     };
 
     wide.addEventListener('change', place);
-    window.addEventListener('resize', () => { if (current && !drawer.hidden) place(); });
+    // Also on resize: the media query alone can miss a change (some emulated
+    // viewports), and the drawer's top follows the top bar's height.
+    window.addEventListener('resize', () => { if (current) place(); });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || !current || e.defaultPrevented) return;
       if (e.target.closest?.('input, select, textarea') || document.querySelector(':popover-open')) return;
