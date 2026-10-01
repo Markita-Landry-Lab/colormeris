@@ -371,8 +371,8 @@ table.ticks[hidden] { display: none; }
 .viewbar .btn.small { padding: 0 10px; }
 .viewbar input.num { width: 52px; padding: 2px 6px; }
 .viewbar select { width: auto; padding: 2px 6px; }
-.viewbar .check { height: 28px; padding: 0 4px 0 6px; font-size: 12px; }
 #page-count { color: var(--muted); }
+.viewbar input.zoom-level { width: 58px; height: 28px; min-height: 28px; padding: 2px 4px; text-align: center; font-size: 12px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .source-info { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 160px; }
 
 .statusbar {

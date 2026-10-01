@@ -68,7 +68,7 @@
           <li><b>Regions</b>: draw ellipses (Shift = circle), rectangles (Shift = square) or polygons. A region drawn in one box is copied into every box; drag a copy to nudge it in that box only.</li>
           <li>Grayscale pixels (the photo) count as no signal. Read the results table, download the CSV, or export the project zip.</li>
         </ol>
-        <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes. Everything runs in your browser; files are never uploaded, except page images sent to OpenRouter when you run the agent.</p>
+        <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, ← → to flip PDF pages, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes. Everything runs in your browser; files are never uploaded, except page images sent to OpenRouter when you run the agent.</p>
       </details>
 
       <section class="card agent" id="sec-agent" data-tool="heatmap">
@@ -314,10 +314,10 @@
       <div class="viewbar" id="view-tools" hidden>
         <span id="source-info" class="source-info"></span>
         <span id="pdf-controls" class="viewbar-group" hidden>
-          <button class="btn icon" id="page-prev" aria-label="Previous page">‹</button>
+          <button class="btn icon" id="page-prev" aria-label="Previous page" title="Previous page (←)">‹</button>
           <input id="page-input" type="number" min="1" value="1" class="num" aria-label="Page">
           <span id="page-count" class="muted small"></span>
-          <button class="btn icon" id="page-next" aria-label="Next page">›</button>
+          <button class="btn icon" id="page-next" aria-label="Next page" title="Next page (→)">›</button>
           <select id="scale-select" title="Resolution" aria-label="Resolution">
             <option value="1">72 dpi (1×)</option>
             <option value="2">144 dpi (2×)</option>
@@ -329,9 +329,11 @@
         </span>
         <span class="viewbar-group zoom-group">
           <button class="btn icon" id="zoom-out" title="Zoom out (−)">−</button>
+          <input id="zoom-level" class="zoom-level" type="text" inputmode="decimal" value="100%" title="Zoom (100% = actual size); type a value and press Enter" aria-label="Zoom percent">
           <button class="btn icon" id="zoom-in" title="Zoom in (+)">+</button>
           <button class="btn small" id="zoom-fit" title="Fit (F)">Fit</button>
-          <label class="check small"><input id="toggle-overlay" type="checkbox" checked> Overlay</label>
+          <button class="btn small" id="toggle-crosshair" title="Crosshair lines across the canvas (C)" aria-pressed="false">Crosshair</button>
+          <button class="btn small active" id="toggle-overlay" title="Show the grid and colorbar overlay" aria-pressed="true">Overlay</button>
         </span>
       </div>
       <footer class="statusbar" id="statusbar">

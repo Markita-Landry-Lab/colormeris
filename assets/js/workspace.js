@@ -158,7 +158,10 @@
       changed();
     },
     onHover,
-    drawOverlay,
+    drawOverlay: (ctx, v) => {
+      drawOverlay(ctx, v);
+      showZoom(v);
+    },
     wantsLoupe: () => !!app.mode,
     wantsDrag: () => !!tool.wantsDrag?.(),
     onDragStart: (p, e) => tool.onDragStart?.(p, e),
@@ -587,6 +590,8 @@
     for (const t of Object.values(tools)) for (const id of t.sections || []) $(id).hidden = true;
     for (const id of ['sec-panels', 'sec-grid', 'sec-colorbar', 'sec-settings', ...(tool.sections || [])]) $(id).hidden = !loaded;
     $('empty-state').hidden = loaded;
+    // The agent card needs a file; its tool (data-tool) still decides where it shows.
+    $('sec-agent').hidden = !loaded || $('sec-agent').dataset.tool !== tool.kind;
     $('view-tools').hidden = !loaded;
     $('btn-export-zip').disabled = !loaded;
     $('btn-undo').disabled = !app.history.length;
@@ -915,6 +920,23 @@
     }
   }
 
+  // 100% is the page's true size: a PDF rendered at 3× shows 100% at viewer scale 1/3.
+  function showZoom(v) {
+    const el = $('zoom-level');
+    if (document.activeElement === el) return; // don't overwrite what is being typed
+    const pct = `${Math.round(v.scale * (app.project?.source?.renderScale || 1) * 100)}%`;
+    if (el.value !== pct) el.value = pct;
+  }
+  // Typed zoom: "150", "150%" or "1.5x"; zooms around the view's center. Bad input reverts.
+  function applyZoomInput() {
+    const el = $('zoom-level');
+    const m = el.value.trim().match(/^(\d+(?:\.\d+)?)\s*(%|x|×)?$/i);
+    const pct = m ? Number(m[1]) * (/x|×/i.test(m[2] || '') ? 100 : 1) : NaN;
+    if (pct > 0 && viewer.source) viewer.zoomBy(pct / 100 / (app.project.source.renderScale || 1) / viewer.scale);
+    el.value = '';
+    showZoom(viewer);
+  }
+
   // Switch the view to another PDF page. Panels stay with the page they were
   // made on; the new page shows its own panels (or a fresh one).
   async function goToPage(page, { keepActive = false } = {}) {
@@ -1181,6 +1203,12 @@
   $('btn-export-zip').addEventListener('click', exportZip);
 
   // Source
+  $('zoom-level').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('zoom-level').value = ''; // cancel: empty input reverts on blur
+    if (e.key === 'Enter' || e.key === 'Escape') $('zoom-level').blur();
+  });
+  $('zoom-level').addEventListener('blur', applyZoomInput);
+  $('zoom-level').addEventListener('focus', () => $('zoom-level').select());
   $('page-prev').addEventListener('click', () => goToPage(currentPage() - 1));
   $('page-next').addEventListener('click', () => goToPage(currentPage() + 1));
   $('page-input').addEventListener('change', (e) => goToPage(Number(e.target.value)));
@@ -1281,8 +1309,24 @@
   $('zoom-in').addEventListener('click', () => viewer.zoomBy(1.25));
   $('zoom-out').addEventListener('click', () => viewer.zoomBy(0.8));
   $('zoom-fit').addEventListener('click', () => viewer.fit());
-  $('toggle-overlay').addEventListener('change', (e) => {
-    app.showOverlay = e.target.checked;
+  // The crosshair choice is a per-browser convenience; storage may be unavailable.
+  function setCrosshair(on) {
+    viewer.crosshair = on;
+    $('toggle-crosshair').classList.toggle('active', on);
+    $('toggle-crosshair').setAttribute('aria-pressed', String(on));
+    try {
+      localStorage.setItem('colormeris.crosshair', on ? '1' : '0');
+    } catch {}
+    viewer.requestDraw();
+  }
+  try {
+    if (localStorage.getItem('colormeris.crosshair') === '1') setCrosshair(true);
+  } catch {}
+  $('toggle-crosshair').addEventListener('click', () => setCrosshair(!viewer.crosshair));
+  $('toggle-overlay').addEventListener('click', () => {
+    app.showOverlay = !app.showOverlay;
+    $('toggle-overlay').classList.toggle('active', app.showOverlay);
+    $('toggle-overlay').setAttribute('aria-pressed', String(app.showOverlay));
     viewer.requestDraw();
   });
 
@@ -1316,6 +1360,12 @@
     else if (k === 'g') setMode(app.mode?.type === 'grid' ? null : 'grid');
     else if (k === 'b') $('bar-place').click();
     else if (k === 't') setMode(app.mode?.type === 'tick' ? null : 'tick');
+    else if (k === 'c') setCrosshair(!viewer.crosshair);
+    // Left/right flip pages when there are several (the page controls are shown).
+    else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !$('pdf-controls').hidden) {
+      e.preventDefault();
+      goToPage(currentPage() + (e.key === 'ArrowRight' ? 1 : -1));
+    }
   });
 
   window.addEventListener('beforeunload', (e) => {

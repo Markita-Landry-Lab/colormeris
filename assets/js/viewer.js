@@ -32,6 +32,7 @@
       this.oy = 0;
       this.pointer = null;
       this.hover = null;
+      this.crosshair = false; // full-canvas guide lines through the pointer
       this.spaceDown = false;
       this.dirty = false;
 
@@ -218,7 +219,31 @@
       ctx.imageSmoothingEnabled = this.scale < 2;
       ctx.drawImage(this.source, this.ox, this.oy, this.source.width * this.scale, this.source.height * this.scale);
       this.cb.drawOverlay?.(ctx, this);
+      this.drawCrosshair(ctx);
       this.drawLoupe();
+    }
+
+    // Screen-space lines across the whole canvas: black with a white border,
+    // so they stay visible on any figure colour. Half-pixel offsets keep them crisp.
+    drawCrosshair(ctx) {
+      if (!this.crosshair || !this.hover) return;
+      const w = this.container.clientWidth;
+      const h = this.container.clientHeight;
+      const x = Math.round(this.hover.sx) + 0.5;
+      const y = Math.round(this.hover.sy) + 0.5;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#000';
+      ctx.stroke();
+      ctx.restore();
     }
 
     drawLoupe() {
