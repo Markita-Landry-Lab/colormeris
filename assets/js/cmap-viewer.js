@@ -1,12 +1,13 @@
 (function (CM) {
   'use strict';
 
-  // The colormap viewer page (colormaps.html), in three tabs:
+  // The colormap viewer page (colormaps.html), in four tabs:
   //   Browse    every colormap as five vector SVG strips (as seen, three
   //             color-vision-deficiency simulations, grayscale) with rating
   //             columns; one map at a time opens in the detail view (cmap-detail.js)
   //   Compare   up to 10 maps side by side (cmap-compare.js)
   //   Identify  find the colormap of a figure (cmap-identify-ui.js)
+  //   Recolor   redraw a figure in another colormap (cmap-recolor-ui.js)
   // The tab, the open map and the comparison live in the URL. The data comes
   // from cmap-data.js, so the page needs no fetch and works from file://.
 
@@ -855,7 +856,7 @@
 
     // ---- tabs ----
 
-    const TAB_TITLES = { browse: 'Browse', compare: 'Compare', identify: 'Identify' };
+    const TAB_TITLES = { browse: 'Browse', compare: 'Compare', identify: 'Identify', recolor: 'Recolor' };
     const tabLinks = new Map();
 
     function buildTabs() {
@@ -887,6 +888,7 @@
       browse.hidden = !browsing;
       compare.sec.hidden = tab !== 'compare';
       identify.sec.hidden = tab !== 'identify';
+      recolor.sec.hidden = tab !== 'recolor';
       hideTip();
       detail.place();
       compare.syncTray();
@@ -956,7 +958,7 @@
     // the reader would jump. We remember what is at the top of the visible
     // area (below the sticky bar) and put it back there after each resize.
     const ANCHORS = '.cmap-item > .cmap-row, .cmap-panel .cmap-detail > *, .cmap-section > summary, .cmap-sub > h3, '
-      + '.cmap-compare-head, .cmap-compare-body > *, .cmap-identify > *, .cmap-about';
+      + '.cmap-compare-head, .cmap-compare-body > *, .cmap-identify > *, .cmap-recolor > *, .cmap-about';
 
     // Above 820px only the page pane scrolls; below it the document does.
     const paneScrolls = () => getComputedStyle(root).overflowY === 'auto';
@@ -1051,10 +1053,12 @@
       setCompared: (name, on) => compare.setCompared(name, on),
       onCompareChange: () => { syncTabs(); detail.syncCompare(); },
       openDetail: (name) => detail.open(name),
+      recolorFigure: (file, line) => { goTab('recolor'); recolor.open(file, line); },
     };
     const detail = CM.setupCmapDetail(ctx);
     const compare = CM.setupCmapCompare(ctx);
     const identify = CM.setupCmapIdentify(ctx);
+    const recolor = CM.setupCmapRecolor(ctx);
 
     root.replaceChildren();
     const inner = el('div', { class: 'cmap-inner' });
@@ -1095,7 +1099,7 @@
     const empty = el('p', { class: 'muted', hidden: '' }, 'No colormap matches your search.');
     browse.append(empty);
     const footer = buildFooter();
-    inner.append(top, browse, compare.sec, identify.sec, footer);
+    inner.append(top, browse, compare.sec, identify.sec, recolor.sec, footer);
     root.append(inner, detail.drawer, compare.tray);
     for (const [btn, pop] of popovers) anchorPopover(btn, pop);
 

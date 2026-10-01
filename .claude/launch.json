@@ -4,13 +4,31 @@
     {
       "name": "colormeris",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8000", "--bind", "127.0.0.1"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8000",
+        "--bind",
+        "127.0.0.1"
+      ],
       "port": 8000
+    },
+    {
+      "name": "colormeris-alt",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "exec python3 -m http.server \"${PORT:-8002}\" --bind 127.0.0.1"
+      ],
+      "port": 8002,
+      "autoPort": true
     },
     {
       "name": "openrouter-proxy",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/openrouter-proxy.mjs"],
+      "runtimeArgs": [
+        "scripts/openrouter-proxy.mjs"
+      ],
       "port": 8787
     }
   ]

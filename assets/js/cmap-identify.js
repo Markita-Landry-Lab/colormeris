@@ -188,5 +188,5 @@
     };
   }
 
-  Object.assign(CM, { identifyColorbar, identifyColors, matchLevel, MATCH_LEVELS, suggestColormap });
+  Object.assign(CM, { identifyColorbar, identifyColors, matchLevel, MATCH_LEVELS, suggestColormap, cmapColorAt: colorAt });
 })((globalThis.Colormeris ??= {}));

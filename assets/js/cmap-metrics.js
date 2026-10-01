@@ -295,10 +295,10 @@
   }
 
   // What the viewer opens on, from its URL: the tab (#browse, #compare,
-  // #identify), the map whose details are open (?map=) and the compared maps
+  // #identify, #recolor), the map whose details are open (?map=) and the compared maps
   // (?compare=). Other hashes (#ref-…) leave the tab alone (tab: null). Old
   // shared links have only ?compare=, so they open on the comparison.
-  const VIEWER_TABS = ['browse', 'compare', 'identify'];
+  const VIEWER_TABS = ['browse', 'compare', 'identify', 'recolor'];
 
   function parseViewerRoute(search, hash, names) {
     const params = new URLSearchParams(search || '');
