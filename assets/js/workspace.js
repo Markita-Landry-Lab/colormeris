@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, readPixel, projectT, pointAtT, colorAtT, buildProjectZip, readProjectZip, safeFileName, panelFileBases, rgbToHex } = CM;
+  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, readPixel, projectT, pointAtT, colorAtT, buildProjectZip, readProjectZip, safeFileName, panelFileBases, rgbToHex, comboFromEvent, findHotkey, defaultSettings } = CM;
 
   // Shared workspace for the Colormeris tools: source loading and PDF pages,
   // the zoomable viewer, panels, the grid and colorbar calibration, undo,
@@ -31,7 +31,7 @@
   //   drawModePreview(ctx, v, mode, hover)
   //   hoverText(panel, cell, p) text for the status bar
   //   onHoverCell(cell)
-  //   onKey(e)                  return true when handled
+  //   onKey(e)                  return true when handled (hotkeys are added with ws.addHotkey)
   //   gridTexts                 mode texts for placing the grid
   function createWorkspace() {
   const $ = (id) => document.getElementById(id);
@@ -589,7 +589,7 @@
   function renderSidebar(light = false) {
     const loaded = !!app.sourceCanvas;
     for (const t of Object.values(tools)) for (const id of t.sections || []) $(id).hidden = true;
-    for (const id of ['sec-panels', 'sec-grid', 'sec-colorbar', 'sec-settings', ...(tool.sections || [])]) $(id).hidden = !loaded;
+    for (const id of ['sec-panels', 'sec-grid', 'sec-colorbar', ...(tool.sections || [])]) $(id).hidden = !loaded;
     $('empty-state').hidden = loaded;
     // Open the help when nothing is loaded, close it once a file is; only on the change, so a manual toggle sticks.
     if (helpLoaded !== loaded) {
@@ -632,10 +632,6 @@
     $('tick-add').disabled = !cb.start;
     $('bar-zoom').disabled = !cb.start;
     renderTicks(cb);
-
-    // Settings
-    setValue($('set-distance'), panel.settings.distance);
-    setValue($('set-maxde'), panel.settings.maxDeltaE);
 
     tool.renderSidebar?.(panel, light);
     renderBarStrip(panel);
@@ -828,6 +824,7 @@
       setMode(null);
       status(`Loading ${file.name}…`);
       const project = createProject(tool.kind);
+      Object.assign(project.panels[0].settings, panelDefaults(tool.kind));
       project.activePanelId = project.panels[0].id;
       project.name = file.name.replace(/\.[^.]+$/, '');
       project.source = { fileName: file.name, mime: file.type || null, page: 1, pageCount: 1, renderScale: 1, width: 0, height: 0, sha256: null };
@@ -896,7 +893,7 @@
     if (app.project.panels.some((p) => p.page === page && p.tool === tool.kind)) return;
     const panel = createPanel(nextPanelName(), page, tool.kind);
     settings ??= app.project.panels.find((p) => p.tool === tool.kind)?.settings;
-    if (settings) panel.settings = { ...settings };
+    Object.assign(panel.settings, settings || panelDefaults(tool.kind));
     app.project.panels.push(panel);
   }
 
@@ -1326,9 +1323,18 @@
   $('bar-scale').addEventListener('change', (e) => commit((p) => (p.colorbar.scale = e.target.value)));
   bindNumber('bar-halfwidth', (p, v) => (p.colorbar.halfWidth = Math.min(50, Math.max(0, v))));
 
-  // Matching settings (both tools)
-  $('set-distance').addEventListener('change', (e) => commit((p) => (p.settings.distance = e.target.value)));
-  bindNumber('set-maxde', (p, v) => (p.settings.maxDeltaE = Math.max(0, v)));
+  // Matching settings live in the Settings dialog (settings-dialog.js). They
+  // are defaults for new panels and, when changed there, apply to every panel
+  // of the tool. Panels keep their own copy, so a project zip reproduces its values.
+  const panelDefaults = (kind) => ({ ...ws.settings.matching[kind] });
+  function applyMatching(kind, settings) {
+    const panels = app.project.panels.filter((p) => p.tool === kind);
+    const same = (p) => Object.entries(settings).every(([k, v]) => p.settings[k] === v);
+    if (!panels.length || panels.every(same)) return;
+    pushHistory();
+    for (const p of panels) Object.assign(p.settings, settings);
+    changed();
+  }
 
   // View tools
   $('mode-done').addEventListener('click', () => setMode(null));
@@ -1356,42 +1362,41 @@
     viewer.requestDraw();
   });
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts. The keys come from the Settings dialog (ws.settings.hotkeys);
+  // Escape always cancels, and the IVIS tool handles its polygon keys in onKey.
+  const hotkeys = {};
+  function addHotkey(id, run, { always = false, tool: only = null } = {}) {
+    hotkeys[id] = { run, always, tool: only };
+  }
+  addHotkey('undo', undo, { always: true });
+  addHotkey('redo', redo, { always: true });
+  addHotkey('grid', () => setMode(app.mode?.type === 'grid' ? null : 'grid'));
+  addHotkey('colorbar', () => $('bar-place').click());
+  addHotkey('ticks', () => setMode(app.mode?.type === 'tick' ? null : 'tick'));
+  addHotkey('fit', () => viewer.fit());
+  addHotkey('zoomIn', () => viewer.zoomBy(1.25));
+  addHotkey('zoomOut', () => viewer.zoomBy(0.8));
+  addHotkey('crosshair', () => setCrosshair(!viewer.crosshair));
+  // Pages flip only when there are several (the page controls are shown).
+  addHotkey('prevPage', () => !$('pdf-controls').hidden && goToPage(currentPage() - 1));
+  addHotkey('nextPage', () => !$('pdf-controls').hidden && goToPage(currentPage() + 1));
+
   window.addEventListener('keydown', (e) => {
+    // A modal (the Settings dialog) takes the keyboard.
+    if (e.defaultPrevented || document.querySelector('dialog[open]')) return;
     if (tool.onKey?.(e)) return;
     const t = e.target;
     const typing = t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== 'checkbox' && t.type !== 'range';
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'z' && !typing) {
-      e.preventDefault();
-      if (e.shiftKey) redo();
-      else undo();
-      return;
-    }
-    if (mod && e.key.toLowerCase() === 'y' && !typing) {
-      e.preventDefault();
-      redo();
-      return;
-    }
     if (e.key === 'Escape') {
       if (typing) t.blur();
       else setMode(null);
       return;
     }
-    if (typing || mod || e.altKey || !app.sourceCanvas) return;
-    const k = e.key.toLowerCase();
-    if (k === 'f') viewer.fit();
-    else if (k === '+' || k === '=') viewer.zoomBy(1.25);
-    else if (k === '-') viewer.zoomBy(0.8);
-    else if (k === 'g') setMode(app.mode?.type === 'grid' ? null : 'grid');
-    else if (k === 'b') $('bar-place').click();
-    else if (k === 't') setMode(app.mode?.type === 'tick' ? null : 'tick');
-    else if (k === 'c') setCrosshair(!viewer.crosshair);
-    // Left/right flip pages when there are several (the page controls are shown).
-    else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !$('pdf-controls').hidden) {
-      e.preventDefault();
-      goToPage(currentPage() + (e.key === 'ArrowRight' ? 1 : -1));
-    }
+    if (typing) return;
+    const h = hotkeys[findHotkey(ws.settings.hotkeys, comboFromEvent(e))];
+    if (!h || (!h.always && !app.sourceCanvas) || (h.tool && h.tool !== tool.kind)) return;
+    e.preventDefault();
+    h.run();
   });
 
   window.addEventListener('beforeunload', (e) => {
@@ -1477,6 +1482,10 @@
     exportZip,
     newTickId,
     removePanel,
+    addHotkey,
+    applyMatching,
+    // App settings; replaced by settings-dialog.js with the stored ones.
+    settings: defaultSettings(),
     zipExtras: [], // functions returning [{path, content}] added to project zips
     onChange: (fn) => changeListeners.push(fn),
     reviewStatus: null, // (panel) → 'accepted' | 'rejected' | 'stale' | null, set by agent.js

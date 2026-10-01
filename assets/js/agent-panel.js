@@ -2,60 +2,32 @@
   'use strict';
   const { createAgentRunner, parsePages, cellSamplePolygon, DEFAULT_LLM, DEFAULT_REVIEWER } = CM;
 
-  // Agent card of the heatmap tool: OpenRouter key and model choice, running
-  // and stopping the agent, its log, and the checks left for a human.
+  // Agent card of the heatmap tool: model choice, running and stopping the
+  // agent, its log, and the checks left for a human. The key, base URL and
+  // limits are in the Settings dialog (settings-dialog.js).
   // The OpenRouter SDK (assets/vendor/openrouter) is loaded on first use.
 
   const SDK_SRC = 'assets/vendor/openrouter/openrouter.min.js';
-  const STORE = 'colormeris.agent';
 
-  function setupAgentPanel(ws, api) {
+  function setupAgentPanel(ws, api, settingsUi) {
     const { $, app } = ws;
     const runner = createAgentRunner(ws, api);
     let abort = null;
 
     // ------------------------------------------------------------ settings
 
-    const load = () => {
-      try {
-        return JSON.parse(localStorage.getItem(STORE)) || {};
-      } catch {
-        return {};
-      }
-    };
-    const saved = load();
-    $('agent-llm').value = saved.llm || DEFAULT_LLM;
-    $('agent-reviewer').value = saved.reviewer || DEFAULT_REVIEWER;
-    $('agent-minconf').value = saved.minConfidence ?? 0.9;
-    $('agent-steps').value = saved.maxSteps ?? 80;
-    $('agent-base').value = saved.base || '';
-    $('agent-key').value = saved.key || '';
-    $('agent-remember').checked = !!saved.key;
-    if (saved.key) $('agent-settings').open = false;
-
-    function save() {
-      const s = {
-        llm: $('agent-llm').value.trim(),
-        reviewer: $('agent-reviewer').value.trim(),
-        minConfidence: Number($('agent-minconf').value),
-        maxSteps: Number($('agent-steps').value),
-        base: $('agent-base').value.trim(),
-        ...($('agent-remember').checked ? { key: $('agent-key').value.trim() } : {}),
-      };
-      try {
-        localStorage.setItem(STORE, JSON.stringify(s));
-      } catch {
-        // Storage can be unavailable (private windows, file://); settings then last for this visit.
-      }
-    }
-    for (const id of ['agent-llm', 'agent-reviewer', 'agent-minconf', 'agent-steps', 'agent-base', 'agent-key', 'agent-remember']) {
+    const agent = () => settingsUi.get().agent;
+    $('agent-llm').value = agent().llm || DEFAULT_LLM;
+    $('agent-reviewer').value = agent().reviewer || DEFAULT_REVIEWER;
+    if (agent().key) $('agent-settings').open = false;
+    for (const [id, key] of [['agent-llm', 'llm'], ['agent-reviewer', 'reviewer']]) {
       $(id).addEventListener('change', () => {
-        save();
-        updateButtons();
+        agent()[key] = $(id).value.trim();
+        settingsUi.save();
       });
     }
-    $('agent-key').addEventListener('input', updateButtons);
-    $('agent-base').addEventListener('input', updateButtons);
+    settingsUi.onChange(() => updateButtons());
+    $('agent-open-settings').addEventListener('click', () => settingsUi.open('agent'));
     $('agent-pages').addEventListener('change', () => ($('agent-range').hidden = $('agent-pages').value !== 'range'));
 
     // ------------------------------------------------------------ SDK
@@ -77,7 +49,7 @@
     }
 
     function makeClient(sdk, key) {
-      const base = $('agent-base').value.trim();
+      const base = agent().base;
       return new sdk.OpenRouter({
         // Behind a proxy the key can be empty; the proxy replaces this header.
         apiKey: key || 'proxy',
@@ -93,7 +65,7 @@
       if (modelsLoaded) return;
       modelsLoaded = true;
       try {
-        const client = makeClient(await loadSdk(), $('agent-key').value.trim() || undefined);
+        const client = makeClient(await loadSdk(), agent().key || undefined);
         const collect = async (req) => {
           const out = [];
           for await (const page of await client.models.list(req)) out.push(...page.result.data);
@@ -125,7 +97,7 @@
       $('agent-badge').textContent = running ? 'running' : 'off';
       $('agent-badge').className = `badge${running ? ' todo' : ''}`;
       if (!running) {
-        const why = !app.sourceCanvas ? 'Open a file first.' : !hasKeyOrProxy() ? 'Enter your OpenRouter key.' : '';
+        const why = !app.sourceCanvas ? 'Open a file first.' : !hasKeyOrProxy() ? 'Add your OpenRouter key in Settings.' : '';
         if (why || $('agent-status').dataset.idle !== 'done') {
           $('agent-status').textContent = why;
           $('agent-status').dataset.idle = '';
@@ -134,7 +106,7 @@
     }
 
     // A key, or a base URL (a local proxy such as scripts/openrouter-proxy.mjs adds the key itself).
-    const hasKeyOrProxy = () => !!($('agent-key').value.trim() || $('agent-base').value.trim());
+    const hasKeyOrProxy = () => !!(agent().key || agent().base);
 
     function selectedPages() {
       const n = app.project.source.pageCount;
@@ -178,7 +150,7 @@
     // focus: {panelId, note} to redo one rejected panel on its own page.
     async function start(focus = null) {
       if (abort) return;
-      const key = $('agent-key').value.trim();
+      const { key, minConfidence, maxSteps } = agent();
       let pages;
       try {
         pages = focus ? [app.project.panels.find((p) => p.id === focus.panelId).page] : selectedPages();
@@ -186,13 +158,7 @@
         ws.toast(err.message, true);
         return;
       }
-      const minConfidence = Number($('agent-minconf').value);
-      if (!(minConfidence >= 0 && minConfidence <= 1)) {
-        ws.toast('Min. confidence must be between 0 and 1.', true);
-        return;
-      }
       api.policy.minConfidence = minConfidence;
-      save();
       abort = new AbortController();
       $('agent-log').replaceChildren();
       $('agent-status').dataset.idle = '';
@@ -205,7 +171,7 @@
           llmModel: $('agent-llm').value.trim() || DEFAULT_LLM,
           reviewModel: $('agent-reviewer').value.trim() || DEFAULT_REVIEWER,
           pages,
-          maxSteps: Number($('agent-steps').value) || 80,
+          maxSteps,
           signal: abort.signal,
           onEvent,
           focus,

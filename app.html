@@ -19,6 +19,7 @@
   <script src="assets/js/viewer.js" defer></script>
   <script src="assets/js/roi.js" defer></script>
   <script src="assets/js/quantify.js" defer></script>
+  <script src="assets/js/settings.js" defer></script>
   <script src="assets/js/workspace.js" defer></script>
   <script src="assets/js/heatmap.js" defer></script>
   <script src="assets/js/ivis.js" defer></script>
@@ -27,6 +28,7 @@
   <script src="assets/js/agent-llm.js" defer></script>
   <script src="assets/js/agent-runner.js" defer></script>
   <script src="assets/js/agent-panel.js" defer></script>
+  <script src="assets/js/settings-dialog.js" defer></script>
   <script src="assets/js/app.js" defer></script>
 </head>
 <body>
@@ -45,9 +47,10 @@
     </label>
     <span id="source-label" class="source-label muted">No file loaded</span>
     <span class="spacer"></span>
-    <button id="btn-undo" class="btn ghost" title="Undo (Ctrl/⌘+Z)" disabled>Undo</button>
-    <button id="btn-redo" class="btn ghost" title="Redo (Ctrl/⌘+Shift+Z)" disabled>Redo</button>
+    <button id="btn-undo" class="btn ghost" title="Undo (Ctrl/⌘+Z)" data-hotkey="undo" data-title="Undo" disabled>Undo</button>
+    <button id="btn-redo" class="btn ghost" title="Redo (Ctrl/⌘+Shift+Z)" data-hotkey="redo" data-title="Redo" disabled>Redo</button>
     <button id="btn-export-zip" class="btn" disabled>Export project (.zip)</button>
+    <button id="btn-settings" class="btn ghost" title="Settings: agent, matching, hotkeys" aria-haspopup="dialog">Settings</button>
   </header>
 
   <main class="layout">
@@ -68,7 +71,7 @@
           <li><b>Regions</b>: draw ellipses (Shift = circle), rectangles (Shift = square) or polygons. A region drawn in one box is copied into every box; drag a copy to nudge it in that box only.</li>
           <li>Grayscale pixels (the photo) count as no signal. Read the results table, download the CSV, or export the project zip.</li>
         </ol>
-        <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, ← → to flip PDF pages, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes. Everything runs in your browser; files are never uploaded, except page images sent to OpenRouter when you run the agent.</p>
+        <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, ← → to flip PDF pages, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes; change the hotkeys in <i>Settings</i>. Everything runs in your browser; files are never uploaded, except page images sent to OpenRouter when you run the agent.</p>
       </details>
 
       <section class="card agent" id="sec-agent" data-tool="heatmap">
@@ -78,11 +81,7 @@
         </div>
         <p class="muted small agent-note">An LLM finds the heatmaps and calibrates them; a smaller vision model reviews each panel. It uses your own OpenRouter key and runs in this browser. <b>Page images and extracted values are sent to OpenRouter and the model providers you pick.</b></p>
         <details class="settings" id="agent-settings" open>
-          <summary>Models and key</summary>
-          <label class="field">OpenRouter API key
-            <input id="agent-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-…">
-          </label>
-          <label class="check small"><input id="agent-remember" type="checkbox"> Remember the key in this browser</label>
+          <summary>Models</summary>
           <label class="field">LLM (vision and tools)
             <input id="agent-llm" type="text" list="agent-llm-list" spellcheck="false">
             <datalist id="agent-llm-list"></datalist>
@@ -90,12 +89,7 @@
           <label class="field">Reviewer (vision and tools)
             <input id="agent-reviewer" type="text" list="agent-llm-list" spellcheck="false">
           </label>
-          <div class="row">
-            <label class="field">Min. confidence <input id="agent-minconf" type="number" min="0.5" max="1" step="0.01" value="0.9" class="num"></label>
-            <label class="field">Max. steps <input id="agent-steps" type="number" min="5" max="400" value="80" class="num"></label>
-          </div>
-          <label class="field">API base URL <input id="agent-base" type="url" spellcheck="false" placeholder="https://openrouter.ai/api/v1"></label>
-          <p class="muted small">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. The base URL is for OpenRouter-compatible proxies; leave it empty otherwise.</p>
+          <p class="muted small">API key, confidence and step limits are in <button type="button" class="link" id="agent-open-settings">Settings</button>.</p>
         </details>
         <label class="field">Pages
           <select id="agent-pages">
@@ -136,12 +130,12 @@
           <span id="grid-state" class="badge"></span>
         </div>
         <div class="row">
-          <button class="btn" id="grid-place" title="Shortcut: G">Place grid corners</button>
+          <button class="btn" id="grid-place" title="Shortcut: G" data-hotkey="grid" data-title="Shortcut: {key}">Place grid corners</button>
           <button class="btn ghost small" id="grid-zoom" title="Zoom to grid">Zoom to</button>
           <button class="btn ghost small danger" id="grid-clear" data-tool="ivis" hidden>Remove</button>
         </div>
         <div class="row wrap">
-          <label class="field">Rows <input id="grid-rows" type="number" min="1" max="1000" class="num"></label>
+          <label class="field">Rows<input id="grid-rows" type="number" min="1" max="1000" class="num"></label>
           <label class="field">Columns <input id="grid-cols" type="number" min="1" max="1000" class="num"></label>
           <button class="btn small" id="grid-detect" title="Guess rows and columns from the image inside the grid">Detect</button>
           <label class="field" data-tool="heatmap">Sampled area
@@ -168,8 +162,8 @@
           <span id="bar-state" class="badge"></span>
         </div>
         <div class="row">
-          <button class="btn" id="bar-place" title="Shortcut: B">Place colorbar ends</button>
-          <button class="btn" id="tick-add" title="Shortcut: T">Add ticks</button>
+          <button class="btn" id="bar-place" title="Shortcut: B" data-hotkey="colorbar" data-title="Shortcut: {key}">Place colorbar ends</button>
+          <button class="btn" id="tick-add" title="Shortcut: T" data-hotkey="ticks" data-title="Shortcut: {key}">Add ticks</button>
           <button class="btn ghost small" id="bar-zoom" title="Zoom to colorbar">Zoom to</button>
         </div>
         <canvas id="bar-strip" class="bar-strip" width="600" height="28" aria-label="Sampled colorbar"></canvas>
@@ -197,33 +191,15 @@
         <p id="tick-empty" class="muted small">No ticks yet. Use <b>Add ticks</b>, click a labelled tick on the bar, type its value, repeat.</p>
       </section>
 
-      <section class="card" id="sec-settings" hidden>
-        <details class="settings">
-          <summary>Matching settings</summary>
-          <div class="row wrap">
-            <label class="field" data-tool="ivis" hidden>Background: gray up to chroma <input id="set-gray" type="number" min="0" max="60" step="1" class="num"></label>
-            <label class="field">Color difference
-              <select id="set-distance">
-                <option value="de2000">CIEDE2000</option>
-                <option value="de76">CIE76 (Lab distance)</option>
-              </select>
-            </label>
-            <label class="field">Flag colors with ΔE above <input id="set-maxde" type="number" min="0" step="0.5" class="num"></label>
-          </div>
-          <p class="muted small" data-tool="ivis" hidden>Pixels whose color is nearly gray (CIELAB chroma at or below the threshold) are background with no signal. Colored pixels that match no colorbar color (ΔE above the limit, e.g. colored text) are counted as signal but reported as flagged.</p>
-          <p class="muted small" data-tool="heatmap">Cells whose color is further than the ΔE limit from every colorbar color are outlined in red.</p>
-        </details>
-      </section>
-
       <section class="card" id="sec-rois" hidden>
         <div class="card-head">
           <h2><span class="step-dot roi-dot"></span>Regions</h2>
           <span id="roi-state" class="badge"></span>
         </div>
         <div class="row wrap tool-row" role="toolbar" aria-label="Draw a region">
-          <button class="btn" id="tool-ellipse" title="Ellipse (E) — hold Shift for a circle"><span class="shape-icon ellipse" aria-hidden="true"></span>Ellipse</button>
-          <button class="btn" id="tool-rect" title="Rectangle (R) — hold Shift for a square"><span class="shape-icon rect" aria-hidden="true"></span>Rectangle</button>
-          <button class="btn" id="tool-polygon" title="Polygon (P) — click points, then click the first point or press Enter"><span class="shape-icon polygon" aria-hidden="true"></span>Polygon</button>
+          <button class="btn" id="tool-ellipse" title="Ellipse (E) — hold Shift for a circle" data-hotkey="ellipse" data-title="Ellipse ({key}) — hold Shift for a circle"><span class="shape-icon ellipse" aria-hidden="true"></span>Ellipse</button>
+          <button class="btn" id="tool-rect" title="Rectangle (R) — hold Shift for a square" data-hotkey="rect" data-title="Rectangle ({key}) — hold Shift for a square"><span class="shape-icon rect" aria-hidden="true"></span>Rectangle</button>
+          <button class="btn" id="tool-polygon" title="Polygon (P) — click points, then click the first point or press Enter" data-hotkey="polygon" data-title="Polygon ({key}) — click points, then click the first point or press Enter"><span class="shape-icon polygon" aria-hidden="true"></span>Polygon</button>
         </div>
         <label class="check"><input id="roi-replicate" type="checkbox" checked> Copy new regions into every grid box</label>
         <ul id="roi-list" class="roi-list"></ul>
@@ -321,10 +297,10 @@
       <div class="viewbar" id="view-tools" hidden>
         <span id="source-info" class="source-info"></span>
         <span id="pdf-controls" class="viewbar-group" hidden>
-          <button class="btn icon" id="page-prev" aria-label="Previous page" title="Previous page (←)">‹</button>
+          <button class="btn icon" id="page-prev" aria-label="Previous page" title="Previous page (←)" data-hotkey="prevPage" data-title="Previous page">‹</button>
           <input id="page-input" type="number" min="1" value="1" class="num" aria-label="Page">
           <span id="page-count" class="muted small"></span>
-          <button class="btn icon" id="page-next" aria-label="Next page" title="Next page (→)">›</button>
+          <button class="btn icon" id="page-next" aria-label="Next page" title="Next page (→)" data-hotkey="nextPage" data-title="Next page">›</button>
           <select id="scale-select" title="Resolution" aria-label="Resolution">
             <option value="1">72 dpi (1×)</option>
             <option value="2">144 dpi (2×)</option>
@@ -335,11 +311,11 @@
           </select>
         </span>
         <span class="viewbar-group zoom-group">
-          <button class="btn icon" id="zoom-out" title="Zoom out (−)">−</button>
+          <button class="btn icon" id="zoom-out" title="Zoom out (−)" data-hotkey="zoomOut" data-title="Zoom out">−</button>
           <input id="zoom-level" class="zoom-level" type="text" inputmode="decimal" value="100%" title="Zoom (100% = actual size); type a value and press Enter" aria-label="Zoom percent">
-          <button class="btn icon" id="zoom-in" title="Zoom in (+)">+</button>
-          <button class="btn small" id="zoom-fit" title="Fit (F)">Fit</button>
-          <button class="btn small" id="toggle-crosshair" title="Crosshair lines across the canvas (C)" aria-pressed="false">Crosshair</button>
+          <button class="btn icon" id="zoom-in" title="Zoom in (+)" data-hotkey="zoomIn" data-title="Zoom in">+</button>
+          <button class="btn small" id="zoom-fit" title="Fit (F)" data-hotkey="fit" data-title="Fit">Fit</button>
+          <button class="btn small" id="toggle-crosshair" title="Crosshair lines across the canvas (C)" data-hotkey="crosshair" data-title="Crosshair lines across the canvas" aria-pressed="false">Crosshair</button>
           <button class="btn small active" id="toggle-overlay" title="Show the grid and colorbar overlay" aria-pressed="true">Overlay</button>
         </span>
       </div>
@@ -353,6 +329,100 @@
       </footer>
     </div>
   </main>
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+    <form method="dialog" class="settings-head">
+      <h2 id="settings-title">Settings</h2>
+      <button class="btn ghost icon" value="close" aria-label="Close settings" title="Close (Esc)">×</button>
+    </form>
+    <div class="settings-body">
+      <nav class="settings-nav" aria-label="Settings sections">
+        <button type="button" class="active" data-settings-tab="agent">Agent</button>
+        <button type="button" data-settings-tab="matching">Matching</button>
+        <button type="button" data-settings-tab="hotkeys">Hotkeys</button>
+        <button type="button" data-settings-tab="transfer">Import and export</button>
+      </nav>
+
+      <section class="settings-pane" data-settings-pane="agent">
+        <h3>Agent</h3>
+        <p class="muted small">Used by the <i>Agent</i> card of the heatmap tool. Settings are saved in this browser as you change them.</p>
+        <label class="field">OpenRouter API key
+          <input id="agent-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-…">
+        </label>
+        <label class="check small"><input id="agent-remember" type="checkbox"> Remember the key in this browser</label>
+        <div class="row">
+          <label class="field" title="Reviewer answers below this confidence are left for you under Needs review">Min. confidence <input id="agent-minconf" type="number" min="0" max="1" step="0.01" class="num"></label>
+          <label class="field" title="The run stops after this many LLM calls">Max. steps <input id="agent-steps" type="number" min="5" max="400" class="num"></label>
+        </div>
+        <label class="field">API base URL <input id="agent-base" type="url" spellcheck="false" placeholder="https://openrouter.ai/api/v1"></label>
+        <p class="muted small">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Without <i>Remember</i>, the key is forgotten when you close the page. The base URL is for OpenRouter-compatible proxies (such as <code>npm run proxy</code> at <code>http://localhost:8787/api/v1</code>, which adds the key itself); leave it empty otherwise.</p>
+      </section>
+
+      <section class="settings-pane" data-settings-pane="matching" hidden>
+        <h3>Matching</h3>
+        <p class="muted small">How colors are matched to the colorbar. New panels start with these values; changing one here applies it to every panel of that tool in the open project (Undo reverts it). Panels keep their values in the project zip.</p>
+        <p id="matching-note" class="notice small"></p>
+        <fieldset>
+          <legend>Heatmap</legend>
+          <div class="row wrap">
+            <label class="field">Color difference
+              <select id="set-hm-distance">
+                <option value="de2000">CIEDE2000</option>
+                <option value="de76">CIE76 (Lab distance)</option>
+              </select>
+            </label>
+            <label class="field">Flag colors with ΔE above <input id="set-hm-maxde" type="number" min="0" step="0.5" class="num"></label>
+          </div>
+          <p class="muted small">Cells whose color is further than the ΔE limit from every colorbar color are outlined in red.</p>
+        </fieldset>
+        <fieldset>
+          <legend>IVIS</legend>
+          <div class="row wrap">
+            <label class="field">Background: gray up to chroma <input id="set-iv-gray" type="number" min="0" max="60" step="1" class="num"></label>
+            <label class="field">Color difference
+              <select id="set-iv-distance">
+                <option value="de2000">CIEDE2000</option>
+                <option value="de76">CIE76 (Lab distance)</option>
+              </select>
+            </label>
+            <label class="field">Flag colors with ΔE above <input id="set-iv-maxde" type="number" min="0" step="0.5" class="num"></label>
+          </div>
+          <p class="muted small">Pixels whose color is nearly gray (CIELAB chroma at or below the threshold) are background with no signal. Colored pixels that match no colorbar color (ΔE above the limit, e.g. colored text) are counted as signal but reported as flagged.</p>
+        </fieldset>
+        <div class="row"><button type="button" class="btn small" id="matching-reset">Reset matching to defaults</button></div>
+      </section>
+
+      <section class="settings-pane" data-settings-pane="hotkeys" hidden>
+        <h3>Hotkeys</h3>
+        <p class="muted small">Click <i>Change</i>, then press the new key or combination. A key used by another action moves to this one. Esc (cancel), Space (pan), Enter and Backspace (polygons) and Delete (regions) are fixed.</p>
+        <table class="hotkeys">
+          <thead><tr><th>Action</th><th>Keys</th><th></th></tr></thead>
+          <tbody id="hotkey-list"></tbody>
+        </table>
+        <div class="row"><button type="button" class="btn small" id="hotkeys-reset">Reset all hotkeys</button></div>
+      </section>
+
+      <section class="settings-pane" data-settings-pane="transfer" hidden>
+        <h3>Import and export</h3>
+        <p class="muted small">Save all settings (agent, matching and hotkeys) to a zip, and load them in another browser or after clearing this one.</p>
+        <fieldset>
+          <legend>Export</legend>
+          <label class="check small"><input id="settings-include-key" type="checkbox"> Include the API key</label>
+          <p class="muted small">The key is stored as plain text in the zip. Anyone with the file can spend your OpenRouter credit.</p>
+          <div class="row"><button type="button" class="btn primary" id="settings-export">Export settings (.zip)</button></div>
+        </fieldset>
+        <fieldset>
+          <legend>Import</legend>
+          <p class="muted small">Replaces the current settings. If the file has no API key, the current key is kept.</p>
+          <div class="row"><label class="btn">Import settings…<input id="settings-import" type="file" accept=".zip,.json,application/zip,application/json" hidden></label></div>
+        </fieldset>
+        <fieldset>
+          <legend>Reset</legend>
+          <div class="row"><button type="button" class="btn danger" id="settings-reset">Reset all settings</button></div>
+          <p class="muted small">Back to the defaults; the API key is kept.</p>
+        </fieldset>
+      </section>
+    </div>
+  </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

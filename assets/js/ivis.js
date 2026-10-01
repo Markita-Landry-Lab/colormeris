@@ -346,15 +346,9 @@
       deleteSelected();
       return true;
     }
-    if (e.altKey) return false;
-    const tools = { e: 'ellipse', r: 'rect', p: 'polygon' };
-    const k = e.key.toLowerCase();
-    if (tools[k]) {
-      toggleTool(tools[k]);
-      return true;
-    }
     return false;
   }
+  for (const shape of ['ellipse', 'rect', 'polygon']) ws.addHotkey(shape, () => toggleTool(shape), { tool: 'ivis' });
 
   function toggleTool(type) {
     ws.setMode(app.mode?.type === type ? null : type);
@@ -510,7 +504,6 @@
   function renderSidebar(panel) {
     renderRois(panel);
     renderScale(panel);
-    ws.setValue($('set-gray'), panel.settings.grayChroma);
     renderResults(panel);
   }
 
@@ -700,7 +693,6 @@
   $('scale-unit').addEventListener('change', (e) => {
     if (ws.activePanel().scale) ws.commit((p) => (p.scale.unit = e.target.value));
   });
-  ws.bindNumber('set-gray', (p, v) => (p.settings.grayChroma = Math.max(0, v)));
   $('result-metric').addEventListener('change', (e) => {
     state.metric = e.target.value;
     ws.changed();

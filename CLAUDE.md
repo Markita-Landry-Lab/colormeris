@@ -31,10 +31,11 @@ There is no build step. Pages load plain classic scripts (not modules, so `file:
 | --- | --- |
 | Color, geometry, sampling (pure) | `color.js`, `grid.js` (bilinear grid, `detectGridSize`), `colormap.js`, `extract.js`, `roi.js`, `quantify.js` |
 | Project model and files (pure) | `state.js` (`project.json` schema v2, panels incl. `review`), `export.js` (CSV, zip) |
-| UI shell | `workspace.js` (pages, panels, grid/colorbar placement, undo, zip, tool switching; `ws` object with hooks), `viewer.js`, `loader.js` (pdf.js) |
+| UI shell | `workspace.js` (pages, panels, grid/colorbar placement, undo, zip, tool switching, hotkey dispatch via `ws.addHotkey`; `ws` object with hooks), `viewer.js`, `loader.js` (pdf.js) |
+| Settings | `settings.js` (pure: defaults, `normalizeSettings`, hotkey combos `comboFromEvent`/`findHotkey`, settings zip with `settings.json`), `settings-dialog.js` (the Settings dialog; owns `ws.settings`, saved in localStorage `colormeris.settings`; the key only with *Remember*) |
 | Tools | `heatmap.js`, `ivis.js`, registered with `ws.addTool` (see TOOL_HOOKS at the top of `workspace.js`) |
 | Agent API | `agent-schema.js` (pure: action catalogue as JSON Schema, `validate`, `normalizeArgs`, state snapshot, typed questions `openQuestions`, `resultKeyHash`) and `agent.js` (binds it to the workspace as `window.colormeris`: `run`, `batch`, `tools`, `policy`, `log`) |
-| Heatmap agent | `agent-llm.js` (pure: system prompt, LLM tool list, question ↔ reviewer mapping (`toReviewItem`, `reviewTool`, `fromReviewAnswer`), `reviewAdvice`, `createRetryGuard`, limits), `agent-runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, one reviewer call per panel), `agent-panel.js` (Agent card UI, Needs review) |
+| Heatmap agent | `agent-llm.js` (pure: system prompt, LLM tool list, question ↔ reviewer mapping (`toReviewItem`, `reviewTool`, `fromReviewAnswer`), `reviewAdvice`, `createRetryGuard`, limits), `agent-runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, one reviewer call per panel), `agent-panel.js` (Agent card UI: models, run, Needs review; key, base URL and limits come from `ws.settings.agent`) |
 | Entry | `app.js` creates the workspace, both tools, `window.colormeris` and the agent panel |
 
 Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter SDK 1.4.10 as an IIFE bundle (`OpenRouterSDK.OpenRouter`, 834 KB, loaded lazily by the Agent card). `assets/examples/` holds `example.pdf` (a 26-page paper on ionizable lipids for mRNA delivery, with heatmaps on pages 3 and 5) and `example-jet.png` (a copy of the synthetic jet calibration figure), loaded by the empty-state buttons. `assets/img/` is git-ignored.

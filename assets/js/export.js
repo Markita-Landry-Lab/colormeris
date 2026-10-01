@@ -160,6 +160,7 @@ Load this zip back into Colormeris to review or re-run the extraction.
   async function readProjectZip(JSZip, blob) {
     const zip = await JSZip.loadAsync(blob);
     const entry = zip.file('project.json');
+    if (!entry && zip.file('settings.json')) throw new Error('this is a settings zip. Import it under Settings → Import and export.');
     if (!entry) throw new Error('Invalid project zip: project.json not found.');
     let json;
     try {

@@ -54,13 +54,13 @@ Measurements for each region copy:
 | `flagged_px` | colored pixels that match no colorbar color (ΔE above the limit), e.g. colored text. They are still counted as signal with their nearest colorbar value. |
 | `area_<unit>2`, `signal_area_<unit>2`, `sum_x_area` | with a scale bar: areas in real units, and `sum` × pixel area |
 
-**Background**: a pixel whose CIELAB chroma is at or below the *gray* threshold is the photograph, i.e. no signal. The default is 20, which removes the JPEG color noise seen in published IVIS figures while keeping the dimmest overlay colors. Adjust it under *Signal settings* and check with *Show signal*.
+**Background**: a pixel whose CIELAB chroma is at or below the *gray* threshold is the photograph, i.e. no signal. The default is 20, which removes the JPEG color noise seen in published IVIS figures while keeping the dimmest overlay colors. Adjust it under *Settings → Matching* and check with *Show signal*.
 
 ## Heatmap agent
 
 The *Agent* card in the heatmap tool calibrates every heatmap on the chosen pages by itself:
 
-1. **Connect.** Enter your [OpenRouter](https://openrouter.ai/keys) key. Or keep it out of the browser: put `OPENROUTER_API_KEY=…` in `.env` (ignored by git), run `npm run proxy`, and set *API base URL* to `http://localhost:8787/api/v1` with the key field empty.
+1. **Connect.** Open *Settings → Agent* and enter your [OpenRouter](https://openrouter.ai/keys) key. Or keep it out of the browser: put `OPENROUTER_API_KEY=…` in `.env` (ignored by git), run `npm run proxy`, and set *API base URL* to `http://localhost:8787/api/v1` with the key field empty.
 2. **Pick models.** The LLM needs image input and tool calling; the default is `anthropic/claude-sonnet-5.5`. The reviewer is a smaller vision model that checks each panel; the default is `anthropic/claude-haiku-4.5`.
 3. **Run.** Choose the pages and press *Run agent*. The LLM looks at page images with pixel rulers, zooms in, places the grid, labels, colorbar and ticks, and checks them with overlays. The reviewer then looks at each panel (the figure, both overlays and a colorbar zoom) and answers typed checks: grid size, flagged cells, tick order and final acceptance. Each answer comes with a confidence and a short reason.
 4. **Review.** Checks answered below *Min. confidence* appear under *Needs review*. A rejected panel gets a red dot and stays there until you accept it or it changes. Add a note on what is wrong and press *Redo with agent* to have the agent fix it. *Delete panel* removes a wrong extraction outright (undo brings it back).
@@ -68,6 +68,15 @@ The *Agent* card in the heatmap tool calibrates every heatmap on the chosen page
 The agent retries a failing tool at most 3 times per panel, then skips that step and reports it. It stops after 8 failed calls in a row or after *Max. steps*. The log shows every step, review and the cost so far.
 
 Page images and extracted values are sent to OpenRouter and the model providers you pick.
+
+## Settings
+
+*Settings* (top right) holds what belongs to you rather than to a figure. It is saved in the browser as you change it.
+
+- **Agent**: OpenRouter key (stored only if *Remember* is ticked), *Min. confidence*, *Max. steps* and *API base URL*.
+- **Matching**: color difference, ΔE flag limit and, for IVIS, the gray threshold. New panels start with these values; changing one applies it to every panel of that tool in the open project (Undo reverts it). Each panel keeps its own copy in the project zip, so a project reopens with the values it was made with.
+- **Hotkeys**: press *Change* and then the new key. Esc, Space, Enter, Backspace and Delete are fixed.
+- **Import and export**: *Export settings* writes `colormeris-settings.zip` (one `settings.json`); *Import settings* reads it back, or a bare `settings.json`. The API key is left out unless you tick *Include the API key*; importing a file without a key keeps the current one.
 
 ## Agent API
 
@@ -143,7 +152,9 @@ To deploy, publish the repository root with GitHub Pages or any static host. `.n
 | `assets/js/agent.js` | binds the agent API to the workspace as `window.colormeris` |
 | `assets/js/agent-llm.js` | agent system prompt, LLM tool list, typed question ↔ reviewer mapping, retry limits |
 | `assets/js/agent-runner.js` | agent loop: page images with rulers and overlays, OpenRouter chat calls for the LLM and the reviewer |
-| `assets/js/agent-panel.js` | Agent card: key, model pickers, run/stop, log, review of low-confidence answers |
+| `assets/js/agent-panel.js` | Agent card: model pickers, run/stop, log, review of low-confidence answers |
+| `assets/js/settings.js` | settings model: defaults, validation, hotkey combos, settings zip |
+| `assets/js/settings-dialog.js` | Settings dialog: agent key and limits, matching, hotkeys, import/export |
 | `scripts/agent-docs.mjs` | generates `docs/agent.md` from the agent definitions |
 | `scripts/openrouter-proxy.mjs` | local proxy that adds the OpenRouter key from `.env` (`npm run proxy`) |
 | `assets/js/app.js` | starts the workspace with both tools; `#heatmap` / `#ivis` picks the tool |
