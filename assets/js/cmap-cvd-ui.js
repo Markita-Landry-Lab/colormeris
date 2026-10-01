@@ -2,7 +2,7 @@
   'use strict';
 
   // The CVD tab of the colormap viewer (colormaps.html): a figure next to how
-  // it may look with a color vision deficiency, after the DaltonLens simulator
+  // it may look with a color vision deficiency (or with no color at all), after the DaltonLens simulator
   // (https://daltonlens.org/colorblindness-simulator). The jet example is shown
   // until the user gives an image. The simulation is in cvd.js; the image
   // input is cmap-figure-input.js, without its colorbar line. The image never
@@ -13,9 +13,10 @@
     ['protanopia', 'Protan', 'Protanopia', 'Protanomaly', 'Missing or shifted L (red) cones'],
     ['deuteranopia', 'Deutan', 'Deuteranopia', 'Deuteranomaly', 'Missing or shifted M (green) cones; the most common kind'],
     ['tritanopia', 'Tritan', 'Tritanopia', 'Tritanomaly', 'Missing or shifted S (blue) cones; rare'],
+    ['achromatopsia', 'Gray', 'Achromatopsia', 'Achromatomaly', 'Achromatopsia: no color vision at all. Shown as the gray of the same luminance (CIELAB L*), as in Browse; very rare'],
   ];
   const TYPE = new Map(TYPES.map((t) => [t[0], t]));
-  const MODEL_NAMES = { brettel: 'Brettel 1997', vienot: 'Viénot 1999', machado: 'Machado 2009' };
+  const MODEL_NAMES = { brettel: 'Brettel 1997', vienot: 'Viénot 1999', machado: 'Machado 2009', luminance: 'grayscale by luminance' };
   const DEFAULT_TYPE = 'deuteranopia';
   const CHUNK = 400000; // pixels simulated between pauses
   const KEEP = 6; // simulated images kept, so going back to a setting is instant
@@ -34,14 +35,18 @@
     // ---- controls ----
     let type = DEFAULT_TYPE; // or 'all'
     const kinds = el('div', { class: 'cmap-tabs', role: 'group', 'aria-label': 'Deficiency' });
-    const kindBtns = [...TYPES.map(([k, label, , , tip]) => [k, label, tip]), ['all', 'All', 'All three side by side']].map(([k, label, tip]) => {
+    const kindBtns = [...TYPES.map(([k, label, , , tip]) => [k, label, tip]), ['all', 'All', 'All four kinds next to the original']].map(([k, label, tip]) => {
       const b = el('button', { type: 'button', 'aria-pressed': 'false', title: tip }, label);
       b.addEventListener('click', () => { type = k; syncKinds(); render(); });
+      if (k === 'achromatopsia') b.setAttribute('aria-label', 'Gray (achromatopsia)');
       kinds.append(b);
       return [k, b];
     });
-    const syncKinds = () => { for (const [k, b] of kindBtns) b.setAttribute('aria-pressed', String(k === type)); };
-    syncKinds();
+    const syncKinds = () => {
+      for (const [k, b] of kindBtns) b.setAttribute('aria-pressed', String(k === type));
+      // Grayscale has no model to choose.
+      model.disabled = type === CM.ACHROMAT;
+    };
 
     const sev = el('input', { type: 'range', min: '0', max: '1', step: '0.1', value: '1' });
     const sevOut = el('output', {}, '1.0');
@@ -52,12 +57,13 @@
       ['vienot', 'Viénot 1999 (protan, deutan)'],
       ['machado', 'Machado 2009'],
     ]) model.append(el('option', { value: v }, label));
+    syncKinds();
     const download = el('button', { type: 'button', class: 'btn small primary' }, 'Download PNG');
     const fieldsRow = el('div', { class: 'cmap-rc-fields' });
     fieldsRow.append(
-      field('Deficiency', 'Which kind of cone is missing (or shifted, below full severity)', kinds),
+      field('Deficiency', 'Which kind of cone is missing (or shifted, below full severity). Gray is achromatopsia: no color at all.', kinds),
       field('Severity', '1 is dichromacy (protanopia, deuteranopia, tritanopia): one kind of cone is missing. Below 1 is anomalous trichromacy (protanomaly etc.): the cone is shifted, a milder and more common form. 0 is normal vision.', sev, sevOut),
-      field('Model', 'Recommended follows the DaltonLens review: Brettel 1997 for tritan, Machado 2009 for protan and deutan (it models partial severity best). Viénot 1999 does not model tritan; Brettel 1997 is used instead.', model),
+      field('Model', 'Recommended follows the DaltonLens review: Brettel 1997 for tritan, Machado 2009 for protan and deutan (it models partial severity best). Viénot 1999 does not model tritan; Brettel 1997 is used instead. Gray needs no model.', model),
     );
     const actions = el('div', { class: 'cmap-id-bar cmap-rc-actions' });
     actions.append(download);
@@ -129,7 +135,7 @@
     const note = el('p', { class: 'cmap-fig-cap muted', hidden: '' });
     note.append('Simulated in linear sRGB with ', ref('brettel', 'Brettel et al. 1997'), ', ', ref('vienot', 'Viénot et al. 1999'), ' (both with libDaltonLens’ parameters) or ',
       ref('machado', 'Machado et al. 2009'), '; Recommended follows the ', ref('daltonlens', 'DaltonLens review'),
-      '. A simulation shows which colors become hard to tell apart, not exactly what any one person sees. Hover to compare colors; press and hold a simulation to see the original.');
+      '. Gray shows each color as the gray of the same luminance (CIELAB L*). A simulation shows which colors become hard to tell apart, not exactly what any one person sees. Hover to compare colors; press and hold a simulation to see the original.');
     function ref(key, text) { return el('a', { href: `#ref-${key}` }, text); }
 
     d.append(fig.zone, fig.file, controls, status, grid, readout, note);
@@ -144,7 +150,7 @@
       const [, label, full, partial] = TYPE.get(k);
       const s = severity();
       const used = CM.resolveCvdModel(k, model.value);
-      const m = MODEL_NAMES[used] + (model.value === 'vienot' && used !== 'vienot' ? '; Viénot 1999 has no tritan model' : '');
+      const m = MODEL_NAMES[used] + (k === 'tritanopia' && model.value === 'vienot' ? '; Viénot 1999 has no tritan model' : '');
       if (s === 0) return `${label}, severity 0: normal vision`;
       return s >= 1 ? `${full} (${m})` : `${partial}, severity ${s.toFixed(1)} (${m})`;
     }
@@ -268,7 +274,7 @@
       for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) p.canvas.addEventListener(t, back);
     }
 
-    // ---- download: the simulation, or all four panels in a 2 × 2 grid ----
+    // ---- download: the simulation, or all five panels in a grid of three columns ----
     download.addEventListener('click', () => {
       if (!fig.src) return;
       const shown = sims.filter((p) => !p.f.hidden && p.data);
@@ -278,13 +284,16 @@
       if (type === 'all') {
         const { width: w, height: h } = fig.src;
         const gap = Math.max(4, Math.round(Math.max(w, h) / 100));
+        const panes = [fig.src, ...shown.map((p) => p.canvas)];
+        const cols = 3;
+        const rows = Math.ceil(panes.length / cols);
         c = document.createElement('canvas');
-        c.width = 2 * w + gap;
-        c.height = 2 * h + gap;
+        c.width = cols * w + (cols - 1) * gap;
+        c.height = rows * h + (rows - 1) * gap;
         const g = c.getContext('2d');
         g.fillStyle = '#fff';
         g.fillRect(0, 0, c.width, c.height);
-        [fig.src, ...shown.map((p) => p.canvas)].forEach((src, i) => g.drawImage(src, (i % 2) * (w + gap), Math.floor(i / 2) * (h + gap)));
+        panes.forEach((src, i) => g.drawImage(src, (i % cols) * (w + gap), Math.floor(i / cols) * (h + gap)));
         what = `cvd-${model.value}-s${severity().toFixed(1)}`;
       }
       c.toBlob((blob) => {

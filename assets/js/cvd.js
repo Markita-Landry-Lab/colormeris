@@ -46,6 +46,9 @@
   //            most principled for partial severity (anomalous trichromacy)
   // Brettel and Viénot model only full dichromacy; lower severities blend with
   // the original in linear RGB, as libDaltonLens does.
+  // Achromatopsia (no color at all) is not one of CVD_TYPES, which are the
+  // strips' views: it is the gray of the same luminance Y, so the same L* as
+  // `grayscale`, with the same severity blend.
 
   // Machado 2009, severity 0.0, 0.1, …, 1.0 (row-major 3 × 3). From the
   // authors' page via colour-science and DaltonLens-Python; the last entries
@@ -120,10 +123,13 @@
   };
 
   const CVD_MODELS = ['brettel', 'vienot', 'machado'];
+  const ACHROMAT = 'achromatopsia';
+  const LUMA = [0.2126729, 0.7151522, 0.072175]; // Y of linear sRGB, as rgbToLab
 
   // 'recommended' follows the DaltonLens review: Brettel for tritan, Machado
   // for protan and deutan. Viénot asked for tritan falls back to Brettel.
   function resolveCvdModel(type, model = 'recommended') {
+    if (type === ACHROMAT) return 'luminance';
     if (!CVD_MODELS.includes(model)) return type === 'tritanopia' ? 'brettel' : 'machado';
     if (model === 'vienot' && !VIENOT[type]) return 'brettel';
     return model;
@@ -138,7 +144,7 @@
   // A function (r, g, b linear, out, k) that writes the simulated linear RGB
   // to out[k..k+2].
   function cvdLinearFn(type, { model = 'recommended', severity = 1 } = {}) {
-    if (!MACHADO[type]) throw new Error(`Unknown CVD type: ${type}`);
+    if (!MACHADO[type] && type !== ACHROMAT) throw new Error(`Unknown CVD type: ${type}`);
     const s = Math.min(1, Math.max(0, Number(severity) || 0));
     const m = resolveCvdModel(type, model);
     if (m === 'machado') {
@@ -155,6 +161,12 @@
       out[k + 1] = s * out[k + 1] + (1 - s) * g;
       out[k + 2] = s * out[k + 2] + (1 - s) * b;
     };
+    if (m === 'luminance') {
+      return (r, g, b, out, k) => {
+        out[k] = out[k + 1] = out[k + 2] = LUMA[0] * r + LUMA[1] * g + LUMA[2] * b;
+        blend(r, g, b, out, k);
+      };
+    }
     if (m === 'vienot') {
       const mat = VIENOT[type];
       return (r, g, b, out, k) => { mul(mat, r, g, b, out, k); blend(r, g, b, out, k); };
@@ -266,6 +278,6 @@
 
   Object.assign(CM, {
     CVD_TYPES, simulateCvd, lightness, grayscale, lightnessStats, parseHexColors,
-    CVD_MODELS, resolveCvdModel, cvdLinearFn, simulateCvdColor, simulateCvdPixels,
+    CVD_MODELS, ACHROMAT, resolveCvdModel, cvdLinearFn, simulateCvdColor, simulateCvdPixels,
   });
 })((globalThis.Colormeris ??= {}));

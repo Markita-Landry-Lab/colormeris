@@ -141,3 +141,16 @@ test('simulateCvdPixels keeps alpha, matches the per-color path, and works in ch
   assert.deepEqual(chunked, out);
   assert.equal(cache.size, 2); // the two reds share one entry
 });
+
+test('achromatopsia: the gray of the same L*, blended by severity', () => {
+  const { simulateCvdColor, ACHROMAT, resolveCvdModel } = CM;
+  assert.equal(resolveCvdModel(ACHROMAT, 'vienot'), 'luminance');
+  for (const rgb of [[255, 0, 0], [68, 1, 84], [253, 231, 37], [30, 200, 90]]) {
+    const g = simulateCvdColor(rgb, ACHROMAT, { severity: 1 });
+    assert.ok(g[0] === g[1] && g[1] === g[2]);
+    closeRgb(g, grayscale(rgb));
+    closeRgb(simulateCvdColor(rgb, ACHROMAT, { severity: 0 }), rgb, 0);
+  }
+  const half = simulateCvdColor([255, 0, 0], ACHROMAT, { severity: 0.5 });
+  assert.ok(half[0] < 255 && half[0] > 127 && half[1] > 0);
+});
