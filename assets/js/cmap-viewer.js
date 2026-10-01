@@ -841,25 +841,25 @@
     const pct = (v) => `${Math.round(v * 100)}%`;
     const NUM_COLS = [
       { id: 'name', label: 'Colormap', get: (f) => f.map.name.toLowerCase() },
-      { id: 'range', label: 'L* range', hint: 'Spread of lightness. Wider means more contrast.', best: 'max',
+      { id: 'range', label: 'L* range', hint: 'Spread of lightness. Wider means more contrast.', best: 'max', dp: 0,
         get: (f) => f.ls.range[1] - f.ls.range[0], show: (f) => `${f.ls.range[0].toFixed(0)}–${f.ls.range[1].toFixed(0)}` },
-      { id: 'mono', label: 'Monotonic', hint: 'Does L* only rise or only fall? Fewer reversals are better.', best: 'min',
+      { id: 'mono', label: 'Monotonic', hint: 'Does L* only rise or only fall? Fewer reversals are better.', best: 'min', dp: 0,
         get: (f) => (f.qual ? null : f.ls.reversals), show: (f) => (f.qual ? '—' : `${f.ls.monotonic ? 'yes' : 'no'} (${f.ls.reversals})`) },
-      { id: 'r2', label: 'L* R²', hint: 'How close L* is to a straight line. Higher is better.', best: 'max',
+      { id: 'r2', label: 'L* R²', hint: 'How close L* is to a straight line. Higher is better.', best: 'max', dp: 3,
         get: (f) => (f.qual ? null : f.ls.r2), show: (f) => (f.qual || f.ls.r2 == null ? '—' : f.ls.r2.toFixed(3)) },
-      { id: 'cv', label: 'Step CV', hint: 'Variation of the ΔE2000 steps. Lower is better.', best: 'min',
+      { id: 'cv', label: 'Step CV', hint: 'Variation of the ΔE2000 steps. Lower is better.', best: 'min', dp: 2,
         get: (f) => (f.qual ? null : f.m.stepStats.cv), show: (f) => (f.qual ? '—' : f.m.stepStats.cv.toFixed(2)) },
-      { id: 'max', label: 'Max step ΔE', hint: 'Largest ΔE2000 jump between neighbors. Lower is better.', best: 'min',
+      { id: 'max', label: 'Max step ΔE', hint: 'Largest ΔE2000 jump between neighbors. Lower is better.', best: 'min', dp: 2,
         get: (f) => (f.qual ? null : f.m.stepStats.max), show: (f) => (f.qual ? '—' : f.m.stepStats.max.toFixed(2)) },
-      { id: 'cvd', label: 'Worst CVD view', hint: 'Smallest ΔE2000 in the worst color-vision view, and the share of the map’s own separation it keeps. Higher is better.', best: 'max',
+      { id: 'cvd', label: 'Worst CVD view', hint: 'Smallest ΔE2000 in the worst color-vision view, and the share of the map’s own separation it keeps. Higher is better.', best: 'max', dp: 1,
         get: (f) => f.m.cvdWorst, show: (f) => `${f.worstLabel} ${f.m.cvdWorst.toFixed(1)} ΔE (${pct(f.m.cvdRatio)})` },
-      { id: 'gray', label: 'Gray min ΔL*', hint: 'Smallest L* difference in grayscale. Higher is better.', best: 'max',
+      { id: 'gray', label: 'Gray min ΔL*', hint: 'Smallest L* difference in grayscale. Higher is better.', best: 'max', dp: 1,
         get: (f) => f.m.separations.gray?.min ?? null, show: (f) => (f.m.separations.gray ? f.m.separations.gray.min.toFixed(1) : '—') },
-      { id: 'levels', label: 'Levels', hint: `Distinguishable levels from end to end (each ${CM.READ_DE} ΔE apart). Higher is better.`, best: 'max',
+      { id: 'levels', label: 'Levels', hint: `Distinguishable levels from end to end (each ${CM.READ_DE} ΔE apart). Higher is better.`, best: 'max', dp: 0,
         get: (f) => f.m.readability?.orig.levels ?? null, show: (f) => (f.m.readability ? String(f.m.readability.orig.levels) : '—') },
-      { id: 'flat', label: 'Flat %', hint: 'Share of the map where values 5% apart look almost the same. Lower is better.', best: 'min',
+      { id: 'flat', label: 'Flat %', hint: 'Share of the map where values 5% apart look almost the same. Lower is better.', best: 'min', dp: 2,
         get: (f) => f.m.readability?.orig.flat ?? null, show: (f) => (f.m.readability ? pct(f.m.readability.orig.flat) : '—') },
-      { id: 'amb', label: 'Ambiguous %', hint: 'Share of the map whose color has a look-alike elsewhere. Lower is better.', best: 'min',
+      { id: 'amb', label: 'Ambiguous %', hint: 'Share of the map whose color has a look-alike elsewhere. Lower is better.', best: 'min', dp: 2,
         get: (f) => f.m.readability?.orig.ambiguous ?? null, show: (f) => (f.m.readability ? pct(f.m.readability.orig.ambiguous) : '—') },
       { id: 'rating', label: 'Ratings', noSort: true },
     ];
@@ -882,14 +882,16 @@
         });
         rows.splice(0, rows.length, ...keyed.map((k) => k.f));
       }
-      // Best per column; nothing is marked when all values are equal.
+      // Best per column; nothing is marked when all values are equal. Values
+      // are compared as shown (rounded to dp), so ties that look equal count as equal.
+      const rnd = (c, v) => Math.round(v * 10 ** c.dp) / 10 ** c.dp;
       const best = {};
       for (const c of NUM_COLS) {
         if (!c.best) continue;
-        const vals = rows.map((f) => c.get(f)).filter((v) => v != null);
+        const vals = rows.map((f) => c.get(f)).filter((v) => v != null).map((v) => rnd(c, v));
         if (vals.length < 2) continue;
         const b = c.best === 'max' ? Math.max(...vals) : Math.min(...vals);
-        if (vals.some((v) => Math.abs(v - b) > 1e-9)) best[c.id] = b;
+        if (vals.some((v) => v !== b)) best[c.id] = b;
       }
 
       const table = el('table', { class: 'cmap-nums' });
@@ -927,7 +929,7 @@
             td.append(ratingPills(f.map));
           } else {
             td.textContent = c.show(f);
-            if (best[c.id] != null && c.get(f) != null && Math.abs(c.get(f) - best[c.id]) <= 1e-9) {
+            if (best[c.id] != null && c.get(f) != null && rnd(c, c.get(f)) === best[c.id]) {
               td.className = 'best';
               td.title = 'Best in this column';
               td.append(el('span', { class: 'sr-only' }, ' (best)'));
