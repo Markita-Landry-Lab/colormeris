@@ -60,6 +60,16 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 - Scripts and the stylesheet in `app.html` carry `?v=N`. Bump N (for example `sed -i '' 's/\.js?v=1"/.js?v=2"/' app.html`) with every deploy so browsers never mix old and new files.
 - Add a unit test for pure logic (`tests/*.test.js`); browser behaviour is checked in the preview.
 
+### UI standard (`app.html`, heatmap and IVIS)
+
+- **Tokens** on `:root`: `--control-h` (32 px, topbar and empty state) and `--control-h-sm` (28 px, everything in the sidebar and viewbar), `--space-1..3`, `--fs-xs/sm/md`. In `body.app .sidebar`, every button, input and select is `--control-h-sm` tall, so mixed rows line up. Don't add `.small` there.
+- **Buttons**: default (bordered) for secondary actions; `primary` only for the card's next step (`setNextStep` in `workspace.js` moves it as steps finish) or its main output (Run agent, Download CSV); `danger` (bordered, red) for Remove, Delete, Clear and Stop, always last in its row; `subtle` (borderless, with a hover background) for utilities such as Zoom to, Show and ×. Don't use `ghost` in the sidebar.
+- **Toggles and modes** use `ws.setPressed(el, on)`, which sets `.active` and `aria-pressed` together.
+- **Chips** (`.chip` in a `.chip-list`, with the name in `.chip-label`) are for selectable items: panels, regions, other pages. Selected = `aria-pressed="true"`. Never use `.btn` for list items.
+- **Card anatomy**: `.card-head` (h2, optional `.tag`, status `.badge`), then `.card-actions` (one row of buttons), then the fields, then `details.options` (summary, optional `.summary-note`, `.options-body`) for rarely changed settings, then at most one `.hint`.
+- **Fields**: labels above inputs, short, with units and explanations in `title`. Fields side by side go in `.fields` (a grid; `.fields.wide` for longer selects). Empty `.hint` and `.chip-list` elements collapse.
+- New rules for the app go in the "UI standard" block of `style.css`. `index.html` and `colormaps.html` share the stylesheet, so scope anything that would change them under `.app`.
+
 ## Browser testing tips (Claude's built-in browser)
 
 - The dev server caches aggressively. After editing, `fetch('/assets/js/<file>', {cache: 'reload'})` for the changed files, then load `app.html?v=<n>#heatmap` with a new `n`.

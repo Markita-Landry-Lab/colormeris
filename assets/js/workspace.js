@@ -556,9 +556,9 @@
     }
     app.mode = type ? { type, points: [] } : null;
     updateModebar();
-    $('grid-place').classList.toggle('active', type === 'grid');
-    $('bar-place').classList.toggle('active', type === 'colorbar');
-    $('tick-add').classList.toggle('active', type === 'tick');
+    setPressed($('grid-place'), type === 'grid');
+    setPressed($('bar-place'), type === 'colorbar');
+    setPressed($('tick-add'), type === 'tick');
     tool.onModeChange?.(type);
     viewer.requestDraw();
   }
@@ -616,6 +616,10 @@
     if ($('grid-col-labels')) setValue($('grid-col-labels'), g.colLabels.join('\n'));
     if ($('grid-box-labels')) setValue($('grid-box-labels'), g.boxLabels.join('\n'));
     setBadge($('grid-state'), g.corners ? `${g.rows} × ${g.cols}` : 'not placed', !!g.corners);
+    $('grid-labels-note').textContent = g.rowLabels.length || g.colLabels.length ? 'custom' : 'R1…, C1…';
+    $('grid-boxes-note').textContent = g.boxLabels.length ? `${g.boxLabels.length} names` : 'R1 C1, …';
+    // IVIS works without a grid, so its grid is never the next step.
+    setNextStep($('grid-place'), !g.corners && tool.kind === 'heatmap');
     $('grid-zoom').disabled = !g.corners;
     $('grid-detect').disabled = !g.corners;
 
@@ -630,6 +634,8 @@
       !!cb.start && validTicks >= 2,
     );
     $('tick-add').disabled = !cb.start;
+    setNextStep($('bar-place'), !cb.start);
+    setNextStep($('tick-add'), !!cb.start && validTicks < 2);
     $('bar-zoom').disabled = !cb.start;
     renderTicks(cb);
 
@@ -643,6 +649,17 @@
     el.className = `badge ${ok ? 'ok' : 'todo'}`;
   }
 
+  // Toggle buttons and chips: .active for the look, aria-pressed for screen readers.
+  function setPressed(el, on) {
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-pressed', String(on));
+  }
+
+  // The next step of an unfinished panel is the card's primary button.
+  function setNextStep(el, on) {
+    el.classList.toggle('primary', on);
+  }
+
   function renderPanels(active) {
     const list = $('panel-list');
     const multiPage = (app.project.source?.pageCount || 1) > 1;
@@ -651,12 +668,13 @@
       ...pagePanels().map((p) => {
         const li = document.createElement('li');
         const btn = document.createElement('button');
-        btn.className = `btn small${p === active ? ' active' : ''}`;
+        btn.className = 'chip';
+        btn.setAttribute('aria-pressed', String(p === active));
         const dot = document.createElement('span');
         const problem = toolFor(p).panelProblem(p);
         const review = !problem && ws.reviewStatus?.(p);
         dot.className = `status-dot${problem ? '' : review === 'rejected' ? ' rejected' : ' done'}`;
-        btn.append(dot, document.createTextNode(p.name || '(unnamed)'));
+        btn.append(dot, Object.assign(document.createElement('span'), { className: 'chip-label', textContent: p.name || '(unnamed)' }));
         btn.title = problem || (review === 'rejected' ? `Rejected in review${p.review.note ? `: ${p.review.note}` : ''}` : review === 'accepted' ? 'Calibrated and accepted' : 'Calibrated');
         btn.addEventListener('click', () => {
           if (p.id === app.project.activePanelId) return;
@@ -688,13 +706,13 @@
       .sort((a, b) => a[0] - b[0])
       .map(([page, names]) => {
         const btn = document.createElement('button');
-        btn.className = 'btn small ghost';
-        btn.textContent = `Page ${page}: ${names.join(', ')}`;
+        btn.className = 'chip';
+        btn.append(Object.assign(document.createElement('span'), { className: 'chip-label', textContent: `Page ${page}: ${names.join(', ')}` }));
         btn.title = `Go to page ${page}`;
         btn.addEventListener('click', () => goToPage(page));
         return btn;
       });
-    box.replaceChildren(Object.assign(document.createElement('span'), { className: 'muted small', textContent: 'Other pages:' }), ...items);
+    box.replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Other pages:' }), ...items);
   }
 
   let tickKey = '';
@@ -743,7 +761,7 @@
           });
           pos.append(at, '%');
           const del = document.createElement('button');
-          del.className = 'btn icon small';
+          del.className = 'btn subtle icon';
           del.textContent = '×';
           del.title = 'Remove tick';
           del.setAttribute('aria-label', 'Remove tick');
@@ -855,7 +873,7 @@
     link.rel = 'noopener';
     link.textContent = 'View';
     link.title = 'Open this colormap in the colormap viewer';
-    out.className = `bar-match small ${m.level}`;
+    out.className = `bar-match hint ${m.level}`;
     if (m.level === 'exact') {
       out.append('Reference colormap: ', strong, ` (matplotlib, ${score})${dir}. `);
     } else if (m.level === 'close') {
@@ -1408,8 +1426,7 @@
   // The crosshair choice is a per-browser convenience; storage may be unavailable.
   function setCrosshair(on) {
     viewer.crosshair = on;
-    $('toggle-crosshair').classList.toggle('active', on);
-    $('toggle-crosshair').setAttribute('aria-pressed', String(on));
+    setPressed($('toggle-crosshair'), on);
     try {
       localStorage.setItem('colormeris.crosshair', on ? '1' : '0');
     } catch {}
@@ -1421,8 +1438,7 @@
   $('toggle-crosshair').addEventListener('click', () => setCrosshair(!viewer.crosshair));
   $('toggle-overlay').addEventListener('click', () => {
     app.showOverlay = !app.showOverlay;
-    $('toggle-overlay').classList.toggle('active', app.showOverlay);
-    $('toggle-overlay').setAttribute('aria-pressed', String(app.showOverlay));
+    setPressed($('toggle-overlay'), app.showOverlay);
     viewer.requestDraw();
   });
 
@@ -1531,6 +1547,7 @@
     bindText,
     setValue,
     setBadge,
+    setPressed,
     strokeDual,
     polyPath,
     drawHandle,

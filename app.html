@@ -6,7 +6,7 @@
   <title>Colormeris</title>
   <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and in vivo imaging (IVIS) signal.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/css/style.css?v=14">
+  <link rel="stylesheet" href="assets/css/style.css?v=18">
   <script src="assets/vendor/jszip/jszip.min.js" defer></script>
   <!-- Classic (non-module) scripts so the page also works when opened from disk. Order matters. -->
   <script src="assets/js/color.js?v=2" defer></script>
@@ -22,18 +22,18 @@
   <script src="assets/js/roi.js?v=1" defer></script>
   <script src="assets/js/quantify.js?v=1" defer></script>
   <script src="assets/js/settings.js?v=1" defer></script>
-  <script src="assets/js/workspace.js?v=4" defer></script>
+  <script src="assets/js/workspace.js?v=6" defer></script>
   <script src="assets/js/heatmap.js?v=1" defer></script>
-  <script src="assets/js/ivis.js?v=1" defer></script>
+  <script src="assets/js/ivis.js?v=2" defer></script>
   <script src="assets/js/agent-schema.js?v=1" defer></script>
   <script src="assets/js/agent.js?v=1" defer></script>
   <script src="assets/js/agent-llm.js?v=1" defer></script>
   <script src="assets/js/agent-runner.js?v=1" defer></script>
-  <script src="assets/js/agent-panel.js?v=1" defer></script>
+  <script src="assets/js/agent-panel.js?v=2" defer></script>
   <script src="assets/js/settings-dialog.js?v=1" defer></script>
   <script src="assets/js/app.js?v=1" defer></script>
 </head>
-<body>
+<body class="app">
   <header class="topbar">
     <a class="brand" href="index.html" title="Colormeris home">
       <span class="brand-mark" aria-hidden="true"></span>
@@ -82,30 +82,34 @@
           <h2>Agent</h2>
           <span id="agent-badge" class="badge">off</span>
         </div>
-        <p class="muted small agent-note">An LLM finds the heatmaps and calibrates them; a smaller vision model reviews each panel. It uses your own OpenRouter key and runs in this browser. <b>Page images and extracted values are sent to OpenRouter and the model providers you pick.</b></p>
-        <details class="settings" id="agent-settings" open>
-          <summary>Models</summary>
-          <label class="field">LLM (vision and tools)
-            <input id="agent-llm" type="text" list="agent-llm-list" spellcheck="false">
-            <datalist id="agent-llm-list"></datalist>
-          </label>
-          <label class="field">Reviewer (vision and tools)
-            <input id="agent-reviewer" type="text" list="agent-llm-list" spellcheck="false">
-          </label>
-          <p class="muted small">API key, confidence and step limits are in <button type="button" class="link" id="agent-open-settings">Settings</button>.</p>
+        <p class="hint">An LLM finds and calibrates the heatmaps with your own OpenRouter key; a smaller vision model reviews each panel. <b>Page images and extracted values are sent to OpenRouter and the model providers you pick.</b></p>
+        <details class="options" id="agent-settings" open>
+          <summary>Models <span id="agent-model-note" class="summary-note"></span></summary>
+          <div class="options-body">
+            <label class="field">LLM (vision and tools)
+              <input id="agent-llm" type="text" list="agent-llm-list" spellcheck="false">
+              <datalist id="agent-llm-list"></datalist>
+            </label>
+            <label class="field">Reviewer (vision and tools)
+              <input id="agent-reviewer" type="text" list="agent-llm-list" spellcheck="false">
+            </label>
+            <p class="hint">API key, confidence and step limits are in <button type="button" class="link" id="agent-open-settings">Settings</button>.</p>
+          </div>
         </details>
-        <label class="field">Pages
-          <select id="agent-pages">
-            <option value="current">Current page</option>
-            <option value="all">All pages</option>
-            <option value="range">Pages…</option>
-          </select>
-        </label>
-        <input id="agent-range" type="text" placeholder="e.g. 2-4, 7" spellcheck="false" hidden>
-        <div class="row tight">
+        <div class="fields wide">
+          <label class="field">Pages
+            <select id="agent-pages">
+              <option value="current">Current page</option>
+              <option value="all">All pages</option>
+              <option value="range">Pages…</option>
+            </select>
+          </label>
+          <input id="agent-range" type="text" placeholder="e.g. 2-4, 7" spellcheck="false" aria-label="Page range" hidden>
+        </div>
+        <div class="card-actions">
           <button class="btn primary" id="agent-run" disabled>Run agent</button>
-          <button class="btn" id="agent-stop" hidden>Stop</button>
-          <span id="agent-status" class="muted small"></span>
+          <button class="btn danger" id="agent-stop" hidden>Stop</button>
+          <span id="agent-status" class="hint"></span>
         </div>
         <div id="agent-review" class="agent-review" hidden>
           <h3>Needs review</h3>
@@ -116,47 +120,60 @@
 
       <section class="card" id="sec-panels" hidden>
         <div class="card-head">
-          <h2>Panels <span id="panel-page-note" class="muted small"></span></h2>
-          <button class="btn small" id="panel-add">+ Add panel</button>
+          <h2>Panels <span id="panel-page-note" class="head-note"></span></h2>
+          <button class="btn" id="panel-add">+ Add panel</button>
         </div>
-        <ul id="panel-list" class="panel-list"></ul>
+        <ul id="panel-list" class="chip-list"></ul>
         <div id="other-pages" class="other-pages" hidden></div>
         <div class="row">
           <label class="field grow">Name <input id="panel-name" type="text" spellcheck="false"></label>
-          <button class="btn small danger" id="panel-delete">Delete</button>
+          <button class="btn danger" id="panel-delete">Delete</button>
         </div>
       </section>
 
       <section class="card" id="sec-grid" hidden>
         <div class="card-head">
-          <h2><span class="step-dot grid-dot"></span>Grid <span class="muted small" data-tool="ivis" hidden>optional</span></h2>
+          <h2><span class="step-dot grid-dot"></span>Grid <span class="tag" data-tool="ivis" hidden>optional</span></h2>
           <span id="grid-state" class="badge"></span>
         </div>
-        <div class="row">
+        <div class="card-actions">
           <button class="btn" id="grid-place" title="Shortcut: G" data-hotkey="grid" data-title="Shortcut: {key}">Place grid corners</button>
-          <button class="btn ghost small" id="grid-zoom" title="Zoom to grid">Zoom to</button>
-          <button class="btn ghost small danger" id="grid-clear" data-tool="ivis" hidden>Remove</button>
+          <button class="btn subtle" id="grid-zoom" title="Zoom to grid">Zoom to</button>
+          <button class="btn danger" id="grid-clear" data-tool="ivis" hidden>Remove</button>
         </div>
-        <div class="row wrap">
-          <label class="field">Rows<input id="grid-rows" type="number" min="1" max="1000" class="num"></label>
-          <label class="field">Columns <input id="grid-cols" type="number" min="1" max="1000" class="num"></label>
-          <button class="btn small" id="grid-detect" title="Guess rows and columns from the image inside the grid">Detect</button>
-          <label class="field" data-tool="heatmap">Sampled area
-            <span class="row tight"><input id="grid-fraction" type="range" min="0.1" max="1" step="0.05"><output id="grid-fraction-out" class="small"></output></span>
-          </label>
+        <div class="fields">
+          <label class="field">Rows <input id="grid-rows" type="number" min="1" max="1000"></label>
+          <label class="field">Columns <input id="grid-cols" type="number" min="1" max="1000"></label>
+          <button class="btn" id="grid-detect" title="Guess rows and columns from the image inside the grid">Detect</button>
         </div>
-        <label class="check"><input id="grid-rect" type="checkbox" checked> Keep rectangular when dragging corners</label>
-        <div class="row" data-tool="heatmap">
-          <label class="field grow">Row labels (top → bottom)
-            <textarea id="grid-row-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated; blank = R1, R2, …"></textarea>
-          </label>
-          <label class="field grow">Column labels (left → right)
-            <textarea id="grid-col-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated; blank = C1, C2, …"></textarea>
-          </label>
-        </div>
-        <label class="field" data-tool="ivis" hidden>Box names (reading order: left → right, top → bottom)
-          <textarea id="grid-box-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated, e.g. B-a11, B-a16, C-a9 …; blank = R1 C1, R1 C2, …"></textarea>
-        </label>
+        <details class="options" data-tool="heatmap">
+          <summary>Row and column labels <span id="grid-labels-note" class="summary-note"></span></summary>
+          <div class="options-body">
+            <label class="field">Rows (top → bottom)
+              <textarea id="grid-row-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated; blank = R1, R2, …"></textarea>
+            </label>
+            <label class="field">Columns (left → right)
+              <textarea id="grid-col-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated; blank = C1, C2, …"></textarea>
+            </label>
+          </div>
+        </details>
+        <details class="options" data-tool="ivis" hidden>
+          <summary>Box names <span id="grid-boxes-note" class="summary-note"></span></summary>
+          <div class="options-body">
+            <label class="field">Reading order: left → right, top → bottom
+              <textarea id="grid-box-labels" rows="3" spellcheck="false" placeholder="One per line or comma-separated, e.g. B-a11, B-a16, C-a9 …; blank = R1 C1, R1 C2, …"></textarea>
+            </label>
+          </div>
+        </details>
+        <details class="options">
+          <summary>Options</summary>
+          <div class="options-body">
+            <label class="field" data-tool="heatmap" title="Share of each cell that is averaged around its center; lower it to stay clear of cell borders">Sampled area
+              <span class="range-row"><input id="grid-fraction" type="range" min="0.1" max="1" step="0.05"><output id="grid-fraction-out"></output></span>
+            </label>
+            <label class="check"><input id="grid-rect" type="checkbox" checked> Keep rectangular when dragging corners</label>
+          </div>
+        </details>
       </section>
 
       <section class="card" id="sec-colorbar" hidden>
@@ -164,35 +181,38 @@
           <h2><span class="step-dot bar-dot"></span>Colorbar</h2>
           <span id="bar-state" class="badge"></span>
         </div>
-        <div class="row">
+        <div class="card-actions">
           <button class="btn" id="bar-place" title="Shortcut: B" data-hotkey="colorbar" data-title="Shortcut: {key}">Place colorbar ends</button>
           <button class="btn" id="tick-add" title="Shortcut: T" data-hotkey="ticks" data-title="Shortcut: {key}">Add ticks</button>
-          <button class="btn ghost small" id="bar-zoom" title="Zoom to colorbar">Zoom to</button>
+          <button class="btn subtle" id="bar-zoom" title="Zoom to colorbar">Zoom to</button>
         </div>
         <canvas id="bar-strip" class="bar-strip" width="600" height="28" aria-label="Sampled colorbar"></canvas>
-        <p id="bar-match" class="bar-match small" aria-live="polite" hidden></p>
-        <div class="row">
-          <label class="field">Scale
-            <select id="bar-scale">
-              <option value="linear">Linear</option>
-              <option value="log10">Log₁₀ (tick values are raw numbers)</option>
-            </select>
-          </label>
-          <label class="field">Averaging half-width (px) <input id="bar-halfwidth" type="number" min="0" max="50" step="1" class="num"></label>
-        </div>
-        <div class="row">
-          <label class="field" title="What happens to the ticks when you drag an end of the colorbar: move with the bar and keep their proportions, or stay on their marks on the page. Drag the line itself to move everything together.">When dragging an end, ticks
-            <select id="bar-tick-mode">
-              <option value="follow">Move with the bar (keep proportions)</option>
-              <option value="fixed">Stay in place on the page</option>
-            </select>
-          </label>
-        </div>
+        <p id="bar-match" class="bar-match hint" aria-live="polite" hidden></p>
         <table class="ticks">
           <thead><tr><th>Tick value</th><th>Position along bar</th><th></th></tr></thead>
           <tbody id="tick-list"></tbody>
         </table>
-        <p id="tick-empty" class="muted small">No ticks yet. Use <b>Add ticks</b>, click a labelled tick on the bar, type its value, repeat.</p>
+        <p id="tick-empty" class="hint">No ticks yet. Use <b>Add ticks</b>, click a labelled tick on the bar, type its value, repeat.</p>
+        <label class="field">Scale
+          <select id="bar-scale">
+            <option value="linear">Linear</option>
+            <option value="log10">Log₁₀ (tick values are raw numbers)</option>
+          </select>
+        </label>
+        <details class="options">
+          <summary>Options</summary>
+          <div class="options-body">
+            <div class="fields">
+              <label class="field" title="Colors are averaged over this many pixels on each side of the colorbar line">Averaging (± px) <input id="bar-halfwidth" type="number" min="0" max="50" step="1"></label>
+            </div>
+            <label class="field" title="What happens to the ticks when you drag an end of the colorbar: move with the bar and keep their proportions, or stay on their marks on the page. Drag the line itself to move everything together.">When dragging an end, ticks
+              <select id="bar-tick-mode">
+                <option value="follow">Move with the bar (keep proportions)</option>
+                <option value="fixed">Stay in place on the page</option>
+              </select>
+            </label>
+          </div>
+        </details>
       </section>
 
       <section class="card" id="sec-rois" hidden>
@@ -200,47 +220,49 @@
           <h2><span class="step-dot roi-dot"></span>Regions</h2>
           <span id="roi-state" class="badge"></span>
         </div>
-        <div class="row wrap tool-row" role="toolbar" aria-label="Draw a region">
-          <button class="btn" id="tool-ellipse" title="Ellipse (E) — hold Shift for a circle" data-hotkey="ellipse" data-title="Ellipse ({key}) — hold Shift for a circle"><span class="shape-icon ellipse" aria-hidden="true"></span>Ellipse</button>
-          <button class="btn" id="tool-rect" title="Rectangle (R) — hold Shift for a square" data-hotkey="rect" data-title="Rectangle ({key}) — hold Shift for a square"><span class="shape-icon rect" aria-hidden="true"></span>Rectangle</button>
-          <button class="btn" id="tool-polygon" title="Polygon (P) — click points, then click the first point or press Enter" data-hotkey="polygon" data-title="Polygon ({key}) — click points, then click the first point or press Enter"><span class="shape-icon polygon" aria-hidden="true"></span>Polygon</button>
+        <div class="card-actions" role="toolbar" aria-label="Draw a region">
+          <button class="btn" id="tool-ellipse" aria-pressed="false" title="Ellipse (E) — hold Shift for a circle" data-hotkey="ellipse" data-title="Ellipse ({key}) — hold Shift for a circle"><span class="shape-icon ellipse" aria-hidden="true"></span>Ellipse</button>
+          <button class="btn" id="tool-rect" aria-pressed="false" title="Rectangle (R) — hold Shift for a square" data-hotkey="rect" data-title="Rectangle ({key}) — hold Shift for a square"><span class="shape-icon rect" aria-hidden="true"></span>Rectangle</button>
+          <button class="btn" id="tool-polygon" aria-pressed="false" title="Polygon (P) — click points, then click the first point or press Enter" data-hotkey="polygon" data-title="Polygon ({key}) — click points, then click the first point or press Enter"><span class="shape-icon polygon" aria-hidden="true"></span>Polygon</button>
         </div>
         <label class="check"><input id="roi-replicate" type="checkbox" checked> Copy new regions into every grid box</label>
-        <ul id="roi-list" class="roi-list"></ul>
-        <p id="roi-empty" class="muted small">No regions yet. Pick a shape and draw it on the image.</p>
+        <ul id="roi-list" class="chip-list"></ul>
+        <p id="roi-empty" class="hint">No regions yet. Pick a shape and draw it on the image.</p>
         <div id="roi-edit" class="row" hidden>
           <label class="field grow">Selected region <input id="roi-name" type="text" spellcheck="false"></label>
-          <button class="btn small" id="roi-reset" title="Put every copy back at the shared position">Reset nudges</button>
-          <button class="btn small danger" id="roi-delete" title="Delete (Del)">Delete</button>
+          <button class="btn" id="roi-reset" title="Put every copy back at the shared position">Reset nudges</button>
+          <button class="btn danger" id="roi-delete" title="Delete (Del)">Delete</button>
         </div>
-        <p class="muted small">Drag a copy to nudge it in its box; Alt-drag moves all copies. Handles resize the shape everywhere.</p>
+        <p id="roi-hint" class="hint">Drag a copy to nudge it in its box; Alt-drag moves all copies. Handles resize the shape everywhere.</p>
       </section>
 
       <section class="card" id="sec-scale" hidden>
         <div class="card-head">
-          <h2>Scale <span class="muted small">optional</span></h2>
+          <h2>Scale <span class="tag">optional</span></h2>
           <span id="scale-state" class="badge"></span>
         </div>
-        <div class="row wrap">
+        <div class="card-actions">
           <button class="btn" id="scale-place">Measure scale bar</button>
-          <label class="field">Length <input id="scale-length" type="number" min="0" step="any" class="num" value="1"></label>
+          <button class="btn danger" id="scale-clear">Remove</button>
+        </div>
+        <div class="fields">
+          <label class="field">Length <input id="scale-length" type="number" min="0" step="any" value="1"></label>
           <label class="field">Unit
             <select id="scale-unit"><option value="cm">cm</option><option value="mm">mm</option></select>
           </label>
-          <button class="btn ghost small danger" id="scale-clear">Remove</button>
         </div>
-        <p id="scale-info" class="muted small">Click both ends of a scale bar (or any known distance) to report areas in real units.</p>
+        <p id="scale-info" class="hint">Click both ends of a scale bar (or any known distance) to report areas in real units.</p>
       </section>
 
       <section class="card" id="sec-hm-results" hidden>
         <div class="card-head">
           <h2>Results</h2>
-          <label class="check small"><input id="toggle-recon" type="checkbox"> Reconstruct</label>
+          <label class="check"><input id="toggle-recon" type="checkbox"> Reconstruct</label>
         </div>
         <p id="result-problem" class="notice"></p>
-        <p id="result-summary" class="muted small"></p>
+        <p id="result-summary" class="hint"></p>
         <div class="table-wrap"><table id="result-table" class="result-table"></table></div>
-        <div class="row wrap">
+        <div class="card-actions">
           <button class="btn primary" id="dl-csv">Download CSV</button>
           <button class="btn" id="dl-long">Long CSV</button>
           <button class="btn" id="copy-tsv">Copy table</button>
@@ -250,10 +272,10 @@
       <section class="card" id="sec-iv-results" hidden>
         <div class="card-head">
           <h2>Results</h2>
-          <label class="check small" title="Tint the pixels counted as signal"><input id="toggle-mask" type="checkbox"> Show signal</label>
+          <label class="check" title="Tint the pixels counted as signal"><input id="toggle-mask" type="checkbox"> Show signal</label>
         </div>
         <p id="iv-result-problem" class="notice"></p>
-        <p id="iv-result-summary" class="muted small"></p>
+        <p id="iv-result-summary" class="hint"></p>
         <label class="field">Show
           <select id="result-metric">
             <option value="sum">Total signal (sum)</option>
@@ -268,7 +290,7 @@
           </select>
         </label>
         <div class="table-wrap"><table id="iv-result-table" class="result-table"></table></div>
-        <div class="row wrap">
+        <div class="card-actions">
           <button class="btn primary" id="iv-dl-csv">Download CSV</button>
           <button class="btn" id="iv-copy-tsv">Copy table</button>
         </div>

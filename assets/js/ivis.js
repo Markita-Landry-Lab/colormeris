@@ -234,8 +234,8 @@
   }
 
   function onModeChange(type) {
-    for (const s of ['ellipse', 'rect', 'polygon']) $(`tool-${s}`).classList.toggle('active', type === s);
-    $('scale-place').classList.toggle('active', type === 'scale');
+    for (const s of ['ellipse', 'rect', 'polygon']) ws.setPressed($(`tool-${s}`), type === s);
+    ws.setPressed($('scale-place'), type === 'scale');
     if (type !== 'ellipse' && type !== 'rect') state.draft = null;
   }
 
@@ -518,16 +518,17 @@
         ...panel.rois.map((roi) => {
           const li = document.createElement('li');
           const btn = document.createElement('button');
-          btn.className = `btn small roi-item${roi.id === state.selectedId ? ' active' : ''}`;
+          btn.className = 'chip roi-item';
+          btn.setAttribute('aria-pressed', String(roi.id === state.selectedId));
           const sw = document.createElement('span');
           sw.className = `shape-icon ${roi.shape}`;
           sw.style.setProperty('--roi-color', roiColor(panel, roi));
           const copies = roi.replicate ? (panel.grid.corners ? panel.grid.rows * panel.grid.cols : 0) : 1;
           const nudged = Object.keys(roi.offsets).length;
           const meta = document.createElement('span');
-          meta.className = 'muted';
+          meta.className = 'chip-meta';
           meta.textContent = roi.replicate ? `×${copies}${nudged ? `, ${nudged} nudged` : ''}` : 'single';
-          btn.append(sw, document.createTextNode(roi.name), meta);
+          btn.append(sw, Object.assign(document.createElement('span'), { className: 'chip-label', textContent: roi.name }), meta);
           btn.title = `${SHAPE_NAMES[roi.shape]}${roi.replicate ? ' copied into every box' : ''}`;
           btn.addEventListener('click', () => {
             state.selectedId = roi.id === state.selectedId ? null : roi.id;
@@ -539,6 +540,7 @@
       );
     }
     $('roi-empty').hidden = panel.rois.length > 0;
+    $('roi-hint').hidden = !panel.rois.length;
     const sel = selectedRoi();
     $('roi-edit').hidden = !sel;
     if (sel) {

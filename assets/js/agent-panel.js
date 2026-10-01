@@ -20,10 +20,14 @@
     $('agent-llm').value = agent().llm || DEFAULT_LLM;
     $('agent-reviewer').value = agent().reviewer || DEFAULT_REVIEWER;
     if (agent().key) $('agent-settings').open = false;
+    // The folded Models line still shows which LLM will run.
+    const showModel = () => ($('agent-model-note').textContent = $('agent-llm').value.trim() || DEFAULT_LLM);
+    showModel();
     for (const [id, key] of [['agent-llm', 'llm'], ['agent-reviewer', 'reviewer']]) {
       $(id).addEventListener('change', () => {
         agent()[key] = $(id).value.trim();
         settingsUi.save();
+        showModel();
       });
     }
     settingsUi.onChange(() => updateButtons());
@@ -231,11 +235,11 @@
       const head = document.createElement('div');
       head.textContent = `${panelName(q.panelId)}: ${q.prompt}`;
       const hint = document.createElement('div');
-      hint.className = 'muted';
+      hint.className = 'hint';
       hint.textContent = `${q.escalated.source || 'The model'} suggested ${answerText(q.escalated.answer)} (${pct(q.escalated.confidence)} sure)`;
       const row = document.createElement('div');
-      row.className = 'row tight';
-      row.append(button('Show', 'ghost', () => showPanel(q.panelId, q)));
+      row.className = 'card-actions';
+      row.append(button('Show', 'subtle', () => showPanel(q.panelId, q)));
       if (q.type === 'confirm_grid_size') {
         const init = q.escalated.answer || q.suggested;
         const rows = Object.assign(document.createElement('input'), { type: 'number', min: 1, value: init.rows, className: 'num', title: 'Rows' });
@@ -266,10 +270,10 @@
       const note = Object.assign(document.createElement('input'), { type: 'text', value: rv.note || '', placeholder: 'What is wrong? (optional, passed to the agent)', spellcheck: false });
       note.addEventListener('change', () => (panel.review.note = note.value.trim()));
       const row = document.createElement('div');
-      row.className = 'row tight';
+      row.className = 'card-actions';
       const redo = button('Redo with agent', 'primary', () => start({ panelId: panel.id, note: note.value.trim() }));
       redo.disabled = !!abort || !hasKeyOrProxy();
-      row.append(button('Show', 'ghost', () => showPanel(panel.id)), redo, button('Accept anyway', '', () => review(panel.id, 'accepted')), deleteButton(panel.id));
+      row.append(button('Show', 'subtle', () => showPanel(panel.id)), redo, button('Accept anyway', '', () => review(panel.id, 'accepted')), deleteButton(panel.id));
       li.append(head, note, row);
       return li;
     }
@@ -290,7 +294,9 @@
     }
 
     function button(text, cls, onClick) {
-      const b = Object.assign(document.createElement('button'), { textContent: text, className: `btn small ${cls}`.trim() });
+      const b = Object.assign(document.createElement('button'), { textContent: text, className: `btn ${cls}`.trim() });
+      // The reviewer's suggested option is shown pressed.
+      if (cls.includes('active')) b.setAttribute('aria-pressed', 'true');
       b.addEventListener('click', onClick);
       return b;
     }
