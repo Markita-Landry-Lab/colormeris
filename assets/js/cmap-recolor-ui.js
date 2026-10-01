@@ -7,13 +7,6 @@
   // text, axes) keep theirs. Hovering a color in the figure, its recolored copy or the strips
   // flashes every pixel with a similar value to its complementary color. The image never leaves the browser.
 
-  const GROUPS = [
-    ['sequential', 'Sequential'],
-    ['diverging', 'Diverging'],
-    ['cyclic', 'Cyclic'],
-    ['rainbow', 'Rainbow'],
-    ['others', 'Others'],
-  ];
   const DEFAULT_MAP = 'viridis';
   const TOLERANCE = 12; // ΔE76: JPEG noise stays inside, white and gray outside
   const BAND = 0.02; // share of the bar that counts as "similar" on hover
@@ -37,7 +30,17 @@
     const revBox = el('input', { type: 'checkbox' });
     const revLabel = el('label', { class: 'cmap-rc-check' });
     revLabel.append(revBox, ' Reversed');
-    const picker = mapPicker();
+    const picker = CM.createMapPicker(ctx, {
+      id: 'cmap-rc',
+      label: 'New colormap',
+      current: () => chosen,
+      onChoose: (name, typedReversed) => {
+        const changed = name !== chosen || (typedReversed && !revBox.checked);
+        chosen = name;
+        if (typedReversed) revBox.checked = true;
+        if (changed) render();
+      },
+    });
     const mapField = field('New colormap', 'The colormap the figure is redrawn in. Type to search; leave empty to see them all.', picker.box, revLabel);
 
     const tol = el('input', { type: 'range', min: '2', max: '40', step: '1', value: String(TOLERANCE) });
@@ -130,131 +133,6 @@
     const grid = el('div', { class: 'cmap-rc-grid' });
     grid.append(origPanel, outPanel);
     d.append(fig.zone, fig.file, controls, status, grid, readout, oldNote, strips);
-
-    // A text field that filters the colormaps as you type (an ARIA combobox).
-    // Empty, it lists them all in their groups. Typing "name_r" also turns on
-    // Reversed. Leaving it with text that names no map puts the choice back.
-    function mapPicker() {
-      const box = el('div', { class: 'cmap-rc-pick' });
-      const input = el('input', {
-        type: 'text', role: 'combobox', 'aria-label': 'New colormap', 'aria-autocomplete': 'list',
-        'aria-expanded': 'false', 'aria-controls': 'cmap-rc-maps', autocomplete: 'off', spellcheck: 'false', placeholder: 'Type to search',
-      });
-      input.value = chosen;
-      const list = el('ul', { class: 'cmap-rc-maps', id: 'cmap-rc-maps', role: 'listbox', 'aria-label': 'Colormaps', hidden: '' });
-      box.append(input, list);
-      const groupOf = new Map(GROUPS);
-      let options = []; // the li elements shown, in order
-      let active = -1;
-
-      const optionFor = (m) => {
-        const li = el('li', { role: 'option', id: `cmap-rc-opt-${m.name}`, 'aria-selected': String(m.name === chosen) });
-        li.dataset.name = m.name;
-        const mini = el('span', { class: 'cmap-mini' });
-        mini.innerHTML = stripSvg(base(m), m.kind === 'qualitative');
-        li.append(mini, el('span', { class: 'cmap-rc-opt-name' }, m.name));
-        // mousedown, not click, so the input keeps the focus.
-        li.addEventListener('mousedown', (e) => { e.preventDefault(); choose(m.name); });
-        return li;
-      };
-
-      // Name matches first that start with the text, then any that contain it.
-      function fill(text) {
-        const q = text.trim().toLowerCase().replace(/_r$/, '');
-        list.replaceChildren();
-        options = [];
-        if (!q) {
-          for (const [group, title] of GROUPS) {
-            const maps = data.maps.filter((m) => m.group === group);
-            if (!maps.length) continue;
-            list.append(el('li', { class: 'cmap-rc-group', role: 'presentation' }, title));
-            for (const m of maps) options.push(list.appendChild(optionFor(m)));
-          }
-        } else {
-          const lower = (m) => m.name.toLowerCase();
-          const hits = [
-            ...data.maps.filter((m) => lower(m).startsWith(q)),
-            ...data.maps.filter((m) => !lower(m).startsWith(q) && lower(m).includes(q)),
-          ];
-          for (const m of hits) {
-            const li = optionFor(m);
-            li.append(el('span', { class: 'cmap-rc-opt-group' }, groupOf.get(m.group) || ''));
-            options.push(list.appendChild(li));
-          }
-          if (!hits.length) list.append(el('li', { class: 'cmap-rc-none', role: 'presentation' }, 'No colormap matches'));
-        }
-        const at = options.findIndex((o) => o.dataset.name === chosen);
-        setActive(q ? 0 : at);
-      }
-
-      function setActive(i) {
-        options[active]?.classList.remove('active');
-        active = options.length ? Math.max(-1, Math.min(options.length - 1, i)) : -1;
-        const o = options[active];
-        if (o) {
-          o.classList.add('active');
-          input.setAttribute('aria-activedescendant', o.id);
-          o.scrollIntoView({ block: 'nearest' });
-        } else input.removeAttribute('aria-activedescendant');
-      }
-
-      function open(text) {
-        list.hidden = false;
-        input.setAttribute('aria-expanded', 'true');
-        fill(text);
-      }
-
-      function close() {
-        list.hidden = true;
-        input.setAttribute('aria-expanded', 'false');
-        input.removeAttribute('aria-activedescendant');
-      }
-
-      function choose(name) {
-        const typedReversed = /_r$/i.test(input.value.trim()) && !mapByName.has(input.value.trim());
-        const changed = name !== chosen || (typedReversed && !revBox.checked);
-        chosen = name;
-        if (typedReversed) revBox.checked = true;
-        input.value = name;
-        close();
-        if (changed) render();
-      }
-
-      // An exact name (any case, with or without _r) counts as chosen.
-      function exact(text) {
-        const q = text.trim().toLowerCase();
-        const find = (n) => data.maps.find((m) => m.name.toLowerCase() === n);
-        return find(q) || find(q.replace(/_r$/, ''));
-      }
-
-      // Focused with the current name in it: show all, so the list is a menu.
-      input.addEventListener('focus', () => { input.select(); open(''); });
-      input.addEventListener('click', () => { if (list.hidden) open(''); });
-      input.addEventListener('input', () => open(input.value));
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          e.preventDefault();
-          if (list.hidden) { open(input.value === chosen ? '' : input.value); return; }
-          setActive(active + (e.key === 'ArrowDown' ? 1 : -1));
-        } else if (e.key === 'Enter') {
-          if (list.hidden) return;
-          e.preventDefault();
-          const m = options[active] ? mapByName.get(options[active].dataset.name) : exact(input.value);
-          if (m) choose(m.name);
-        } else if (e.key === 'Escape') {
-          if (list.hidden) return;
-          e.preventDefault();
-          input.value = chosen;
-          close();
-        }
-      });
-      input.addEventListener('blur', () => {
-        const m = exact(input.value);
-        if (m) choose(m.name);
-        else { input.value = chosen; close(); }
-      });
-      return { box, input };
-    }
 
     function field(label, title, ...inputs) {
       const f = el('div', { class: 'cmap-rc-field', title });

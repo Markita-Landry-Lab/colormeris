@@ -329,6 +329,9 @@
       cmp.empty.hidden = list.length > 0;
       cmp.body.hidden = !list.length;
       cmp.clear.disabled = cmp.copyLink.disabled = !list.length;
+      const full = list.length >= MAX_CMP;
+      cmp.picker.disabled = full;
+      cmp.picker.title = full ? `Up to ${MAX_CMP} maps can be compared` : '';
       hideTip();
       if (!list.length) {
         for (const k of ['strips', 'plot', 'table']) cmp[k].replaceChildren();
@@ -430,6 +433,17 @@
       });
       head.append(count, clear, copyLink);
 
+      // Add maps by name, as an alternative to the + in Browse.
+      const picker = CM.createMapPicker(ctx, {
+        id: 'cmap-cmp',
+        label: 'Add a colormap',
+        placeholder: 'Add a colormap: type to search',
+        current: () => null,
+        onChoose: (name) => setCompared(name, true),
+      });
+      const add = el('div', { class: 'cmap-compare-add' });
+      add.append(picker.box);
+
       const empty = el('p', { class: 'muted' });
       const link = el('a', { href: '#browse' }, 'Browse');
       empty.append('No colormaps chosen yet. In ', link, ', press + on a row to add it (up to 10).');
@@ -449,8 +463,8 @@
       const body = el('div', { class: 'cmap-compare-body' });
       const h3 = (t) => el('h3', {}, t);
       body.append(h3('Colormaps'), strips, h3('Profiles'), plot, numsHead, table);
-      sec.append(head, empty, body);
-      Object.assign(cmp, { sec, count, strips, plot, table, empty, body, clear, copyLink });
+      sec.append(head, add, empty, body);
+      Object.assign(cmp, { sec, picker: picker.input, count, strips, plot, table, empty, body, clear, copyLink });
       return sec;
     }
 

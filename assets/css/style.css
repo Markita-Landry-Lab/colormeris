@@ -829,6 +829,8 @@ input.cmap-search { width: 260px; max-width: 100%; }
 }
 .cmap-compare-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cmap-compare-head h2 { margin: 0 auto 0 0; font-size: 16px; }
+.cmap-compare-add { margin-top: 8px; }
+.cmap-compare-add .cmap-rc-pick input { width: min(100%, 280px); }
 .cmap-compare-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .cmap-compare-body h3 { margin: 10px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
 .cmap-compare > p { margin: 0; }
