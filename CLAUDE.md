@@ -37,7 +37,7 @@ There is no build step. Pages load plain classic scripts (not modules, so `file:
 | Heatmap agent | `agent-llm.js` (pure: system prompt, LLM tool list, question ↔ reviewer mapping (`toReviewItem`, `reviewTool`, `fromReviewAnswer`), `reviewAdvice`, `createRetryGuard`, limits), `agent-runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, one reviewer call per panel), `agent-panel.js` (Agent card UI, Needs review) |
 | Entry | `app.js` creates the workspace, both tools, `window.colormeris` and the agent panel |
 
-Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter SDK 1.4.10 as an IIFE bundle (`OpenRouterSDK.OpenRouter`, 834 KB, loaded lazily by the Agent card). `assets/img/` (which holds `example.pdf`, a 26-page paper on ionizable lipids for mRNA delivery, with heatmaps on pages 3 and 5) is git-ignored.
+Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter SDK 1.4.10 as an IIFE bundle (`OpenRouterSDK.OpenRouter`, 834 KB, loaded lazily by the Agent card). `assets/examples/` holds `example.pdf` (a 26-page paper on ionizable lipids for mRNA delivery, with heatmaps on pages 3 and 5) and `example-jet.png` (a copy of the synthetic jet calibration figure), loaded by the empty-state buttons. `assets/img/` is git-ignored.
 
 ### Agent design decisions (and why)
 

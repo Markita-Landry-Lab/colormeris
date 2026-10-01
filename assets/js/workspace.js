@@ -585,11 +585,18 @@
     for (const fn of changeListeners) fn();
   }
 
+  let helpLoaded = null;
   function renderSidebar(light = false) {
     const loaded = !!app.sourceCanvas;
     for (const t of Object.values(tools)) for (const id of t.sections || []) $(id).hidden = true;
     for (const id of ['sec-panels', 'sec-grid', 'sec-colorbar', 'sec-settings', ...(tool.sections || [])]) $(id).hidden = !loaded;
     $('empty-state').hidden = loaded;
+    // Open the help when nothing is loaded, close it once a file is; only on the change, so a manual toggle sticks.
+    if (helpLoaded !== loaded) {
+      helpLoaded = loaded;
+      const help = document.querySelector('details.help');
+      if (help) help.open = !loaded;
+    }
     // The agent card needs a file; its tool (data-tool) still decides where it shows.
     $('sec-agent').hidden = !loaded || $('sec-agent').dataset.tool !== tool.kind;
     $('view-tools').hidden = !loaded;
@@ -1166,6 +1173,25 @@
     $(id).addEventListener('change', (e) => {
       openFile(e.target.files[0]);
       e.target.value = '';
+    });
+  }
+
+  // The whole dashed drop area opens the file dialog; the button inside already does.
+  $('dropzone').addEventListener('click', (e) => {
+    if (!e.target.closest('label')) $('file-input-2').click();
+  });
+
+  // Example files ship with the app. fetch() fails on file://, so say how to run it.
+  for (const btn of document.querySelectorAll('[data-example]')) {
+    btn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(btn.dataset.example);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        await openFile(new File([blob], btn.dataset.example.split('/').pop(), { type: btn.dataset.exampleType }));
+      } catch (err) {
+        toast(`Could not load the example (${err.message}). Serve the folder with npm run serve.`, true);
+      }
     });
   }
 

@@ -305,6 +305,10 @@ table.ticks[hidden] { display: none; }
 }
 .empty-card p { margin: 4px 0; }
 .empty-card .btn { margin-top: 12px; }
+.empty-stack { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.empty-card.dropzone { cursor: pointer; }
+.empty-card.examples { border-style: solid; padding: 18px 32px; }
+.empty-card.examples .btn { margin: 8px 3px 0; }
 .empty-icon {
   width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 6px;
   background:

@@ -298,11 +298,18 @@
     <div class="stage">
       <div id="viewer" class="viewer">
         <div id="empty-state" class="empty-state">
-          <div class="empty-card">
-            <div class="empty-icon" aria-hidden="true"></div>
-            <p><b>Drop a PDF, PNG or JPG here</b></p>
-            <p class="muted">or paste an image, or open a saved project <code>.zip</code></p>
-            <label class="btn primary">Choose file…<input id="file-input-2" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.webp,.zip,image/*,application/pdf,application/zip" hidden></label>
+          <div class="empty-stack">
+            <div class="empty-card dropzone" id="dropzone">
+              <div class="empty-icon" aria-hidden="true"></div>
+              <p><b>Drop a PDF, PNG or JPG here</b></p>
+              <p class="muted">or paste an image, or open a saved project <code>.zip</code></p>
+              <label class="btn primary">Choose file…<input id="file-input-2" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.webp,.zip,image/*,application/pdf,application/zip" hidden></label>
+            </div>
+            <div class="empty-card examples">
+              <p><b>Or try an example</b></p>
+              <button class="btn" type="button" data-example="assets/examples/example.pdf" data-example-type="application/pdf">Example PDF</button>
+              <button class="btn" type="button" data-example="assets/examples/example-jet.png" data-example-type="image/png">Example image (jet)</button>
+            </div>
           </div>
         </div>
         <div id="drop-overlay" class="drop-overlay" hidden>Drop to open</div>
