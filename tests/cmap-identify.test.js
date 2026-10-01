@@ -56,3 +56,13 @@ test('loose pixels of a heatmap find its map, ignoring the white background', ()
   assert.ok(r[0].coverage > 0.5);
   assert.deepEqual(identifyColors([], maps), []);
 });
+
+test('suggested reference colormap names the direction by value', () => {
+  const s = bar('viridis', { reversed: true });
+  const free = CM.suggestColormap(s);
+  assert.deepEqual([free.mplName, free.level, free.byValue], ['viridis_r', 'exact', false]);
+  // Ticks say the start has the high values: then it is plain viridis.
+  assert.equal(CM.suggestColormap(s, { lowAtStart: false }).mplName, 'viridis');
+  const g = CM.suggestColormap(bar('gray'));
+  assert.ok(g.same.length >= 2, g.same.join());
+});

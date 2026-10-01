@@ -144,5 +144,49 @@
     return score < MATCH_LEVELS.exact ? 'exact' : score < MATCH_LEVELS.close ? 'close' : 'none';
   }
 
-  Object.assign(CM, { identifyColorbar, identifyColors, matchLevel, MATCH_LEVELS });
+  // 'rrggbb…' → [[r, g, b], …]. Kept here so the heatmap page needs no cvd.js.
+  function unpack(hex) {
+    const out = [];
+    for (let i = 0; i + 6 <= hex.length; i += 6) out.push([0, 2, 4].map((k) => parseInt(hex.slice(i + k, i + k + 2), 16)));
+    return out;
+  }
+
+  // The maps of cmap-data.js in the form above, parsed once.
+  let known = null;
+  function knownMaps() {
+    if (!known && CM.cmapData) {
+      known = CM.cmapData.maps.map((m) => ({ name: m.name, kind: m.kind, rgbs: unpack(m.colors) }));
+    }
+    return known || [];
+  }
+
+  // A reference colormap for a calibrated colorbar (heatmap and IVIS tools).
+  //   rgbs        colors sampled from the bar's start to its end
+  //   lowAtStart  true / false when the ticks say which end has the lower
+  //               values, null when unknown
+  // Returns null without colormap data, else { name, mplName ('viridis' or
+  // 'viridis_r'), reversed, byValue, score, level, same: [names with the same
+  // colors] }. With byValue, reversed is relative to rising values (as
+  // matplotlib names it); otherwise relative to start → end.
+  function suggestColormap(rgbs, { lowAtStart = null } = {}) {
+    const maps = knownMaps();
+    if (!maps.length || rgbs.length < 2) return null;
+    const ranked = identifyColorbar(rgbs, maps);
+    const best = ranked[0];
+    const byValue = lowAtStart != null;
+    const flip = (r) => (lowAtStart === false ? !r : r);
+    const name = (m) => `${m.name}${flip(m.reversed) ? '_r' : ''}`;
+    const same = ranked.slice(1).filter((m) => m.score - best.score < 0.01).map(name);
+    return {
+      name: best.name,
+      mplName: name(best),
+      reversed: flip(best.reversed),
+      byValue,
+      score: best.score,
+      level: matchLevel(best.score),
+      same,
+    };
+  }
+
+  Object.assign(CM, { identifyColorbar, identifyColors, matchLevel, MATCH_LEVELS, suggestColormap });
 })((globalThis.Colormeris ??= {}));

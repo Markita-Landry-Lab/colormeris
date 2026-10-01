@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, readPixel, projectT, pointAtT, colorAtT, buildProjectZip, readProjectZip, safeFileName, panelFileBases, rgbToHex, comboFromEvent, findHotkey, defaultSettings } = CM;
+  const { Viewer, fileKind, openPdf, renderPdfPage, imageToCanvas, canvasImageData, canvasToPngBlob, sha256Hex, createProject, createPanel, parseLabelText, ticksWithT, rescalePanel, rectCorners, detectGridSize, bilinear, cellAt, readPixel, projectT, pointAtT, colorAtT, buildProjectZip, readProjectZip, safeFileName, panelFileBases, rgbToHex, sampleColorbar, makeValueFn, comboFromEvent, findHotkey, defaultSettings } = CM;
 
   // Shared workspace for the Colormeris tools: source loading and PDF pages,
   // the zoomable viewer, panels, the grid and colorbar calibration, undo,
@@ -635,6 +635,7 @@
 
     tool.renderSidebar?.(panel, light);
     renderBarStrip(panel);
+    scheduleBarMatch(panel);
   }
 
   function setBadge(el, text, ok) {
@@ -804,6 +805,69 @@
       ctx.fillStyle = '#fff';
       ctx.fillRect(x - 1, 0, 2, h);
     }
+  }
+
+  // Which known colormap the calibrated colorbar looks like (cmap-identify.js).
+  // Matching takes ≈ 70 ms, so it waits until the bar stops moving and is
+  // cached per bar position; tick values only decide the direction.
+  let barMatchTimer = 0;
+  let barMatch = { key: null, result: null };
+
+  function scheduleBarMatch(panel) {
+    const out = $('bar-match');
+    const cb = panel.colorbar;
+    const image = app.pages.get(panel.page)?.imageData;
+    if (!out || !CM.suggestColormap || !cb.start || !cb.end || !image) {
+      if (out) out.hidden = true;
+      clearTimeout(barMatchTimer);
+      return;
+    }
+    const key = JSON.stringify([panel.page, cb.start, cb.end, cb.halfWidth]);
+    const valueAt = makeValueFn(ticksWithT(cb), cb.scale);
+    const lowAtStart = valueAt ? valueAt(0) < valueAt(1) : null;
+    clearTimeout(barMatchTimer);
+    if (barMatch.key === key) {
+      showBarMatch(barMatch.result, lowAtStart);
+      return;
+    }
+    barMatchTimer = setTimeout(() => {
+      const rgbs = sampleColorbar(image, cb.start, cb.end, cb.halfWidth, 128).map((s) => s.rgb);
+      // Match start → end once; the ticks flip the direction afterwards.
+      barMatch = { key, result: CM.suggestColormap(rgbs) };
+      if (activePanel()?.id === panel.id) showBarMatch(barMatch.result, lowAtStart);
+    }, 250);
+  }
+
+  function showBarMatch(m, lowAtStart) {
+    const out = $('bar-match');
+    out.replaceChildren();
+    out.hidden = !m;
+    if (!m) return;
+    const reversed = lowAtStart === false ? !m.reversed : m.reversed;
+    const name = `${m.name}${reversed ? '_r' : ''}`;
+    const dir = lowAtStart == null ? ' (direction from the first end you placed; add ticks to read it by value)' : '';
+    const score = `ΔE ${m.score.toFixed(1)}`;
+    const strong = document.createElement('code');
+    strong.textContent = name;
+    const link = document.createElement('a');
+    link.href = `colormaps.html?compare=${encodeURIComponent(m.name)}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'View';
+    link.title = 'Open this colormap in the colormap viewer';
+    out.className = `bar-match small ${m.level}`;
+    if (m.level === 'exact') {
+      out.append('Reference colormap: ', strong, ` (matplotlib, ${score})${dir}. `);
+    } else if (m.level === 'close') {
+      out.append('Closest colormap: ', strong, ` (${score}): similar, but not the same map${dir}. `);
+    } else {
+      out.append('No matplotlib colormap matches this colorbar (closest: ', strong, `, ${score}). `);
+    }
+    if (m.level !== 'none' && m.same.length) {
+      const flip = (n) => (lowAtStart === false ? (n.endsWith('_r') ? n.slice(0, -2) : `${n}_r`) : n);
+      out.append(`Same colors: ${m.same.map(flip).join(', ')}. `);
+    }
+    out.append(link);
   }
 
   // ---------------------------------------------------------------- loading

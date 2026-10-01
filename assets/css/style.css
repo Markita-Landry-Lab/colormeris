@@ -839,3 +839,8 @@ input.cmap-search { width: 260px; max-width: 100%; }
 @media (max-width: 900px) {
   .cmap-top { position: static; }
 }
+
+/* Suggested reference colormap under the sampled colorbar strip. */
+.bar-match { margin: 6px 0 0; color: var(--muted); line-height: 1.4; }
+.bar-match code { color: var(--text); font-weight: 600; }
+.bar-match.exact code { color: var(--good-text); }
