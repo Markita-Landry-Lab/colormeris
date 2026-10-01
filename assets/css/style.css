@@ -814,6 +814,10 @@ input.cmap-search { width: 260px; max-width: 100%; }
 /* The shadow widens the tint sideways without moving the grid. */
 .cmap-item.compared { background: var(--accent-soft); box-shadow: -6px 0 0 var(--accent-soft), 6px 0 0 var(--accent-soft); }
 .cmap-item.compared .cmap-cmp[aria-pressed="true"] { background: var(--surface); }
+/* With its detail open under the row, only the row is tinted, not the detail. */
+.cmap-item.compared:has(> .cmap-panel:not([hidden])) { background: none; box-shadow: none; }
+.cmap-item.compared:has(> .cmap-panel:not([hidden])) > .cmap-row { background: var(--accent-soft); box-shadow: -6px 0 0 var(--accent-soft), 6px 0 0 var(--accent-soft); }
+.cmap-item.compared .cmap-panel .cmap-cmp[aria-pressed="true"] { background: var(--accent-soft); }
 
 /* Comparison panel: strips, one overlay plot and a numbers table. */
 .cmap-compare {

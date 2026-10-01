@@ -95,7 +95,7 @@
       label: 'Your figure. Drag along the colorbar from its low end to its high end, then hover a color to see where it is.',
       hints: {
         empty: EMPTY_HINT,
-        loaded: 'Drag along the colorbar from one end to the other. The figure is then redrawn in the new colormap. Hover a color to see where it appears.',
+        loaded: 'Drag along the colorbar from one end to the other. The figure is then redrawn in the new colormap. Hover a color to see where it appears; press and hold the figure to see the other version.',
       },
       base: () => (view === 'recolored' && out ? out : null),
       showLine: () => view === 'original' || !out,
@@ -430,7 +430,25 @@
       if (hit) hover(hit.t);
       else if (hoverT != null || pending != null) clearHighlight();
     });
-    fig.canvas.addEventListener('pointerdown', () => clearHighlight());
+    // Press and hold the figure to see the other version (original or
+    // recolored); it comes back on release, or once the press becomes a drag.
+    let peek = null; // { view to return to, x, y }
+    const endPeek = () => {
+      if (!peek) return;
+      const back = peek.view;
+      peek = null;
+      setView(back);
+    };
+    fig.canvas.addEventListener('pointerdown', (e) => {
+      clearHighlight();
+      if (!out || e.button > 0) return;
+      peek = { view, x: e.clientX, y: e.clientY };
+      setView(view === 'original' ? 'recolored' : 'original');
+    });
+    fig.canvas.addEventListener('pointermove', (e) => {
+      if (peek && Math.hypot(e.clientX - peek.x, e.clientY - peek.y) >= 8) endPeek();
+    });
+    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) fig.canvas.addEventListener(t, endPeek);
     fig.canvas.addEventListener('pointerleave', () => clearHighlight());
 
     for (const s of [oldStrip, newStrip]) {
