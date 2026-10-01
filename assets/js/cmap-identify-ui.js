@@ -45,10 +45,11 @@
 
       const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
       const choose = el('button', { type: 'button', class: 'btn small' }, 'Choose image…');
+      const example = el('button', { type: 'button', class: 'btn small' }, 'Example image (jet)');
       const whole = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Use the whole image');
       const clear = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Clear');
       const bar = el('div', { class: 'cmap-id-bar' });
-      bar.append(choose, whole, clear);
+      bar.append(choose, example, whole, clear);
       const hint = el('p', { class: 'cmap-id-hint' }, 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).');
       const zone = el('div', { class: 'cmap-drop' });
       zone.append(bar, hint);
@@ -276,6 +277,15 @@
 
       choose.addEventListener('click', () => file.click());
       file.addEventListener('change', () => { if (file.files[0]) load(file.files[0]); });
+      example.addEventListener('click', async () => {
+        try {
+          const res = await fetch('assets/examples/example-jet.png');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          load(new File([await res.blob()], 'example-jet.png', { type: 'image/png' }));
+        } catch (err) {
+          fail(`Could not load the example (${err.message}). Serve the folder with npm run serve.`);
+        }
+      });
       whole.addEventListener('click', runWhole);
       clear.addEventListener('click', () => { reset(false); hint.textContent = 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).'; });
 
