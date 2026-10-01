@@ -460,6 +460,13 @@
     function figure(title, svg, caption, { compact = false } = {}) {
       const fig = el('div', { class: 'cmap-fig' });
       const head = el('div', { class: 'cmap-fig-title' }, title);
+      // Center the title over the x axis, not the whole plot: pad by the
+      // plot margins as a share of the width (the svg fills the figure).
+      const W = svg.viewBox?.baseVal?.width;
+      if (W) {
+        head.style.paddingLeft = `${(M.l / W) * 100}%`;
+        head.style.paddingRight = `${(M.r / W) * 100}%`;
+      }
       fig.append(head, svg);
       if (caption && compact) {
         head.title = caption;

@@ -878,9 +878,12 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-plots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; max-width: 1180px; }
 /* Subgrid keeps the plots level when one title wraps to two lines. */
 .cmap-fig { min-width: 0; display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 3px; }
-.cmap-fig-title { font-size: 12px; font-weight: 600; }
+/* One line, centered over the x axis; a long title spills evenly into the
+   margins and gap (flex centering overflows on both sides). */
+.cmap-fig-title { font-size: 12px; font-weight: 600; display: flex; justify-content: center; gap: 0.25em; white-space: nowrap; }
 .cmap-fig-cap { font-size: 11.5px; }
-.cmap-plot { width: 100%; height: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); touch-action: pan-y; }
+/* No frame or fill: plots sit on whatever holds them (drawer, row, compare panel). */
+.cmap-plot { width: 100%; height: auto; background: transparent; touch-action: pan-y; }
 .cmap-plot .cmap-grid { stroke: var(--border); stroke-width: 1; }
 .cmap-plot .cmap-axes { stroke: var(--muted); stroke-width: 1; }
 .cmap-plot .cmap-tick { fill: var(--muted); font-size: 11px; font-family: var(--font); }
