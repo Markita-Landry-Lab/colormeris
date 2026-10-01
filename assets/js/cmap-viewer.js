@@ -1,13 +1,14 @@
 (function (CM) {
   'use strict';
 
-  // The colormap viewer page (colormaps.html), in four tabs:
+  // The colormap viewer page (colormaps.html), in five tabs:
   //   Browse    every colormap as five vector SVG strips (as seen, three
   //             color-vision-deficiency simulations, grayscale) with rating
   //             columns; one map at a time opens in the detail view (cmap-detail.js)
   //   Compare   up to 10 maps side by side (cmap-compare.js)
   //   Identify  find the colormap of a figure (cmap-identify-ui.js)
   //   Recolor   redraw a figure in another colormap (cmap-recolor-ui.js)
+  //   CVD       a figure next to a color-vision-deficiency simulation (cmap-cvd-ui.js)
   // The tab, the open map and the comparison live in the URL. The data comes
   // from cmap-data.js, so the page needs no fetch and works from file://.
 
@@ -856,7 +857,7 @@
 
     // ---- tabs ----
 
-    const TAB_TITLES = { browse: 'Browse', compare: 'Compare', identify: 'Identify', recolor: 'Recolor' };
+    const TAB_TITLES = { browse: 'Browse', compare: 'Compare', identify: 'Identify', recolor: 'Recolor', cvd: 'CVD' };
     const tabLinks = new Map();
 
     function buildTabs() {
@@ -889,6 +890,8 @@
       compare.sec.hidden = tab !== 'compare';
       identify.sec.hidden = tab !== 'identify';
       recolor.sec.hidden = tab !== 'recolor';
+      cvd.sec.hidden = tab !== 'cvd';
+      if (tab === 'cvd') cvd.show();
       hideTip();
       detail.place();
       compare.syncTray();
@@ -943,9 +946,9 @@
       for (const k of refOrder) ol.append(refItem(k));
       d.append(ol);
       d.append(el('h3', {}, 'Methods'));
-      d.append(el('p', { class: 'muted' }, 'CVD views simulate Machado et al. (2009) at full severity in linear RGB, the same model matplotlib’s docs use via colorspacious. Grayscale is each color’s CIELAB L*. Color differences are CIEDE2000 (ΔE2000).'));
+      d.append(el('p', { class: 'muted' }, 'CVD views simulate Machado et al. (2009) at full severity in linear RGB, the same model matplotlib’s docs use via colorspacious. Grayscale is each color’s CIELAB L*. Color differences are CIEDE2000 (ΔE2000). The CVD tab also offers Brettel et al. (1997) and Viénot et al. (1999), and Machado et al. at partial severity, following the DaltonLens review.'));
       const ol2 = el('ol', { start: String(refOrder.length + 1) });
-      for (const k of ['machado', 'cielab', 'ciede2000']) ol2.append(refItem(k));
+      for (const k of ['machado', 'cielab', 'ciede2000', 'brettel', 'vienot', 'daltonlens']) ol2.append(refItem(k));
       d.append(ol2);
       d.append(el('p', { class: 'muted small' }, `Colormap data comes from ${data.source} ${data.version}.`));
       return d;
@@ -958,7 +961,7 @@
     // the reader would jump. We remember what is at the top of the visible
     // area (below the sticky bar) and put it back there after each resize.
     const ANCHORS = '.cmap-item > .cmap-row, .cmap-panel .cmap-detail > *, .cmap-section > summary, .cmap-sub > h3, '
-      + '.cmap-compare-head, .cmap-compare-body > *, .cmap-identify > *, .cmap-recolor > *, .cmap-about';
+      + '.cmap-compare-head, .cmap-compare-body > *, .cmap-identify > *, .cmap-recolor > *, .cmap-cvd > *, .cmap-about';
 
     // Above 820px only the page pane scrolls; below it the document does.
     const paneScrolls = () => getComputedStyle(root).overflowY === 'auto';
@@ -1059,6 +1062,7 @@
     const compare = CM.setupCmapCompare(ctx);
     const identify = CM.setupCmapIdentify(ctx);
     const recolor = CM.setupCmapRecolor(ctx);
+    const cvd = CM.setupCmapCvd(ctx);
 
     root.replaceChildren();
     const inner = el('div', { class: 'cmap-inner' });
@@ -1099,7 +1103,7 @@
     const empty = el('p', { class: 'muted', hidden: '' }, 'No colormap matches your search.');
     browse.append(empty);
     const footer = buildFooter();
-    inner.append(top, browse, compare.sec, identify.sec, recolor.sec, footer);
+    inner.append(top, browse, compare.sec, identify.sec, recolor.sec, cvd.sec, footer);
     root.append(inner, detail.drawer, compare.tray);
     for (const [btn, pop] of popovers) anchorPopover(btn, pop);
 

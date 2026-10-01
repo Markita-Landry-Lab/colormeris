@@ -91,6 +91,7 @@ test('parseViewerRoute: tab from the hash, map and comparison from the query', (
   assert.deepEqual(parseViewerRoute('?compare=jet,viridis', '', names), { tab: 'compare', map: null, compare: ['jet', 'viridis'] });
   assert.equal(parseViewerRoute('?compare=jet&map=rdbu', '', names).tab, 'browse');
   assert.equal(parseViewerRoute('?compare=jet', '#Identify', names).tab, 'identify');
+  assert.equal(parseViewerRoute('', '#cvd', names).tab, 'cvd');
   // Reference links leave the tab alone.
   assert.equal(parseViewerRoute('', '#ref-viridis', names).tab, null);
 });

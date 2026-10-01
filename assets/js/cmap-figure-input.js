@@ -9,7 +9,8 @@
   // opts: { el, state, tab, label, hints: { empty, loaded }, buttons: [extra
   // buttons for the bar], base(): what to draw under the line (default the
   // image), showLine(): whether to draw it, onLoad(file), onReset(keepImage),
-  // onError(msg), onLine(start, end) after a drag }.
+  // onError(msg), onLine(start, end) after a drag, lines: false for no line
+  // at all (the CVD tab) }.
 
   const MAX_SIDE = 4000; // larger images are scaled down before sampling
   const EXAMPLE = 'assets/examples/example-jet.png';
@@ -144,7 +145,7 @@
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (!fig.img || e.button > 0) return;
+      if (!fig.img || e.button > 0 || opts.lines === false) return;
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       drag = { start: pointAt(e), px: e.clientX, py: e.clientY, before: fig.line };
@@ -169,15 +170,17 @@
 
     choose.addEventListener('click', () => file.click());
     file.addEventListener('change', () => { if (file.files[0]) load(file.files[0]); });
-    example.addEventListener('click', async () => {
+    async function loadExample() {
       try {
         const res = await fetch(EXAMPLE);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        load(new File([await res.blob()], 'example-jet.png', { type: 'image/png' }));
+        return await load(new File([await res.blob()], 'example-jet.png', { type: 'image/png' }));
       } catch (err) {
         fail(`Could not load the example (${err.message}). Serve the folder with npm run serve.`);
+        return false;
       }
-    });
+    }
+    example.addEventListener('click', loadExample);
     clear.addEventListener('click', () => { reset(false); hint.textContent = hints.empty; });
 
     const fileOf = (dt) => [...(dt?.files || [])].find((f) => /^image\//.test(f.type)) || [...(dt?.files || [])][0];
@@ -199,7 +202,7 @@
       load(f);
     });
 
-    return Object.assign(fig, { redraw, reset, fail, load, pointAt, scale });
+    return Object.assign(fig, { redraw, reset, fail, load, loadExample, pointAt, scale, clear });
   }
 
   Object.assign(CM, { createFigureInput });

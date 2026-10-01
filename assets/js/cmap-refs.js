@@ -72,8 +72,20 @@
       url: MPL_URL,
     },
     machado: {
-      text: 'Machado GM, Oliveira MM, Fernandes LAF (2009). A physiologically-based model for simulation of color vision deficiency. IEEE TVCG 15(6):1291–1298. Used at severity 1.0 in linear RGB.',
+      text: 'Machado GM, Oliveira MM, Fernandes LAF (2009). A physiologically-based model for simulation of color vision deficiency. IEEE TVCG 15(6):1291–1298. Used at severity 1.0 in linear RGB for the strips; the CVD tab also uses its partial-severity matrices.',
       url: 'https://doi.org/10.1109/TVCG.2009.113',
+    },
+    brettel: {
+      text: 'Brettel H, Viénot F, Mollon JD (1997). Computerized simulation of color appearance for dichromats. JOSA A 14(10):2647–2655. Used in the CVD tab with libDaltonLens’ sRGB parameters.',
+      url: 'https://doi.org/10.1364/JOSAA.14.002647',
+    },
+    vienot: {
+      text: 'Viénot F, Brettel H, Mollon JD (1999). Digital video colourmaps for checking the legibility of displays by dichromats. Color Research & Application 24(4):243–252. Used in the CVD tab for protan and deutan.',
+      url: 'https://doi.org/10.1002/(SICI)1520-6378(199908)24:4<243::AID-COL5>3.0.CO;2-3',
+    },
+    daltonlens: {
+      text: 'DaltonLens (2021). Review of open source color blindness simulations. The CVD tab follows its advice: Brettel 1997 for tritan, Machado 2009 for partial severity.',
+      url: 'https://daltonlens.org/opensource-cvd-simulation/',
     },
     cielab: {
       text: 'CIE (1976), ISO/CIE 11664-4. CIELAB L* lightness, D65 white point. Grayscale shows each color as the gray of the same L*.',

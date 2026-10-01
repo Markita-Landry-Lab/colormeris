@@ -68,3 +68,76 @@ test('colormap data: valid colors, groups and citations', () => {
   assert.deepEqual(viridis[255], [0xfd, 0xe7, 0x25]);
   assert.equal(citeFor('viridis')[0], 'viridis');
 });
+
+test('image simulation: grays stay gray, severity 0 is the identity', () => {
+  const { simulateCvdColor } = CM;
+  for (const type of CVD_TYPES) {
+    for (const model of ['recommended', ...CM.CVD_MODELS]) {
+      for (const severity of [0, 0.35, 1]) {
+        for (const v of [0, 90, 255]) closeRgb(simulateCvdColor([v, v, v], type, { model, severity }), [v, v, v]);
+        if (severity === 0) closeRgb(simulateCvdColor([200, 30, 120], type, { model, severity }), [200, 30, 120], 0);
+      }
+    }
+  }
+});
+
+test('image simulation: Machado at full severity equals the colormap views', () => {
+  for (const type of CVD_TYPES) {
+    for (const rgb of [[255, 0, 0], [68, 1, 84], [0, 128, 255]]) {
+      assert.deepEqual(CM.simulateCvdColor(rgb, type, { model: 'machado', severity: 1 }), simulateCvd(rgb, type));
+    }
+  }
+  // Half severity lies between the original and full.
+  const half = CM.simulateCvdColor([255, 0, 0], 'deuteranopia', { model: 'machado', severity: 0.5 });
+  assert.ok(half[0] < 255 && half[0] > 163 && half[1] > 0 && half[1] < 144);
+});
+
+test('image simulation matches DaltonLens-Python (Brettel 1997, Viénot 1999)', () => {
+  // daltonlens.simulate.Simulator_Brettel1997 / Simulator_Vienot1999, severity 1 and 0.5.
+  const cols = [[255, 0, 0], [0, 128, 255], [253, 231, 37], [68, 1, 84], [30, 200, 90]];
+  const ref = {
+    brettel: {
+      protanopia: { 1: [[106, 90, 13], [0, 129, 254], [254, 229, 36], [0, 24, 84], [212, 187, 88]], 0.5: [[199, 64, 7], [0, 128, 254], [254, 230, 36], [38, 15, 84], [156, 193, 89]] },
+      deuteranopia: { 1: [[163, 138, 0], [0, 132, 254], [254, 226, 39], [2, 42, 83], [185, 166, 96]], 0.5: [[215, 100, 0], [0, 130, 254], [254, 228, 38], [47, 28, 83], [137, 184, 93]] },
+      tritanopia: { 1: [[254, 0, 78], [0, 147, 185], [254, 216, 221], [59, 28, 32], [94, 185, 214]], 0.5: [[254, 0, 55], [0, 138, 223], [254, 223, 164], [64, 17, 64], [71, 193, 167]] },
+    },
+    vienot: {
+      protanopia: { 1: [[92, 92, 14], [121, 121, 254], [233, 233, 37], [19, 19, 84], [190, 190, 88]], 0.5: [[196, 65, 7], [87, 124, 254], [243, 232, 37], [50, 11, 84], [140, 195, 89]] },
+      deuteranopia: { 1: [[146, 146, 0], [109, 109, 254], [237, 237, 32], [35, 35, 83], [172, 172, 95]], 0.5: [[210, 106, 0], [78, 119, 254], [245, 234, 34], [54, 23, 83], [127, 186, 92]] },
+    },
+  };
+  for (const [model, byType] of Object.entries(ref)) {
+    for (const [type, bySev] of Object.entries(byType)) {
+      for (const [sev, want] of Object.entries(bySev)) {
+        cols.forEach((rgb, i) => closeRgb(CM.simulateCvdColor(rgb, type, { model, severity: Number(sev) }), want[i], 2));
+      }
+    }
+  }
+});
+
+test('resolveCvdModel follows the DaltonLens advice', () => {
+  const { resolveCvdModel } = CM;
+  assert.equal(resolveCvdModel('tritanopia'), 'brettel');
+  assert.equal(resolveCvdModel('protanopia'), 'machado');
+  assert.equal(resolveCvdModel('deuteranopia', 'recommended'), 'machado');
+  assert.equal(resolveCvdModel('tritanopia', 'vienot'), 'brettel');
+  assert.equal(resolveCvdModel('deuteranopia', 'vienot'), 'vienot');
+  assert.equal(resolveCvdModel('tritanopia', 'machado'), 'machado');
+});
+
+test('simulateCvdPixels keeps alpha, matches the per-color path, and works in chunks', () => {
+  const px = new Uint8ClampedArray([255, 0, 0, 255, 30, 200, 90, 128, 255, 0, 0, 0]);
+  const opts = { model: 'brettel', severity: 0.7 };
+  const out = CM.simulateCvdPixels(px, 'protanopia', opts);
+  for (let p = 0; p < 3; p++) {
+    const o = p * 4;
+    assert.deepEqual([...out.slice(o, o + 3)], CM.simulateCvdColor([...px.slice(o, o + 3)], 'protanopia', opts));
+    assert.equal(out[o + 3], px[o + 3]);
+  }
+  const chunked = new Uint8ClampedArray(px.length);
+  const cache = new Map();
+  CM.simulateCvdPixels(px, 'protanopia', { ...opts, out: chunked, cache, from: 0, to: 2 });
+  CM.simulateCvdPixels(px, 'protanopia', { ...opts, out: chunked, cache, from: 2, to: 3 });
+  assert.deepEqual(chunked, out);
+  assert.equal(cache.size, 2); // the two reds share one entry
+});
