@@ -706,11 +706,23 @@
         filtPop.append(l);
         boxes[k].addEventListener('change', applyFilter);
       }
+      // Sources: none ticked shows every library.
+      filtPop.append(el('div', { class: 'cmap-pop-title' }, 'Only maps from'));
+      const sources = {};
+      for (const src of data.sources) {
+        const n = data.maps.filter((m) => m.source === src.key).length;
+        if (!n) continue;
+        const l = el('label', { class: 'check', title: `Only colormaps from ${src.label}` });
+        sources[src.key] = el('input', { type: 'checkbox' });
+        l.append(sources[src.key], `${src.label} (${n})`);
+        filtPop.append(l);
+        sources[src.key].addEventListener('change', applyFilter);
+      }
       const presets = el('div', { class: 'cmap-pop-row' });
       const allYes = el('button', { type: 'button', class: 'btn small' }, 'All four ✓');
       const none = el('button', { type: 'button', class: 'btn small' }, 'Clear');
       allYes.addEventListener('click', () => { for (const b of Object.values(boxes)) b.checked = true; applyFilter(); });
-      none.addEventListener('click', () => { for (const b of Object.values(boxes)) b.checked = false; applyFilter(); });
+      none.addEventListener('click', () => { clearFilters(); applyFilter(); });
       presets.append(allYes, none);
       filtPop.append(presets);
       popovers.push([filtBtn, filtPop]);
@@ -743,7 +755,7 @@
         detail.refresh();
         compare.render();
       });
-      return { bar, search, sort, boxes, filtBtn, viewBtns, rev };
+      return { bar, search, sort, boxes, sources, filtBtn, viewBtns, rev };
     }
 
     function setStripView(k) {
@@ -800,16 +812,23 @@
       }
     }
 
+    const filterBoxes = () => [...Object.values(ui.boxes), ...Object.values(ui.sources)];
+
     function filtering() {
-      return ui.search.value.trim() !== '' || Object.values(ui.boxes).some((b) => b.checked);
+      return ui.search.value.trim() !== '' || filterBoxes().some((b) => b.checked);
+    }
+
+    function clearFilters() {
+      for (const b of filterBoxes()) b.checked = false;
     }
 
     function applyFilter() {
       const q = ui.search.value.trim().toLowerCase();
       const on = FILTERS.filter(([k]) => ui.boxes[k].checked);
+      const srcs = Object.keys(ui.sources).filter((k) => ui.sources[k].checked);
       for (const entry of items) {
         const r = metrics(entry.map).rating;
-        const fails = on.some(([, , , key]) => r[key] !== 'yes');
+        const fails = on.some(([, , , key]) => r[key] !== 'yes') || (srcs.length > 0 && !srcs.includes(entry.map.source));
         entry.item.hidden = (q !== '' && !entry.item.dataset.name.includes(q)) || fails;
       }
       for (const sub of root.querySelectorAll('.cmap-browse .cmap-sub')) {
@@ -826,8 +845,9 @@
         if (n) shown++;
       }
       empty.hidden = shown > 0;
-      ui.filtBtn.textContent = on.length ? `Filters (${on.length})` : 'Filters';
-      ui.filtBtn.classList.toggle('active', on.length > 0);
+      const nOn = on.length + (srcs.length ? 1 : 0); // the sources count as one filter
+      ui.filtBtn.textContent = nOn ? `Filters (${nOn})` : 'Filters';
+      ui.filtBtn.classList.toggle('active', nOn > 0);
     }
 
     // Show a map in the list: clear the search and filters that hide it, open
@@ -838,7 +858,7 @@
       goTab('browse');
       if (entry.item.hidden) {
         ui.search.value = '';
-        for (const b of Object.values(ui.boxes)) b.checked = false;
+        clearFilters();
         applyFilter();
       }
       const sec = entry.item.closest('.cmap-section');
@@ -936,7 +956,7 @@
       const d = el('details', { class: 'cmap-about', id: 'cmap-about' });
       d.append(el('summary', {}, 'About the ratings, methods and references'));
       d.append(el('h3', {}, 'How the ratings work'));
-      d.append(el('p', {}, 'Each colormap gets up to four ratings: yes (✓), partly (~) or no (✕). They are rules of thumb tuned on the matplotlib maps, not standards. Hover a rating for the numbers.'));
+      d.append(el('p', {}, 'Each colormap gets up to four ratings: yes (✓), partly (~) or no (✕). They are rules of thumb tuned on the Matplotlib maps, not standards. Hover a rating for the numbers.'));
       d.append(methodList());
       const p = el('p', { class: 'muted' }, 'A ΔE2000 of about 2 is roughly the smallest difference you notice side by side. Color differences use CIEDE2000 (');
       p.append(el('a', { href: '#ref-ciede2000' }, 'Sharma, Wu & Dalal 2005'), ').');
@@ -951,7 +971,8 @@
       const ol2 = el('ol', { start: String(refOrder.length + 1) });
       for (const k of ['machado', 'cielab', 'ciede2000', 'brettel', 'vienot', 'daltonlens']) ol2.append(refItem(k));
       d.append(ol2);
-      d.append(el('p', { class: 'muted small' }, `Colormap data comes from ${data.source} ${data.version}.`));
+      const versions = data.sources.map((src) => `${src.label} ${src.version}`);
+      d.append(el('p', { class: 'muted small' }, `Colormap data comes from ${versions.join(' and ')}.`));
       return d;
     }
 
@@ -1068,7 +1089,7 @@
     root.replaceChildren();
     const inner = el('div', { class: 'cmap-inner' });
     inner.append(el('h1', {}, 'Colormaps'));
-    inner.append(el('p', { class: 'cmap-intro' }, `The ${data.maps.length} matplotlib colormaps as seen, as simulated for three kinds of color-vision deficiency, and in grayscale, rated for uniformity, CVD and grayscale safety, and how well values can be read back. Hover a strip for its values; click to copy the hex.`));
+    inner.append(el('p', { class: 'cmap-intro' }, `The ${data.maps.length} colormaps of Matplotlib and CMasher as seen, as simulated for three kinds of color-vision deficiency, and in grayscale, rated for uniformity, CVD and grayscale safety, and how well values can be read back. Hover a strip for its values; click to copy the hex.`));
     const ui = buildControls();
     const header = headerRow(true);
     // Tabs, controls and column names share one sticky bar, so they stay

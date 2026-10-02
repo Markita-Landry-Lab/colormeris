@@ -155,7 +155,7 @@
   let known = null;
   function knownMaps() {
     if (!known && CM.cmapData) {
-      known = CM.cmapData.maps.map((m) => ({ name: m.name, kind: m.kind, rgbs: unpack(m.colors) }));
+      known = CM.cmapData.maps.map((m) => ({ name: m.name, kind: m.kind, source: m.source, rgbs: unpack(m.colors) }));
     }
     return known || [];
   }
@@ -165,7 +165,7 @@
   //   lowAtStart  true / false when the ticks say which end has the lower
   //               values, null when unknown
   // Returns null without colormap data, else { name, mplName ('viridis' or
-  // 'viridis_r'), reversed, byValue, score, level, same: [names with the same
+  // 'viridis_r'), source ('matplotlib', 'cmasher'), reversed, byValue, score, level, same: [names with the same
   // colors] }. With byValue, reversed is relative to rising values (as
   // matplotlib names it); otherwise relative to start → end.
   function suggestColormap(rgbs, { lowAtStart = null } = {}) {
@@ -180,6 +180,7 @@
     return {
       name: best.name,
       mplName: name(best),
+      source: knownMaps().find((m) => m.name === best.name).source,
       reversed: flip(best.reversed),
       byValue,
       score: best.score,

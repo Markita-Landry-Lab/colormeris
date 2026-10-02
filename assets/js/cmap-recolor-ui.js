@@ -179,7 +179,7 @@
       oldNote.replaceChildren();
       oldNote.hidden = false;
       if (level === 'none') {
-        oldNote.append(`The old colors match no matplotlib colormap (best ΔE ${best ? best.score.toFixed(1) : '–'}), so the end where you started the line is taken as the low end.`);
+        oldNote.append(`The old colors match no known colormap (best ΔE ${best ? best.score.toFixed(1) : '–'}), so the end where you started the line is taken as the low end.`);
       } else {
         oldNote.append(level === 'exact' ? 'Old colormap: ' : 'Old colormap looks like ', el('code', {}, best.name), ` (ΔE ${best.score.toFixed(1)}).`);
         if (flip) oldNote.append(' The line runs from its high end, so it is read the other way.');

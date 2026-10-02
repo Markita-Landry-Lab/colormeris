@@ -11,6 +11,10 @@
       text: 'Hunter JD (2007). Matplotlib: A 2D graphics environment. Computing in Science & Engineering 9(3):90–95. Colormap reference: matplotlib.org.',
       url: MPL_URL,
     },
+    cmasher: {
+      text: 'van der Velden E (2020). CMasher: Scientific colormaps for making accessible, informative and ‘cmashing’ plots. Journal of Open Source Software 5(46):2004.',
+      url: 'https://doi.org/10.21105/joss.02004',
+    },
     viridis: {
       text: 'van der Walt S, Smith N (2015). A better default colormap for Matplotlib. SciPy 2015 (viridis, magma, inferno, plasma).',
       url: 'https://bids.github.io/colormap/',
@@ -119,8 +123,10 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // Every map comes from Matplotlib; the original source (if any) comes first.
+  // CMasher maps (cmr.*) cite CMasher. The others come from Matplotlib, with
+  // the original source (if any) first.
   function citeFor(name) {
+    if (name.startsWith('cmr.')) return ['cmasher'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

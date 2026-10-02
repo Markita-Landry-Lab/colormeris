@@ -3,7 +3,7 @@
 
   // The Identify tab of the colormap viewer (colormaps.html): load an image of
   // a figure, drag along its colorbar (or use the whole image), and list the
-  // closest matplotlib maps. The image input is cmap-figure-input.js.
+  // closest known maps. The image input is cmap-figure-input.js.
 
   function setupCmapIdentify(ctx) {
     const { el, pct, clamp8, roundRgb, data, state, mapByName, base, stripSvg } = ctx;
@@ -40,7 +40,7 @@
     function buildIdentify() {
       const d = el('section', { class: 'cmap-identify', 'aria-labelledby': 'cmap-identify-title', hidden: '' });
       d.append(el('h2', { id: 'cmap-identify-title' }, 'Identify a colormap from a figure'));
-      d.append(el('p', { class: 'muted' }, 'Give an image of a figure and find which matplotlib colormap it uses. The image stays in your browser.'));
+      d.append(el('p', { class: 'muted' }, 'Give an image of a figure and find which Matplotlib or CMasher colormap it uses. The image stays in your browser.'));
 
       const whole = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Use the whole image');
       const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or click to choose a file (PNG, JPEG, WebP or GIF).';
@@ -84,7 +84,7 @@
         verdict.replaceChildren();
         if (level === 'exact') verdict.append('Best match: ', el('strong', {}, nm), ` (ΔE ${sc}).`);
         else if (level === 'close') verdict.append('Closest: ', el('strong', {}, nm), ` (ΔE ${sc}). Not an exact match; it may be a relative or a map from another library.`);
-        else verdict.append(`No good match among the matplotlib colormaps (best ΔE ${sc}).`);
+        else verdict.append(`No good match among the known colormaps (best ΔE ${sc}).`);
         if (extra) verdict.append(' ', extra);
       }
 

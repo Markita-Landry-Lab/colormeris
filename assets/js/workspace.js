@@ -875,11 +875,12 @@
     link.title = 'Open this colormap in the colormap viewer';
     out.className = `bar-match hint ${m.level}`;
     if (m.level === 'exact') {
-      out.append('Reference colormap: ', strong, ` (matplotlib, ${score})${dir}. `);
+      const lib = CM.cmapData.sources.find((s) => s.key === m.source)?.label || m.source;
+      out.append('Reference colormap: ', strong, ` (${lib}, ${score})${dir}. `);
     } else if (m.level === 'close') {
       out.append('Closest colormap: ', strong, ` (${score}): similar, but not the same map${dir}. `);
     } else {
-      out.append('No matplotlib colormap matches this colorbar (closest: ', strong, `, ${score}). `);
+      out.append('No known colormap matches this colorbar (closest: ', strong, `, ${score}). `);
     }
     if (m.level !== 'none' && m.same.length) {
       const flip = (n) => (lowAtStart === false ? (n.endsWith('_r') ? n.slice(0, -2) : `${n}_r`) : n);
