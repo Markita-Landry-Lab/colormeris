@@ -492,21 +492,13 @@ for m in maps:
 maps = [m for block in blocks.values() for m in by_similarity(block)]
 
 
-# Sequential maps run light to dark or dark to light. Within one sub-heading,
-# maps against the majority get `flip`, and Browse shows them reversed, so
-# neighbors run the same way. Ties keep the direction of the first map.
-def mark_flips(block):
-    ends = [lab_of(m)[:, 0] for m in block]
-    rising = [L[-1] > L[0] for L in ends]
-    up = sum(rising) * 2 > len(rising) if sum(rising) * 2 != len(rising) else rising[0]
-    for m, r in zip(block, rising):
-        if r != up:
+# Sequential maps all run dark to light. Maps that start lighter than they
+# end get `flip`, and Browse shows them reversed.
+for m in maps:
+    if m["group"] == "sequential":
+        L = lab_of(m)[:, 0]
+        if L[-1] < L[0]:
             m["flip"] = True
-
-
-for (group, sub), block in blocks.items():
-    if group == "sequential":
-        mark_flips(block)
 print(f"pre-reversed {sum('flip' in m for m in maps)} sequential maps")
 
 # In the order of the source filter in colormaps.html.

@@ -36,7 +36,7 @@
     const state = {
       reversed: false, selected: route.compare, open: null, tab: 'browse', stripView: 'all', sort: null,
       // Maps shown the other way round in Browse. It starts with the sequential
-      // maps the export script marked `flip`, so each section runs one way.
+      // maps the export script marked `flip`, so every Sequential map runs dark to light.
       flipped: new Set(data.maps.filter((m) => m.flip).map((m) => m.name)),
     };
     // A map's direction in Browse: its own toggle, then the global Reversed.
