@@ -31,7 +31,7 @@ _No arguments._
 
 ### `get_results`
 
-Extracted values of a panel: heatmap matrix with ΔE and flags, or IVIS region statistics. _Available to the heatmap agent's LLM._
+Extracted values of a panel: heatmap matrix with ΔE and flags, or ROI region statistics. _Available to the heatmap agent's LLM._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -76,11 +76,11 @@ Open a PDF, PNG, JPG or project zip by URL (same origin or CORS-enabled). _Chang
 
 ### `set_tool`
 
-Switch between the heatmap and IVIS tools. _Changes the project; undoable._
+Switch between the heatmap and ROI tools. _Changes the project; undoable._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
-| `tool` | "heatmap" \\| "ivis" | yes |  |
+| `tool` | "heatmap" \\| "roi" | yes |  |
 
 ### `go_to_page`
 
@@ -156,14 +156,14 @@ Set rows and columns. _Changes the project; undoable._ _Available to the heatmap
 
 ### `set_labels`
 
-Row, column and (IVIS) box labels. Give at least one list. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
+Row, column and (ROI) box labels. Give at least one list. _Changes the project; undoable._ _Available to the heatmap agent's LLM._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `panelId` | string |  | Panel to act on. Defaults to the active panel; another panel is selected first (switching tool and page if needed). |
 | `rows` | string[] |  | Row labels, top to bottom. |
 | `cols` | string[] |  | Column labels, left to right. |
-| `boxes` | string[] |  | IVIS box names in reading order. |
+| `boxes` | string[] |  | ROI box names in reading order. |
 
 ### `remove_grid`
 
@@ -239,11 +239,11 @@ Matching settings. _Changes the project; undoable._ _Available to the heatmap ag
 | `grayChroma` | number (≥ 0) |  |  |
 | `sampleFraction` | number (≥ 0.05, ≤ 1) |  |  |
 
-## IVIS regions
+## ROI regions
 
 ### `add_region`
 
-IVIS: add a region in image pixels. ellipse/rect use {cx, cy, rx, ry} (rect rx/ry are half-extents); polygon uses {points}. With replicate (default) and a grid, it is copied into every box. _Changes the project; undoable._
+ROI: add a region in image pixels. ellipse/rect use {cx, cy, rx, ry} (rect rx/ry are half-extents); polygon uses {points}. With replicate (default) and a grid, it is copied into every box. _Changes the project; undoable._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -255,7 +255,7 @@ IVIS: add a region in image pixels. ellipse/rect use {cx, cy, rx, ry} (rect rx/r
 
 ### `remove_region`
 
-IVIS: remove a region and all its copies. _Changes the project; undoable._
+ROI: remove a region and all its copies. _Changes the project; undoable._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -264,7 +264,7 @@ IVIS: remove a region and all its copies. _Changes the project; undoable._
 
 ### `set_scale_bar`
 
-IVIS: a known distance between two points, for areas in real units. _Changes the project; undoable._
+ROI: a known distance between two points, for areas in real units. _Changes the project; undoable._
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |

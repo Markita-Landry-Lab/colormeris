@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Colormeris</title>
-  <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and in vivo imaging (IVIS) signal.">
+  <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and signal inside regions of interest (ROI).">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/style.css?v=40">
   <script src="assets/vendor/jszip/jszip.min.js" defer></script>
@@ -41,7 +41,7 @@
     </a>
     <nav class="tool-switch" aria-label="Tools">
       <a href="#heatmap" data-tool-link="heatmap">Heatmap</a>
-      <a href="#ivis" data-tool-link="ivis">IVIS</a>
+      <a href="#roi" data-tool-link="roi">ROI</a>
       <a href="colormaps.html">Colormaps</a>
     </nav>
     <label class="btn primary">
@@ -67,8 +67,8 @@
           <li><b>Colorbar</b>: click the two ends of the colorbar along its middle, then click at least two tick marks and type their values.</li>
           <li>Check the results (toggle <i>Reconstruct</i> to compare colors), then download CSV or export the project zip to reload later.</li>
         </ol>
-        <ol data-tool="ivis" hidden>
-          <li>Open a PDF, PNG or JPG of the IVIS figure (or drop / paste it). For PDFs pick the page and resolution.</li>
+        <ol data-tool="roi" hidden>
+          <li>Open a PDF, PNG or JPG of the figure, for example an IVIS luminescence image (or drop / paste it). For PDFs pick the page and resolution.</li>
           <li><b>Grid</b> (optional): if the animals are arranged in boxes, click the outer top-left and bottom-right corners of the grid, then check rows, columns and box names.</li>
           <li><b>Colorbar</b>: click the two ends of the colorbar, then click at least two ticks and type their values (e.g. <code>0.4e8</code> for 0.4 × 10⁸).</li>
           <li><b>Regions</b>: draw ellipses (Shift = circle), rectangles (Shift = square) or polygons. A region drawn in one box is copied into every box; drag a copy to nudge it in that box only.</li>
@@ -133,13 +133,13 @@
 
       <section class="card" id="sec-grid" hidden>
         <div class="card-head">
-          <h2><span class="step-dot grid-dot"></span>Grid <span class="tag" data-tool="ivis" hidden>optional</span></h2>
+          <h2><span class="step-dot grid-dot"></span>Grid <span class="tag" data-tool="roi" hidden>optional</span></h2>
           <span id="grid-state" class="badge"></span>
         </div>
         <div class="card-actions">
           <button class="btn" id="grid-place" title="Shortcut: G" data-hotkey="grid" data-title="Shortcut: {key}">Place grid corners</button>
           <button class="btn subtle" id="grid-zoom" title="Zoom to grid">Zoom to</button>
-          <button class="btn danger" id="grid-clear" data-tool="ivis" hidden>Remove</button>
+          <button class="btn danger" id="grid-clear" data-tool="roi" hidden>Remove</button>
         </div>
         <div class="fields">
           <label class="field">Rows <input id="grid-rows" type="number" min="1" max="1000"></label>
@@ -157,7 +157,7 @@
             </label>
           </div>
         </details>
-        <details class="options" data-tool="ivis" hidden>
+        <details class="options" data-tool="roi" hidden>
           <summary>Box names <span id="grid-boxes-note" class="summary-note"></span></summary>
           <div class="options-body">
             <label class="field">Reading order: left → right, top → bottom
@@ -269,13 +269,13 @@
         </div>
       </section>
 
-      <section class="card" id="sec-iv-results" hidden>
+      <section class="card" id="sec-roi-results" hidden>
         <div class="card-head">
           <h2>Results</h2>
           <label class="check" title="Tint the pixels counted as signal"><input id="toggle-mask" type="checkbox"> Show signal</label>
         </div>
-        <p id="iv-result-problem" class="notice"></p>
-        <p id="iv-result-summary" class="hint"></p>
+        <p id="roi-result-problem" class="notice"></p>
+        <p id="roi-result-summary" class="hint"></p>
         <label class="field">Show
           <select id="result-metric">
             <option value="sum">Total signal (sum)</option>
@@ -289,10 +289,10 @@
             <option value="area" data-scaled>Region area (unit²)</option>
           </select>
         </label>
-        <div class="table-wrap"><table id="iv-result-table" class="result-table"></table></div>
+        <div class="table-wrap"><table id="roi-result-table" class="result-table"></table></div>
         <div class="card-actions">
-          <button class="btn primary" id="iv-dl-csv">Download CSV</button>
-          <button class="btn" id="iv-copy-tsv">Copy table</button>
+          <button class="btn primary" id="roi-dl-csv">Download CSV</button>
+          <button class="btn" id="roi-copy-tsv">Copy table</button>
         </div>
       </section>
     </aside>
@@ -401,16 +401,16 @@
           <p class="muted small">Cells whose color is further than the ΔE limit from every colorbar color are outlined in red.</p>
         </fieldset>
         <fieldset>
-          <legend>IVIS</legend>
+          <legend>ROI</legend>
           <div class="row wrap">
-            <label class="field">Background: gray up to chroma <input id="set-iv-gray" type="number" min="0" max="60" step="1" class="num"></label>
+            <label class="field">Background: gray up to chroma <input id="set-roi-gray" type="number" min="0" max="60" step="1" class="num"></label>
             <label class="field">Color difference
-              <select id="set-iv-distance">
+              <select id="set-roi-distance">
                 <option value="de2000">CIEDE2000</option>
                 <option value="de76">CIE76 (Lab distance)</option>
               </select>
             </label>
-            <label class="field">Flag colors with ΔE above <input id="set-iv-maxde" type="number" min="0" step="0.5" class="num"></label>
+            <label class="field">Flag colors with ΔE above <input id="set-roi-maxde" type="number" min="0" step="0.5" class="num"></label>
           </div>
           <p class="muted small">Pixels whose color is nearly gray (CIELAB chroma at or below the threshold) are background with no signal. Colored pixels that match no colorbar color (ΔE above the limit, e.g. colored text) are counted as signal but reported as flagged.</p>
         </fieldset>

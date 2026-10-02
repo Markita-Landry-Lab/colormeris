@@ -89,8 +89,8 @@ test('panels keep their page; older files fall back to source.page', () => {
   assert.deepEqual(parseProject(json).panels.map((p) => p.page), [3, 3]);
 });
 
-test('IVIS panels keep their tool, regions, nudges and scale', () => {
-  const project = createProject('ivis');
+test('ROI panels keep their tool, regions, nudges and scale', () => {
+  const project = createProject('roi');
   project.source = { fileName: 'fig.pdf', page: 3 };
   const p = project.panels[0];
   p.grid.boxLabels = ['B-a11', 'B-a16'];
@@ -100,10 +100,10 @@ test('IVIS panels keep their tool, regions, nudges and scale', () => {
   p.scale = { p1: { x: 0, y: 0 }, p2: { x: 100, y: 0 }, length: 1, unit: 'cm' };
   const json = JSON.parse(JSON.stringify(serializeProject(project)));
   assert.equal(json.version, 2);
-  assert.equal(json.panels[0].tool, 'ivis');
+  assert.equal(json.panels[0].tool, 'roi');
   const back = parseProject(json);
   const q = back.panels[0];
-  assert.equal(q.tool, 'ivis');
+  assert.equal(q.tool, 'roi');
   assert.deepEqual(q.grid.boxLabels, ['B-a11', 'B-a16']);
   assert.deepEqual(q.rois.map((r) => [r.name, r.shape, r.replicate]), [['liver', 'ellipse', true], ['tumour', 'polygon', false]]);
   assert.deepEqual(q.rois[0].offsets, { '1,2': { dx: 0.05, dy: -0.02 } });
@@ -115,25 +115,31 @@ test('IVIS panels keep their tool, regions, nudges and scale', () => {
   assert.deepEqual(q.scale.p2, { x: 200, y: 0 });
 });
 
-test('new IVIS projects use background and flag defaults suited to photos', () => {
-  assert.deepEqual([createProject('ivis').panels[0].settings.grayChroma, createProject('ivis').panels[0].settings.maxDeltaE], [20, 20]);
+test('new ROI projects use background and flag defaults suited to photos', () => {
+  assert.deepEqual([createProject('roi').panels[0].settings.grayChroma, createProject('roi').panels[0].settings.maxDeltaE], [20, 20]);
   assert.equal(createProject().panels[0].settings.maxDeltaE, 10);
 });
 
-test('one project holds heatmap and IVIS panels', () => {
+test('one project holds heatmap and ROI panels', () => {
   const project = createProject('heatmap');
-  project.panels.push(createPanel('mice', 1, 'ivis'));
+  project.panels.push(createPanel('mice', 1, 'roi'));
   project.panels[1].rois.push(CM.createRoi('rect', { cx: 1, cy: 1, rx: 1, ry: 1 }, { replicate: false }));
   const json = JSON.parse(JSON.stringify(serializeProject(project)));
-  assert.deepEqual(json.panels.map((p) => p.tool), ['heatmap', 'ivis']);
-  assert.equal(json.panels[0].rois, undefined); // regions are only stored for IVIS panels
+  assert.deepEqual(json.panels.map((p) => p.tool), ['heatmap', 'roi']);
+  assert.equal(json.panels[0].rois, undefined); // regions are only stored for ROI panels
   const back = parseProject(json);
-  assert.deepEqual(back.panels.map((p) => [p.tool, p.rois.length]), [['heatmap', 0], ['ivis', 1]]);
+  assert.deepEqual(back.panels.map((p) => [p.tool, p.rois.length]), [['heatmap', 0], ['roi', 1]]);
 });
 
 test('version 1 files: kind applies to every panel, missing kind means heatmap', () => {
   const v1 = (extra) => ({ schema: 'colormeris-project', version: 1, ...extra, panels: [{ name: 'a' }, { name: 'b', rois: [] }] });
-  assert.deepEqual(parseProject(v1({ kind: 'ivis' })).panels.map((p) => p.tool), ['ivis', 'ivis']);
+  assert.deepEqual(parseProject(v1({ kind: 'roi' })).panels.map((p) => p.tool), ['roi', 'roi']);
   assert.deepEqual(parseProject(v1({})).panels.map((p) => p.tool), ['heatmap', 'heatmap']);
+  assert.throws(() => parseProject(v1({ kind: 'ivis' })), /unknown tool "ivis"/);
   assert.throws(() => parseProject({ schema: 'colormeris-project', version: 3, panels: [{}] }), /version/);
+});
+
+test('version 2 panels with an unknown tool are refused', () => {
+  const json = { schema: 'colormeris-project', version: 2, panels: [{ name: 'a', tool: 'ivis' }] };
+  assert.throws(() => parseProject(json), /unknown tool "ivis"/);
 });

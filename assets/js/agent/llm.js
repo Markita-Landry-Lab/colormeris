@@ -31,7 +31,7 @@ Errors and retries:
 
 When every heatmap on every page is done, call finish with one line per panel and anything a human should check. The first finish is answered with a checklist: look at each page once more, calibrate any heatmap still missing, then call finish again. Keep your messages short.`;
 
-  // Agent actions the LLM may call (see agent/schema.js). File, tool, IVIS
+  // Agent actions the LLM may call (see agent/schema.js). File, tool, ROI
   // and question-answering actions are left to the runner and the user.
   const LLM_ACTIONS = [
     'get_state', 'get_results', 'sample_pixel', 'go_to_page', 'select_panel', 'add_panel', 'rename_panel',

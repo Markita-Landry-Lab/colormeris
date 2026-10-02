@@ -11,7 +11,7 @@
   // carries the data of all tools.
   //
   // TOOL_HOOKS (all optional unless noted):
-  //   kind                      'heatmap' | 'ivis' (required)
+  //   kind                      'heatmap' | 'roi' (required)
   //   title                     page title while the tool is active
   //   computeResult(panel, img) result object or {error} (required)
   //   resultKey(panel)          JSON-able key of everything computeResult depends on
@@ -618,7 +618,7 @@
     setBadge($('grid-state'), g.corners ? `${g.rows} × ${g.cols}` : 'not placed', !!g.corners);
     $('grid-labels-note').textContent = g.rowLabels.length || g.colLabels.length ? 'custom' : 'R1…, C1…';
     $('grid-boxes-note').textContent = g.boxLabels.length ? `${g.boxLabels.length} names` : 'R1 C1, …';
-    // IVIS works without a grid, so its grid is never the next step.
+    // ROI works without a grid, so its grid is never the next step.
     setNextStep($('grid-place'), !g.corners && tool.kind === 'heatmap');
     $('grid-zoom').disabled = !g.corners;
     $('grid-detect').disabled = !g.corners;
@@ -1444,7 +1444,7 @@
   });
 
   // Keyboard shortcuts. The keys come from the Settings dialog (ws.settings.hotkeys);
-  // Escape always cancels, and the IVIS tool handles its polygon keys in onKey.
+  // Escape always cancels, and the ROI tool handles its polygon keys in onKey.
   const hotkeys = {};
   function addHotkey(id, run, { always = false, tool: only = null } = {}) {
     hotkeys[id] = { run, always, tool: only };
@@ -1510,7 +1510,7 @@
       else a.removeAttribute('aria-current');
     }
     if (tool.title) document.title = tool.title;
-    // Keep the URL (#heatmap / #ivis) in step, e.g. when undo switches tools.
+    // Keep the URL (#heatmap / #roi) in step, e.g. when undo switches tools.
     if (location.hash !== `#${kind}`) history.replaceState(null, '', `#${kind}`);
     app.tableCell = null;
     app.hoverCell = null;

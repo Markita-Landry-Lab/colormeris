@@ -31,7 +31,7 @@ function scene() {
   return { img, panel, values };
 }
 
-test('roiPanelProblem guides the IVIS workflow', () => {
+test('roiPanelProblem guides the ROI workflow', () => {
   const p = createPanel();
   assert.match(roiPanelProblem(p), /colorbar/);
   const { panel } = scene();

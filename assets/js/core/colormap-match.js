@@ -160,7 +160,7 @@
     return known || [];
   }
 
-  // A reference colormap for a calibrated colorbar (heatmap and IVIS tools).
+  // A reference colormap for a calibrated colorbar (heatmap and ROI tools).
   //   rgbs        colors sampled from the bar's start to its end
   //   lowAtStart  true / false when the ticks say which end has the lower
   //               values, null when unknown

@@ -17,7 +17,7 @@ test('normalizeSettings fills defaults and clamps bad values', () => {
   assert.deepEqual(normalizeSettings(null), defaultSettings());
   const s = normalizeSettings({
     agent: { minConfidence: 3, maxSteps: 2.4, base: ' http://localhost:8787/api/v1 ', key: 7 },
-    matching: { heatmap: { distance: 'bogus', maxDeltaE: 5 }, ivis: { grayChroma: -4 } },
+    matching: { heatmap: { distance: 'bogus', maxDeltaE: 5 }, roi: { grayChroma: -4 } },
     hotkeys: { grid: ['shift+g', 'nonsense+x', 'Escape'], unknownAction: ['Q'] },
   });
   assert.equal(s.agent.minConfidence, 1);
@@ -25,8 +25,8 @@ test('normalizeSettings fills defaults and clamps bad values', () => {
   assert.equal(s.agent.base, 'http://localhost:8787/api/v1');
   assert.equal(s.agent.key, '');
   assert.deepEqual(s.matching.heatmap, { distance: 'de2000', maxDeltaE: 5 });
-  assert.equal(s.matching.ivis.grayChroma, 0);
-  assert.equal(s.matching.ivis.maxDeltaE, 20);
+  assert.equal(s.matching.roi.grayChroma, 0);
+  assert.equal(s.matching.roi.maxDeltaE, 20);
   assert.deepEqual(s.hotkeys.grid, ['Shift+G']);
   assert.equal('unknownAction' in s.hotkeys, false);
   assert.deepEqual(s.hotkeys.fit, ['F']);
@@ -81,7 +81,7 @@ test('settings files leave out the key unless asked', () => {
 test('settings zip round-trips', async () => {
   const s = defaultSettings();
   s.agent.maxSteps = 12;
-  s.matching.ivis.grayChroma = 15;
+  s.matching.roi.grayChroma = 15;
   s.hotkeys.grid = ['Alt+G'];
   s.hotkeys.fit = [];
   const blob = await buildSettingsZip(JSZip, s);

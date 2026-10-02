@@ -16,8 +16,8 @@ test('validateAction rejects bad arguments with paths', () => {
   assert.deepEqual(validateAction('set_grid_size', { rows: 3, cols: 4 }), []);
   assert.match(validateAction('set_grid_size', { rows: 2.5, cols: 4 })[0], /args\.rows: must be an integer/);
   assert.match(validateAction('set_grid_size', { rows: 3 })[0], /args\.cols: required/);
-  assert.match(validateAction('set_tool', { tool: 'foo' })[0], /one of heatmap, ivis/);
-  assert.match(validateAction('set_tool', { tool: 'ivis', extra: 1 })[0], /unknown property/);
+  assert.match(validateAction('set_tool', { tool: 'foo' })[0], /one of heatmap, roi/);
+  assert.match(validateAction('set_tool', { tool: 'roi', extra: 1 })[0], /unknown property/);
   assert.match(validateAction('nope')[0], /unknown action/);
 });
 

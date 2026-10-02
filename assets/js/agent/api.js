@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, normalizeArgs, toolDefinitions, stateSnapshot, heatmapResultJson, ivisResultJson, openQuestions, resultKeyHash,
+    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, normalizeArgs, toolDefinitions, stateSnapshot, heatmapResultJson, roiResultJson, openQuestions, resultKeyHash,
     createPanel, createRoi, rectCorners, detectGridSize, projectT, pointAtT, refineColorbar, snapTick, readPixel, rgbToLab, sampleColorbar, labToT, makeValueFn, ticksWithT, tickProblem,
     cellAt, centroid, geomToBox, boxLabel, fileKind,
   } = CM;
@@ -47,7 +47,7 @@
 
     function rawResultsJson(panel) {
       const res = ws.resultFor(panel);
-      return panel.tool === 'heatmap' ? heatmapResultJson(panel, res) : ivisResultJson(panel, res, (r, c) => boxLabel(panel.grid, r, c));
+      return panel.tool === 'heatmap' ? heatmapResultJson(panel, res) : roiResultJson(panel, res, (r, c) => boxLabel(panel.grid, r, c));
     }
 
     // Hash of the panel's current values, or null while it has no result.
@@ -360,7 +360,7 @@
 
       add_region: async ({ panelId, shape, geom, name, replicate = true }) => {
         const panel = await usePanel(panelId);
-        if (panel.tool !== 'ivis') throw new Error('Regions belong to IVIS panels; use set_tool first.');
+        if (panel.tool !== 'roi') throw new Error('Regions belong to ROI panels; use set_tool first.');
         const px = shape === 'polygon' ? { points: geom.points.map((q) => ({ x: q.x, y: q.y })) } : { cx: geom.cx, cy: geom.cy, rx: geom.rx, ry: geom.ry };
         const grid = panel.grid;
         const cell = replicate && grid.corners ? cellAt(grid, shape === 'polygon' ? centroid(px.points) : { x: px.cx, y: px.cy }) : null;
@@ -379,7 +379,7 @@
 
       set_scale_bar: async ({ panelId, p1, p2, length, unit = 'cm' }) => {
         const panel = await usePanel(panelId);
-        if (panel.tool !== 'ivis') throw new Error('The scale bar belongs to IVIS panels.');
+        if (panel.tool !== 'roi') throw new Error('The scale bar belongs to ROI panels.');
         if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 3) throw new Error('Scale bar is too short.');
         ws.commit((p) => (p.scale = { p1: { ...p1 }, p2: { ...p2 }, length, unit }));
         return null;

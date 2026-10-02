@@ -15,13 +15,13 @@
   const newId = () => `p${nextId++}`;
   let nextRoiId = 1;
   const newRoiId = () => `r${nextRoiId++}`;
-  const KINDS = ['heatmap', 'ivis'];
+  const KINDS = ['heatmap', 'roi'];
   const SHAPES = ['ellipse', 'rect', 'polygon'];
   const SCALE_UNITS = ['cm', 'mm'];
 
   // `page` is the 1-based PDF page the panel's coordinates refer to (always 1
-  // for images). `tool` is 'heatmap' or 'ivis'. `rois` and `scale` are used by
-  // the IVIS tool (see roi/geometry.js); `settings.grayChroma` is its background
+  // for images). `tool` is 'heatmap' or 'roi'. `rois` and `scale` are used by
+  // the ROI tool (see roi/geometry.js); `settings.grayChroma` is its background
   // threshold (CIELAB chroma).
   function createPanel(name = 'Panel 1', page = 1, tool = 'heatmap') {
     const panel = {
@@ -42,7 +42,7 @@
     // IVIS photos carry JPEG color noise up to about chroma 20 (measured on
     // Fig. 1k of the example paper), and blended overlay edges sit further from
     // the colorbar colors than heatmap cells do.
-    if (tool === 'ivis') Object.assign(panel.settings, { grayChroma: 20, maxDeltaE: 20 });
+    if (tool === 'roi') Object.assign(panel.settings, { grayChroma: 20, maxDeltaE: 20 });
     return panel;
   }
 
@@ -127,7 +127,7 @@
         },
         settings: { ...p.settings },
         ...(p.review ? { review: { ...p.review } } : {}),
-        ...(p.tool === 'ivis'
+        ...(p.tool === 'roi'
           ? {
               rois: p.rois.map((r) => ({
                 name: r.name,
@@ -189,12 +189,18 @@
     }
     if (!Array.isArray(json.panels) || json.panels.length === 0) fail('no panels');
     // Version 1 files have one tool for the whole project in `kind` (missing in
-    // files written before the IVIS tool existed, which are heatmap projects).
-    const fileKind = KINDS.includes(json.kind) ? json.kind : 'heatmap';
+    // files written before the ROI tool existed, which are heatmap projects).
+    // An unknown tool (e.g. 'ivis', the ROI tool's old name) is an error rather
+    // than a silent heatmap panel that would drop its regions.
+    const checkTool = (t) => {
+      if (t !== undefined && !KINDS.includes(t)) fail(`unknown tool "${t}"; this app knows ${KINDS.join(', ')}`);
+      return t;
+    };
+    const fileKind = checkTool(json.kind) ?? 'heatmap';
     const panels = json.panels.map((raw, i) => {
       // Version 1 files written before panels had pages refer to source.page.
       const page = Number.isInteger(raw.page) && raw.page >= 1 ? raw.page : json.source?.page || 1;
-      const tool = json.version >= 2 && KINDS.includes(raw.tool) ? raw.tool : fileKind;
+      const tool = (json.version >= 2 && checkTool(raw.tool)) || fileKind;
       const p = createPanel(typeof raw.name === 'string' ? raw.name : `Panel ${i + 1}`, page, tool);
       const g = raw.grid || {};
       if (g.corners !== null && g.corners !== undefined) {
@@ -232,7 +238,7 @@
           time: typeof rv.time === 'string' ? rv.time : null,
         };
       }
-      if (tool === 'ivis') {
+      if (tool === 'roi') {
         p.rois = (Array.isArray(raw.rois) ? raw.rois : []).map((r, j) => readRoi(r, `panel ${i + 1} region ${j + 1}`));
         const sc = raw.scale;
         if (sc && typeof sc === 'object') {

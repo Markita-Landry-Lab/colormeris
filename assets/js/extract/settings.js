@@ -25,9 +25,9 @@
     { id: 'crosshair', label: 'Crosshair', keys: ['C'] },
     { id: 'prevPage', label: 'Previous page', keys: ['ArrowLeft'] },
     { id: 'nextPage', label: 'Next page', keys: ['ArrowRight'] },
-    { id: 'ellipse', label: 'Ellipse region (IVIS)', keys: ['E'], tool: 'ivis' },
-    { id: 'rect', label: 'Rectangle region (IVIS)', keys: ['R'], tool: 'ivis' },
-    { id: 'polygon', label: 'Polygon region (IVIS)', keys: ['P'], tool: 'ivis' },
+    { id: 'ellipse', label: 'Ellipse region (ROI)', keys: ['E'], tool: 'roi' },
+    { id: 'rect', label: 'Rectangle region (ROI)', keys: ['R'], tool: 'roi' },
+    { id: 'polygon', label: 'Polygon region (ROI)', keys: ['P'], tool: 'roi' },
   ];
   // Keys with a fixed meaning: cancel, pan, and finishing or editing a polygon.
   const RESERVED_KEYS = ['Escape', 'Space', 'Enter', 'Backspace', 'Delete', 'Tab'];
@@ -35,7 +35,7 @@
   const MATCHING_DEFAULTS = {
     heatmap: { distance: 'de2000', maxDeltaE: 10 },
     // IVIS photos carry JPEG color noise up to about chroma 20 (see project.js).
-    ivis: { distance: 'de2000', maxDeltaE: 20, grayChroma: 20 },
+    roi: { distance: 'de2000', maxDeltaE: 20, grayChroma: 20 },
   };
 
   const AGENT_DEFAULTS = { key: '', rememberKey: false, minConfidence: 0.9, maxSteps: 80, base: '', llm: '', reviewer: '' };

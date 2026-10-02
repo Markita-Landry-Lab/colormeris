@@ -47,7 +47,7 @@ const groups = [
   ['File, tool and page', ['open_url', 'set_tool', 'go_to_page', 'select_panel', 'add_panel', 'rename_panel', 'remove_panel']],
   ['Grid', ['set_grid', 'detect_grid_size', 'set_grid_size', 'set_labels', 'remove_grid']],
   ['Colorbar and matching', ['set_colorbar', 'add_tick', 'set_tick_value', 'remove_tick', 'set_colorbar_scale', 'set_settings']],
-  ['IVIS regions', ['add_region', 'remove_region', 'set_scale_bar']],
+  ['ROI regions', ['add_region', 'remove_region', 'set_scale_bar']],
   ['Decisions and review', ['answer_question', 'set_review']],
   ['History and export', ['undo', 'redo', 'export_project']],
 ];

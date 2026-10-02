@@ -23,7 +23,7 @@
   // name → {description, args (JSON Schema of the argument object), mutates}
   const ACTIONS = {
     get_state: { description: 'Snapshot of the source, panels, calibration and readiness. Cheap; call after every mutation.', args: { type: 'object', properties: {} } },
-    get_results: { description: 'Extracted values of a panel: heatmap matrix with ΔE and flags, or IVIS region statistics.', args: { type: 'object', properties: { panelId } } },
+    get_results: { description: 'Extracted values of a panel: heatmap matrix with ΔE and flags, or ROI region statistics.', args: { type: 'object', properties: { panelId } } },
     get_questions: { description: 'Open typed questions (decisions) about the current project, with evidence and answer schemas.', args: { type: 'object', properties: { panelId } } },
     answer_question: {
       description: 'Answer a question from get_questions. Answers below the policy confidence are logged and left for a human.',
@@ -56,7 +56,7 @@
     focus: { description: 'Zoom the viewer to points (for screenshot-based checking).', args: { type: 'object', properties: { points: { type: 'array', items: point, minItems: 1 } }, required: ['points'] } },
 
     open_url: { description: 'Open a PDF, PNG, JPG or project zip by URL (same origin or CORS-enabled).', mutates: true, args: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
-    set_tool: { description: 'Switch between the heatmap and IVIS tools.', mutates: true, args: { type: 'object', properties: { tool: { enum: ['heatmap', 'ivis'] } }, required: ['tool'] } },
+    set_tool: { description: 'Switch between the heatmap and ROI tools.', mutates: true, args: { type: 'object', properties: { tool: { enum: ['heatmap', 'roi'] } }, required: ['tool'] } },
     go_to_page: { description: 'Show a PDF page (1-based).', mutates: true, args: { type: 'object', properties: { page: { type: 'integer', minimum: 1 } }, required: ['page'] } },
     select_panel: { description: 'Make a panel active.', mutates: true, args: { type: 'object', properties: { panelId }, required: ['panelId'] } },
     add_panel: { description: 'Add a panel on the current page for the active tool and make it active.', mutates: true, args: { type: 'object', properties: { name: { type: 'string' } } } },
@@ -79,7 +79,7 @@
     detect_grid_size: { description: 'Guess rows and columns from the colors inside the placed grid, with confidences (below ~1.3 is uncertain). Does not change the panel.', args: { type: 'object', properties: { panelId } } },
     set_grid_size: { description: 'Set rows and columns.', mutates: true, args: { type: 'object', properties: { panelId, rows: count('Number of cell rows.'), cols: count('Number of cell columns.') }, required: ['rows', 'cols'] } },
     set_labels: {
-      description: 'Row, column and (IVIS) box labels. Give at least one list.',
+      description: 'Row, column and (ROI) box labels. Give at least one list.',
       mutates: true,
       args: {
         type: 'object',
@@ -87,7 +87,7 @@
           panelId,
           rows: { ...labels, description: 'Row labels, top to bottom.' },
           cols: { ...labels, description: 'Column labels, left to right.' },
-          boxes: { ...labels, description: 'IVIS box names in reading order.' },
+          boxes: { ...labels, description: 'ROI box names in reading order.' },
         },
       },
     },
@@ -142,7 +142,7 @@
     },
 
     add_region: {
-      description: 'IVIS: add a region in image pixels. ellipse/rect use {cx, cy, rx, ry} (rect rx/ry are half-extents); polygon uses {points}. With replicate (default) and a grid, it is copied into every box.',
+      description: 'ROI: add a region in image pixels. ellipse/rect use {cx, cy, rx, ry} (rect rx/ry are half-extents); polygon uses {points}. With replicate (default) and a grid, it is copied into every box.',
       mutates: true,
       args: {
         type: 'object',
@@ -159,9 +159,9 @@
         required: ['shape', 'geom'],
       },
     },
-    remove_region: { description: 'IVIS: remove a region and all its copies.', mutates: true, args: { type: 'object', properties: { panelId, regionId: { type: 'string' } }, required: ['regionId'] } },
+    remove_region: { description: 'ROI: remove a region and all its copies.', mutates: true, args: { type: 'object', properties: { panelId, regionId: { type: 'string' } }, required: ['regionId'] } },
     set_scale_bar: {
-      description: 'IVIS: a known distance between two points, for areas in real units.',
+      description: 'ROI: a known distance between two points, for areas in real units.',
       mutates: true,
       args: { type: 'object', properties: { panelId, p1: point, p2: point, length: { type: 'number', exclusiveMinimum: 0 }, unit: { enum: ['cm', 'mm'] } }, required: ['p1', 'p2', 'length'] },
     },
@@ -323,7 +323,7 @@
       settings: { ...p.settings },
       review: p.review ? { status: reviewStatus || p.review.status, by: p.review.by, confidence: p.review.confidence, note: p.review.note || null } : null,
     };
-    if (p.tool === 'ivis') {
+    if (p.tool === 'roi') {
       out.regions = p.rois.map((r) => ({ id: r.id, name: r.name, shape: r.shape, replicate: r.replicate, nudged: Object.keys(r.offsets).length }));
       out.scaleBar = p.scale ? { p1: pt(p.scale.p1), p2: pt(p.scale.p2), length: p.scale.length, unit: p.scale.unit } : null;
     }
@@ -349,11 +349,11 @@
     };
   }
 
-  function ivisResultJson(panel, result, boxName) {
+  function roiResultJson(panel, result, boxName) {
     if (result.error) return { panelId: panel.id, error: result.error };
     return {
       panelId: panel.id,
-      tool: 'ivis',
+      tool: 'roi',
       unit: result.unit,
       regions: result.rows.map((x) => ({
         regionId: x.roi.id,
@@ -492,7 +492,7 @@
     toolDefinitions,
     stateSnapshot,
     heatmapResultJson,
-    ivisResultJson,
+    roiResultJson,
     openQuestions,
     resultKeyHash,
   });

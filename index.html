@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Colormeris</title>
-  <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and in vivo imaging (IVIS) signal.">
+  <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and signal inside regions of interest (ROI).">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/style.css?v=23">
 </head>
@@ -16,7 +16,7 @@
     </a>
     <nav class="tool-switch" aria-label="Tools">
       <a href="extract.html#heatmap">Heatmap</a>
-      <a href="extract.html#ivis">IVIS</a>
+      <a href="extract.html#roi">ROI</a>
       <a href="colormaps.html">Colormaps</a>
     </nav>
   </header>
@@ -51,7 +51,7 @@
           <span class="go">Open the heatmap tool →</span>
         </a>
 
-        <a class="tool-card" href="extract.html#ivis">
+        <a class="tool-card" href="extract.html#roi">
           <svg viewBox="0 0 240 120" aria-hidden="true">
             <defs>
               <radialGradient id="lum"><stop offset="0" stop-color="#ff2a00"/><stop offset="0.35" stop-color="#ffd000"/><stop offset="0.65" stop-color="#00c8ff"/><stop offset="1" stop-color="#3a00b0" stop-opacity="0"/></radialGradient>
@@ -66,14 +66,14 @@
             </g>
             <rect x="190" y="16" width="12" height="88" fill="url(#ib)" stroke="#999"/>
           </svg>
-          <h2>IVIS / in vivo imaging</h2>
-          <p>Signal inside regions drawn on luminescence images.</p>
+          <h2>ROI / regions of interest</h2>
+          <p>Signal inside regions drawn on images, such as IVIS luminescence.</p>
           <ul>
             <li>Ellipses, rectangles and polygons, mixed freely</li>
             <li>Draw once, copied into every animal's box</li>
             <li>Total, mean, max and signal area; optional scale bar</li>
           </ul>
-          <span class="go">Open the IVIS tool →</span>
+          <span class="go">Open the ROI tool →</span>
         </a>
 
         <a class="tool-card" href="colormaps.html">

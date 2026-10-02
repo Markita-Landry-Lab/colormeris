@@ -86,12 +86,12 @@
       ws.setValue($('agent-steps'), a.maxSteps);
       ws.setValue($('agent-base'), a.base);
       const hm = settings.matching.heatmap;
-      const iv = settings.matching.ivis;
+      const iv = settings.matching.roi;
       ws.setValue($('set-hm-distance'), hm.distance);
       ws.setValue($('set-hm-maxde'), hm.maxDeltaE);
-      ws.setValue($('set-iv-distance'), iv.distance);
-      ws.setValue($('set-iv-maxde'), iv.maxDeltaE);
-      ws.setValue($('set-iv-gray'), iv.grayChroma);
+      ws.setValue($('set-roi-distance'), iv.distance);
+      ws.setValue($('set-roi-maxde'), iv.maxDeltaE);
+      ws.setValue($('set-roi-gray'), iv.grayChroma);
       $('matching-note').textContent = matchingNote();
       renderHotkeys();
     }
@@ -133,7 +133,7 @@
       settings.matching[kind][key] = value;
       ws.applyMatching(kind, settings.matching[kind]);
     }
-    for (const [id, kind] of [['set-hm-distance', 'heatmap'], ['set-iv-distance', 'ivis']]) {
+    for (const [id, kind] of [['set-hm-distance', 'heatmap'], ['set-roi-distance', 'roi']]) {
       $(id).addEventListener('change', (e) => {
         setMatching(kind, 'distance', e.target.value);
         changed();
@@ -141,8 +141,8 @@
       });
     }
     bindNumber('set-hm-maxde', 0, 1000, (v) => setMatching('heatmap', 'maxDeltaE', v));
-    bindNumber('set-iv-maxde', 0, 1000, (v) => setMatching('ivis', 'maxDeltaE', v));
-    bindNumber('set-iv-gray', 0, 60, (v) => setMatching('ivis', 'grayChroma', v));
+    bindNumber('set-roi-maxde', 0, 1000, (v) => setMatching('roi', 'maxDeltaE', v));
+    bindNumber('set-roi-gray', 0, 60, (v) => setMatching('roi', 'grayChroma', v));
     $('matching-reset').addEventListener('click', () => {
       for (const [kind, defs] of Object.entries(MATCHING_DEFAULTS)) {
         settings.matching[kind] = { ...defs };
@@ -156,7 +156,7 @@
     function matchingNote() {
       if (!app.sourceCanvas) return '';
       const parts = [];
-      for (const [kind, label] of [['heatmap', 'heatmap'], ['ivis', 'IVIS']]) {
+      for (const [kind, label] of [['heatmap', 'heatmap'], ['roi', 'ROI']]) {
         const m = settings.matching[kind];
         const n = app.project.panels.filter((p) => p.tool === kind && Object.entries(m).some(([k, v]) => p.settings[k] !== v)).length;
         if (n) parts.push(`${n} ${label} panel${n === 1 ? '' : 's'}`);
