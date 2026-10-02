@@ -15,6 +15,8 @@
     ['diverging', 'Diverging'],
     ['cyclic', 'Cyclic'],
     ['rainbow', 'Rainbow'],
+    ['multi-sequential', 'Multi-sequential'],
+    ['qualitative', 'Qualitative'],
     ['others', 'Others'],
   ];
 

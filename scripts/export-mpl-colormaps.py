@@ -13,7 +13,7 @@ palette linearly in sRGB. Qualitative ones keep their longest palette.
 Continuous maps are sampled at 256 evenly spaced points (matplotlib's own
 lookup-table size); qualitative maps keep their listed colors. Groups follow the
 categories of matplotlib's colormap reference, regrouped into sequential,
-diverging, cyclic, rainbow and others. CMasher maps keep matplotlib's
+diverging, cyclic, rainbow, multi-sequential, qualitative and others. CMasher maps keep matplotlib's
 registered names (cmr.amber), since copper and ocean exist in both; Crameri's
 maps likewise (cmc.batlow). A map already shown under an earlier source
 (berlin, managua and vanimo ship with matplotlib) is not added again.
@@ -51,7 +51,7 @@ GROUPS = [
                        "coolwarm", "bwr", "seismic", "berlin", "managua", "vanimo"]),
     ("cyclic", "Matplotlib", ["twilight", "twilight_shifted", "hsv"]),
     ("rainbow", "Matplotlib", ["jet", "rainbow", "gist_rainbow", "turbo", "nipy_spectral", "gist_ncar", "Spectral"]),
-    ("others", "Matplotlib (qualitative)", ["Pastel1", "Pastel2", "Paired", "Accent", "Dark2", "Set1", "Set2",
+    ("qualitative", "Matplotlib", ["Pastel1", "Pastel2", "Paired", "Accent", "Dark2", "Set1", "Set2",
                                "Set3", "tab10", "tab20", "tab20b", "tab20c", "okabe_ito"]),
     ("others", "Matplotlib (miscellaneous)", ["flag", "prism", "ocean", "gist_earth", "terrain", "gist_stern",
                                  "gnuplot", "gnuplot2", "CMRmap", "cubehelix", "brg"]),
@@ -88,7 +88,7 @@ CMC_GROUPS = [
     ("diverging", "Crameri", ["broc", "cork", "vik", "lisbon", "tofino", "berlin", "roma",
                               "bam", "vanimo", "managua"]),
     ("cyclic", "Crameri", ["romaO", "bamO", "brocO", "corkO", "vikO"]),
-    ("others", "Crameri (multi-sequential)", ["oleron", "bukavu", "fes"]),
+    ("multi-sequential", "Crameri", ["oleron", "bukavu", "fes"]),
 ]
 
 
@@ -106,7 +106,7 @@ CMO_GROUPS = [
                                "algae", "matter", "turbid", "speed", "amp", "tempo", "rain"]),
     ("diverging", "cmocean", ["balance", "delta", "curl", "diff", "tarn"]),
     ("cyclic", "cmocean", ["phase"]),
-    ("others", "cmocean (multi-sequential)", ["topo"]),
+    ("multi-sequential", "cmocean", ["topo"]),
     # oxy is gray with red and yellow ends for out-of-range values, not one sequence.
     ("others", "cmocean (miscellaneous)", ["oxy"]),
 ]
@@ -163,7 +163,7 @@ EXTRA = {}  # name -> colormap, for maps matplotlib does not register
 SNS_GROUPS = [
     ("sequential", "seaborn", ["rocket", "mako", "flare", "crest"]),
     ("diverging", "seaborn", ["vlag", "icefire"]),
-    ("others", "seaborn (qualitative)", ["deep", "muted", "pastel", "bright", "dark", "colorblind"]),
+    ("qualitative", "seaborn", ["deep", "muted", "pastel", "bright", "dark", "colorblind"]),
 ]
 
 
@@ -171,7 +171,7 @@ def seaborn_groups():
     listed = {n for _, _, names in SNS_GROUPS for n in names}
     assert {n for n in SEABORN_PALETTES if not n.endswith("6")} <= listed, "new seaborn palettes"
     for group, sub, names in SNS_GROUPS:
-        if sub.endswith("(qualitative)"):
+        if group == "qualitative":
             for n in names:
                 EXTRA[n] = ListedColormap(SEABORN_PALETTES[n], name=n)
         yield group, sub, names
@@ -219,10 +219,12 @@ def carbonplan_groups():
 # ours, chosen by looking at each table's lightness and hues.
 NCL_GROUPS = [
     ("sequential", "NCL", [
-        "GMT_copper", "GMT_cool", "GMT_gebco", "GMT_gray", "GMT_hot", "GMT_nighttime",
+        "GMT_copper", "GMT_cool", "GMT_gebco", "GMT_gray", "GMT_hot",
         "GMT_ocean", "GreenYellow", "gsdtol", "gsltod", "GSFC_landsat_udf_density", "helix", "helix1",
-        "thelix", "matlab_hot", "NEO_modis_ndvi", "SVG_es_landscape_79", "sunshine_9lev", "WhiteBlue",
-        "WhiteGreen", "WhiteYellowOrangeRed", "WhiteBlueGreenYellowRed"]),
+        "thelix", "matlab_hot", "NEO_modis_ndvi", "sunshine_9lev", "WhiteBlue",
+        "WhiteGreen", "WhiteYellowOrangeRed"]),
+    # Two sequential runs joined: the lightness jumps or turns once.
+    ("multi-sequential", "NCL", ["GMT_nighttime", "SVG_es_landscape_79", "GMT_relief"]),
     ("diverging", "NCL", [
         "amwg_blueyellowred", "BlAqGrWh2YeOrReVi22", "BlRe", "BlueDarkOrange18", "BlueDarkRed18",
         "BlueGreen14", "BlueRed", "BlueRedGray", "BlueWhiteOrangeRed", "BlueYellowRed", "BlWhRe",
@@ -242,10 +244,10 @@ NCL_GROUPS = [
         "WhViBlGrYeOrRe", "WhViBlGrYeOrReWh", "precip2_15lev", "precip2_17lev", "precip3_16lev",
         "precip4_11lev", "precip_11lev", "prcp_1", "prcp_2", "prcp_3", "rh_19lev", "wind_17lev",
         "spread_15lev", "perc2_9lev", "percent_11lev", "t2m_29lev", "temp1", "NMCRef", "NMCVel", "wgne15"]),
-    ("others", "NCL (qualitative)", ["Cat12", "GMT_paired", "default", "hlu_default", "grads_default"]),
+    ("qualitative", "NCL", ["Cat12", "GMT_paired", "default", "hlu_default", "grads_default"]),
     ("others", "NCL (miscellaneous)", [
-        "cb_9step", "StepSeq25", "cmp_flux", "GMT_drywet", "GMT_globe", "GMT_relief",
-        "GMT_relief_oceanonly", "GMT_topo", "NCV_gebco", "OceanLakeLandSnow", "topo_15lev",
+        "cb_9step", "StepSeq25", "cmp_flux", "GMT_drywet", "GMT_globe",
+        "WhiteBlueGreenYellowRed", "GMT_relief_oceanonly", "GMT_topo", "NCV_gebco", "OceanLakeLandSnow", "topo_15lev",
         "vegetation_modis", "NOC_ndvi", "nice_gfdl", "hotres", "NCV_banded", "NCV_manga", "NCV_roullet",
         "posneg_1", "posneg_2", "seaice_1", "seaice_2", "so4_21", "so4_23", "srip_reanalysis",
         "mch_default", "radar", "radar_1", "SVG_bhw3_22", "SVG_feb_sunrise", "SVG_foggy_sunrise",
@@ -302,14 +304,14 @@ def sciviz_groups():
     assert special <= set(found), f"SciVisColor tables missing: {special - set(found)}"
     groups = [("sequential", "SciVisColor", [n for n in found if n not in special]),
               ("diverging", "SciVisColor", SVC_DIVERGING),
-              ("others", "SciVisColor (multi-sequential)", SVC_MULTI),
+              ("multi-sequential", "SciVisColor", SVC_MULTI),
               ("others", "SciVisColor (outlier ranges)", SVC_OUTLIER),
-              ("others", "SciVisColor (qualitative)", SVC_DISCRETE)]
+              ("qualitative", "SciVisColor", SVC_DISCRETE)]
     for group, sub, names in groups:
         for n in names:
             rgb = read_ncl(folder / f"{n}.rgb")
             full = f"sciviz.{n}"
-            if sub.endswith("(qualitative)"):
+            if group == "qualitative":
                 keep = [c for i, c in enumerate(rgb) if i == 0 or np.abs(c - rgb[i - 1]).max() > 1e-6]
                 EXTRA[full] = ListedColormap(keep, name=full)
             else:
@@ -324,7 +326,7 @@ CARTO_TAGS = {
     "quantitative": ("sequential", "CARTOColors"),
     "aggregation": ("sequential", "CARTOColors"),
     "diverging": ("diverging", "CARTOColors"),
-    "qualitative": ("others", "CARTOColors (qualitative)"),
+    "qualitative": ("qualitative", "CARTOColors"),
 }
 
 
@@ -339,7 +341,7 @@ def carto_groups():
         group, sub = CARTO_TAGS[tags[0]]
         colors = [c.lower() for c in sizes[max(sizes)]]
         full = f"carto.{name}"
-        if sub.endswith("(qualitative)"):
+        if group == "qualitative":
             EXTRA[full] = ListedColormap(colors, name=full)
         else:
             EXTRA[full] = LinearSegmentedColormap.from_list(full, colors, N=N)
@@ -379,7 +381,7 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
-            qualitative = sub.endswith("(qualitative)")
+            qualitative = group == "qualitative"
             assert not qualitative or isinstance(cmap, ListedColormap), name
             if not qualitative:
                 rgb = cmap(X)[:, :3]

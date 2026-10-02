@@ -14,6 +14,8 @@
     ['diverging', 'Diverging', false],
     ['cyclic', 'Cyclic', false],
     ['rainbow', 'Rainbow', false],
+    ['multi-sequential', 'Multi-sequential', false],
+    ['qualitative', 'Qualitative', false],
     ['others', 'Others', false],
   ];
   const SORTS = [

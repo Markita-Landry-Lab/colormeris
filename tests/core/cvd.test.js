@@ -51,7 +51,7 @@ test('lightnessStats: viridis is linear, jet is not', () => {
 test('colormap data: valid colors, groups, sources and citations', () => {
   const sources = new Set(cmapData.sources.map((s) => s.key));
   assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri', 'cmocean', 'colorcet', 'seaborn', 'carbonplan', 'ncl', 'sciviz', 'carto']);
-  const groups = new Set(['sequential', 'diverging', 'cyclic', 'rainbow', 'others']);
+  const groups = new Set(['sequential', 'diverging', 'cyclic', 'rainbow', 'multi-sequential', 'qualitative', 'others']);
   const names = new Set();
   for (const m of cmapData.maps) {
     assert.ok(groups.has(m.group), m.name);
