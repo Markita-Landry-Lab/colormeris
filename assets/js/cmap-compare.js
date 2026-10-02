@@ -30,9 +30,9 @@
     let allCols = false; // the numbers table shows only the key columns until asked
     let sinePat = 'waves'; // test image of the sine section: 'waves' or 'bumps'
     let sineView = 'orig'; // one of VIEWS
-    // Maps flipped here, on top of the Browse setting, so each map can be read either way.
+    // Maps flipped here, on top of their Browse direction, so each map can be read either way.
     const flipped = new Set();
-    const isRev = (map) => state.reversed !== flipped.has(map.name);
+    const isRev = (map) => ctx.isRev(map) !== flipped.has(map.name);
 
     function cmpSeries(map, key) {
       const p = profile(map, isRev(map));

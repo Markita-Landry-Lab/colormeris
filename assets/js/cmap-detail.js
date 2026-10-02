@@ -26,7 +26,7 @@
     // ---- plots ----
 
     function plotFigs(map) {
-      const { colors, Ls, m, C, h, n, qual, xOf, pts } = profile(map);
+      const { colors, Ls, m, C, h, n, qual, xOf, pts, reversed } = profile(map);
       const mode = qual ? 'dots' : 'line';
       const dotR = qual ? 4.5 : 1.8;
       // Three position ticks: five crowd the small square plots.
@@ -49,7 +49,7 @@
       }), qual ? null : 'A straight rising or falling line reads best, in color and in grayscale.', opt);
 
       if (!qual) {
-        const stepPts = stepPoints(map, { colors, n });
+        const stepPts = stepPoints(map, { colors, n, reversed });
         const k = stepPts.length;
         const axis = niceAxis(Math.max(...stepPts.map((p) => p.y)) * 1.05);
         const mean = m.stepStats.mean;
@@ -165,8 +165,8 @@
 
     // ---- where values get confused ----
 
-    // Spans are on the original map; flip them with the Reversed toggle.
-    const spansOf = (spans) => (state.reversed ? spans.map(([a, b]) => [1 - b, 1 - a]).reverse() : spans);
+    // Spans are on the original map; flip them when the map is shown reversed.
+    const spansOf = (map, spans) => (ctx.isRev(map) ? spans.map(([a, b]) => [1 - b, 1 - a]).reverse() : spans);
 
     // The strip with two thin tracks below it: where values are flat, and where
     // a color has a look-alike elsewhere. Positions are percentages, so it scales.
@@ -187,8 +187,8 @@
         box.append(t);
       };
       box.append(el('span'), strip);
-      track('Flat', 'flat', spansOf(r.flatSpans), 'Flat');
-      track('Ambiguous', 'ambiguous', spansOf(r.ambiguousSpans), 'Look-alike elsewhere');
+      track('Flat', 'flat', spansOf(map, r.flatSpans), 'Flat');
+      track('Ambiguous', 'ambiguous', spansOf(map, r.ambiguousSpans), 'Look-alike elsewhere');
       return box;
     }
 

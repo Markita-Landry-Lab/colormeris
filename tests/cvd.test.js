@@ -211,3 +211,15 @@ test('colormap data: CMasher, Crameri, cmocean, colorcet, seaborn, CarbonPlan, N
   assert.ok(cet.includes('cet_fire') && !cet.includes('cet_linear_kryw_0_100_c71'));
   assert.ok(!cet.some((n) => /CET_|_s25$|glasbey/.test(n)), cet.join());
 });
+
+test('colormap data: each sequential sub-heading runs one way once flips are applied', () => {
+  const subs = new Map();
+  for (const m of cmapData.maps.filter((x) => x.group === 'sequential')) {
+    const c = parseHexColors(m.colors);
+    const rising = lightness(c[c.length - 1]) > lightness(c[0]);
+    if (!subs.has(m.sub)) subs.set(m.sub, new Set());
+    subs.get(m.sub).add(rising !== !!m.flip);
+  }
+  for (const [sub, dirs] of subs) assert.equal(dirs.size, 1, sub);
+  assert.ok(!cmapData.maps.some((m) => m.flip && m.group !== 'sequential'));
+});

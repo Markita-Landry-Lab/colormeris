@@ -123,7 +123,12 @@
     // comparison (?compare=), `open` the map in the detail view (?map=).
     const state = {
       reversed: false, selected: route.compare, open: null, tab: 'browse', stripView: loadStripView(), sort: null,
+      // Maps shown the other way round in Browse. It starts with the sequential
+      // maps the export script marked `flip`, so each section runs one way.
+      flipped: new Set(data.maps.filter((m) => m.flip).map((m) => m.name)),
     };
+    // A map's direction in Browse: its own toggle, then the global Reversed.
+    const isRev = (map) => state.reversed !== state.flipped.has(map.name);
     let uid = 0;
     const cache = new Map(); // `${name}|${reversed}` -> { view key -> { colors, L } }
     const baseOf = new Map(); // name -> original colors, unpacked once
@@ -137,8 +142,8 @@
       return baseOf.get(map.name);
     }
 
-    // `reversed` defaults to the Browse setting; the Compare tab passes its own per map.
-    function viewData(map, view, reversed = state.reversed) {
+    // `reversed` defaults to the map's Browse direction; the Compare tab passes its own.
+    function viewData(map, view, reversed = isRev(map)) {
       const key = `${map.name}|${reversed}`;
       let entry = cache.get(key);
       if (!entry) {
@@ -344,7 +349,7 @@
     // Smallest separation in one view, with positions that follow Reversed.
     function sepOf(map, key) {
       const s = metrics(map).separations[key];
-      if (!s || !state.reversed) return s;
+      if (!s || !isRev(map)) return s;
       if (map.kind === 'qualitative') {
         const n = base(map).length;
         return { min: s.min, t: [n - 1 - s.t[1], n - 1 - s.t[0]] };
@@ -487,7 +492,7 @@
 
     // Per-position values of one map (in the current direction) and a point
     // builder shared by the single plots and the comparison plot.
-    function profile(map, reversed = state.reversed) {
+    function profile(map, reversed = isRev(map)) {
       const colors = viewData(map, 'orig', reversed).colors;
       const Ls = viewData(map, 'orig', reversed).L;
       const m = metrics(map);
@@ -631,14 +636,22 @@
       button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       const cmpBtn = el('button', { class: 'cmap-toggle cmap-cmp', type: 'button', 'aria-pressed': 'false' });
       cmpBtn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-add" d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="i-on" d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      // Reverse this map only, as in Compare.
+      const revBtn = el('button', { class: 'cmap-toggle cmap-sm', type: 'button', 'data-act': 'rev' });
+      revBtn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h9l-2.5-2.5M13 10H4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       const actions = el('div', { class: 'cmap-actions' });
-      actions.append(cmpBtn, button);
+      actions.append(revBtn, cmpBtn, button);
       row.append(actions);
 
       const panel = el('div', { class: 'cmap-panel', id: panelId, hidden: '' });
       item.append(row, panel);
       item.dataset.name = map.name.toLowerCase();
-      const entry = { map, item, strips, panel, button, cmpBtn, order: items.length };
+      const entry = { map, item, strips, panel, button, cmpBtn, revBtn, order: items.length };
+      syncRevBtn(entry);
+      revBtn.addEventListener('click', () => {
+        if (!state.flipped.delete(map.name)) state.flipped.add(map.name);
+        redirect([entry]);
+      });
       const toggleDetail = () => (state.open === map.name ? detail.close() : detail.open(map.name));
       button.addEventListener('click', toggleDetail);
       code.addEventListener('click', toggleDetail);
@@ -778,14 +791,30 @@
       search.addEventListener('input', applyFilter);
       rev.addEventListener('change', () => {
         state.reversed = rev.checked;
-        for (const entry of items) {
-          for (const s of entry.strips) if (s._cm.rendered) renderStrip(s);
-        }
-        hideTip();
-        detail.refresh();
-        compare.render();
+        redirect(items);
       });
       return { bar, search, sort, boxes, sources, filtBtn, viewBtns, rev };
+    }
+
+    function syncRevBtn(entry) {
+      const on = isRev(entry.map);
+      const pre = state.flipped.has(entry.map.name) && entry.map.flip;
+      entry.revBtn.setAttribute('aria-pressed', String(on));
+      entry.revBtn.setAttribute('aria-label', `Reverse ${entry.map.name}`);
+      entry.revBtn.title = on
+        ? `Shown reversed${pre ? ' (to run the same way as its neighbors)' : ''}: click to show ${entry.map.name} in its original direction`
+        : `Reverse ${entry.map.name}`;
+    }
+
+    // Redraw maps whose direction changed: their strips, the open detail and Compare.
+    function redirect(entries) {
+      for (const entry of entries) {
+        syncRevBtn(entry);
+        for (const s of entry.strips) if (s._cm.rendered) renderStrip(s);
+      }
+      hideTip();
+      if (entries.some((e) => e.map.name === state.open)) detail.refresh();
+      compare.render();
     }
 
     function setStripView(k) {
@@ -1102,7 +1131,7 @@
 
     const ctx = {
       CM, el, svgEl, pct, clamp8, roundRgb, VIEWS, GLYPH, data, state, items, mapByName,
-      base, viewData, metrics, sepOf, rev, stripCanvas, makeStrip, renderStrip, showTip, hideTip,
+      base, viewData, metrics, sepOf, rev, isRev, stripCanvas, makeStrip, renderStrip, showTip, hideTip,
       niceAxis, drawAxes, drawSeries, linePlot, figure, profile, stepPoints, POS_TICKS, PW, PH, M, HUE_MIN_CHROMA,
       ratingPills, ratingCells, headerRow, applyStripView, refNumber, refItem, updateUrl, showRow, goTab,
       // Late bound: the modules call each other through these.
