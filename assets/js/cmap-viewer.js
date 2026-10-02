@@ -137,12 +137,13 @@
       return baseOf.get(map.name);
     }
 
-    function viewData(map, view) {
-      const key = `${map.name}|${state.reversed}`;
+    // `reversed` defaults to the Browse setting; the Compare tab passes its own per map.
+    function viewData(map, view, reversed = state.reversed) {
+      const key = `${map.name}|${reversed}`;
       let entry = cache.get(key);
       if (!entry) {
         let orig = base(map);
-        if (state.reversed) orig = orig.slice().reverse();
+        if (reversed) orig = orig.slice().reverse();
         entry = { orig: { colors: orig } };
         for (const type of CM.CVD_TYPES) entry[type] = { colors: orig.map((c) => roundRgb(CM.simulateCvd(c, type))) };
         entry.gray = { colors: orig.map((c) => roundRgb(CM.grayscale(c))) };
@@ -173,7 +174,7 @@
       const { map, view } = strip._cm;
       const svg = strip.querySelector('svg');
       if (svg) svg.remove();
-      strip.insertAdjacentHTML('afterbegin', stripSvg(viewData(map, view).colors, map.kind === 'qualitative'));
+      strip.insertAdjacentHTML('afterbegin', stripSvg(viewData(map, view, strip._cm.rev).colors, map.kind === 'qualitative'));
       strip._cm.rendered = true;
     }
 
@@ -189,14 +190,14 @@
       : null;
 
     // `eager` renders at once: the comparison panel rebuilds its few strips often.
-    function makeStrip(map, view, eager = false) {
+    function makeStrip(map, view, eager = false, reversed = undefined) {
       const strip = el('div', {
         class: 'cmap-strip',
         tabindex: '0',
         role: 'img',
         'aria-label': `${map.name} ${view.label}`,
       });
-      strip._cm = { map, view: view.key, rendered: false, probe: null };
+      strip._cm = { map, view: view.key, rendered: false, probe: null, rev: reversed };
       strip.append(el('div', { class: 'cmap-marker', hidden: '' }));
       if (observer && !eager) observer.observe(strip);
       else renderStrip(strip);
@@ -264,7 +265,7 @@
 
     function indexAt(strip, clientX) {
       const r = strip.getBoundingClientRect();
-      const n = viewData(strip._cm.map, strip._cm.view).colors.length;
+      const n = viewData(strip._cm.map, strip._cm.view, strip._cm.rev).colors.length;
       const f = r.width ? (clientX - r.left) / r.width : 0;
       return Math.max(0, Math.min(n - 1, Math.floor(f * n)));
     }
@@ -272,7 +273,7 @@
     function probe(strip, i, x, y) {
       const { map, view } = strip._cm;
       const label = VIEWS.find((v) => v.key === view).label;
-      const vd = viewData(map, view);
+      const vd = viewData(map, view, strip._cm.rev);
       const marker = strip.querySelector('.cmap-marker');
       if (tipMarker && tipMarker !== marker) tipMarker.hidden = true;
       tipMarker = marker;
@@ -311,7 +312,7 @@
     root.addEventListener('keydown', (e) => {
       const strip = e.target.closest?.('.cmap-strip');
       if (!strip || e.target !== strip) return;
-      const n = viewData(strip._cm.map, strip._cm.view).colors.length;
+      const n = viewData(strip._cm.map, strip._cm.view, strip._cm.rev).colors.length;
       let i = strip._cm.probe ?? (e.key === 'ArrowLeft' ? n : -1);
       if (e.key === 'ArrowRight') i += e.shiftKey ? 10 : 1;
       else if (e.key === 'ArrowLeft') i -= e.shiftKey ? 10 : 1;
@@ -340,7 +341,7 @@
       return m;
     }
 
-    const rev = (a) => (state.reversed ? a.slice().reverse() : a);
+    const rev = (a, reversed = state.reversed) => (reversed ? a.slice().reverse() : a);
 
     // Smallest separation in one view, with positions that follow Reversed.
     function sepOf(map, key) {
@@ -488,12 +489,12 @@
 
     // Per-position values of one map (in the current direction) and a point
     // builder shared by the single plots and the comparison plot.
-    function profile(map) {
-      const colors = viewData(map, 'orig').colors;
-      const Ls = viewData(map, 'orig').L;
+    function profile(map, reversed = state.reversed) {
+      const colors = viewData(map, 'orig', reversed).colors;
+      const Ls = viewData(map, 'orig', reversed).L;
       const m = metrics(map);
-      const C = rev(m.lch.C);
-      const h = rev(m.lch.h);
+      const C = rev(m.lch.C, reversed);
+      const h = rev(m.lch.h, reversed);
       const n = colors.length;
       const qual = map.kind === 'qualitative';
       const xOf = (i) => (n > 1 ? i / (n - 1) : 0.5);
@@ -501,12 +502,12 @@
       const pts = (ys, fmt, skip) => colors.map((c, i) => ({
         x: xOf(i), y: skip && skip(i) ? null : ys[i], color: c, pos: posOf(i), value: fmt(ys[i]),
       }));
-      return { colors, Ls, m, C, h, n, qual, xOf, pts };
+      return { colors, Ls, m, C, h, n, qual, xOf, pts, reversed };
     }
 
     // ΔE2000 between neighbors, one point per step, in the color at its middle.
-    function stepPoints(map, { colors, n }) {
-      const steps = rev(metrics(map).steps);
+    function stepPoints(map, { colors, n, reversed }) {
+      const steps = rev(metrics(map).steps, reversed);
       const k = steps.length;
       return steps.map((v, i) => {
         const t = (i + 0.5) / k;

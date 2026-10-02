@@ -806,6 +806,13 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .cmap-actions { display: flex; justify-content: flex-end; gap: 2px; }
 .cmap-toggle.cmap-sm { width: 28px; }
+.cmap-compare .cmap-head, .cmap-compare .cmap-row { grid-template-columns: 28px minmax(96px, 170px) 2fr repeat(4, 1fr) repeat(4, 30px) var(--cmap-actions, 66px); }
+.cmap-grip { cursor: grab; touch-action: none; }
+.cmap-item.dragging { position: relative; z-index: 2; opacity: 0.85; box-shadow: var(--shadow, 0 4px 14px rgba(0,0,0,.25)); background: var(--surface); }
+.cmap-item.dragging .cmap-grip { cursor: grabbing; }
+.cmap-item.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+.cmap-item.drop-after { box-shadow: 0 2px 0 var(--accent); }
+.cmap-toggle[data-act="rev"][aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .cmap-toggle:disabled { opacity: 0.35; cursor: not-allowed; background: transparent; color: var(--muted); }
 .cmap-cmp .i-on, .cmap-cmp[aria-pressed="true"] .i-add { display: none; }
 .cmap-cmp[aria-pressed="true"] .i-on { display: inline; }
@@ -821,7 +828,7 @@ input.cmap-search { width: 260px; max-width: 100%; }
 
 /* Comparison panel: strips, one overlay plot and a numbers table. */
 .cmap-compare {
-  --cmap-actions: 90px;
+  --cmap-actions: 62px;
   min-width: 0;
   display: flex; flex-direction: column; gap: 10px;
   padding: 12px 14px 16px;
@@ -1028,6 +1035,9 @@ input.cmap-search { width: 260px; max-width: 100%; }
   .cmap-rc { display: none; }
   .cmap-single .cmap-cell { grid-column: 1 / -1; }
   .cmap-name { grid-column: 1; grid-row: 1; }
+  .cmap-compare .cmap-row { grid-template-columns: 1fr 1fr; }
+  .cmap-compare .cmap-row > .cmap-grip { grid-column: 1; grid-row: 1; justify-self: start; }
+  .cmap-compare .cmap-name { padding-left: 34px; }
   .cmap-actions { grid-column: 2; grid-row: 1; justify-self: end; }
   .cmap-cell.main { grid-column: 1 / -1; grid-row: 2; }
   .cmap-cap { display: block; }

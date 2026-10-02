@@ -30,9 +30,12 @@
     let allCols = false; // the numbers table shows only the key columns until asked
     let sinePat = 'waves'; // test image of the sine section: 'waves' or 'bumps'
     let sineView = 'orig'; // one of VIEWS
+    // Maps flipped here, on top of the Browse setting, so each map can be read either way.
+    const flipped = new Set();
+    const isRev = (map) => state.reversed !== flipped.has(map.name);
 
     function cmpSeries(map, key) {
-      const p = profile(map);
+      const p = profile(map, isRev(map));
       if (key === 'L') return { points: p.pts(p.Ls, (v) => `L* = ${v.toFixed(1)}`), mode: p.qual ? 'dots' : 'line', dotR: p.qual ? 4 : 0 };
       if (key === 'C') return { points: p.pts(p.C, (v) => `C* = ${v.toFixed(1)}`), mode: p.qual ? 'dots' : 'line', dotR: p.qual ? 4 : 0 };
       if (key === 'h') {
@@ -54,7 +57,7 @@
 
     function miniStrip(map) {
       const d = el('span', { class: 'cmap-mini' });
-      d.innerHTML = stripSvg(viewData(map, 'orig').colors, map.kind === 'qualitative');
+      d.innerHTML = stripSvg(viewData(map, 'orig', isRev(map)).colors, map.kind === 'qualitative');
       return d;
     }
 
@@ -286,23 +289,35 @@
       row.append(name);
       VIEWS.forEach((v, j) => {
         const cell = el('div', { class: j === 0 ? 'cmap-cell main' : 'cmap-cell', 'data-view': v.key });
-        cell.append(el('span', { class: 'cmap-cap' }, v.label), makeStrip(map, v, true));
+        cell.append(el('span', { class: 'cmap-cap' }, v.label), makeStrip(map, v, true, isRev(map)));
         row.append(cell);
       });
       row.append(...ratingCells(map));
       const actions = el('div', { class: 'cmap-actions' });
-      const btn = (act, label, path, disabled) => {
+      const btn = (act, label, path) => {
         const b = el('button', {
           class: 'cmap-toggle cmap-sm', type: 'button', title: `${label} ${map.name}`, 'aria-label': `${label} ${map.name}`,
           'data-act': act, 'data-name': map.name,
         });
-        if (disabled) b.disabled = true;
         b.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
         actions.append(b);
         return b;
       };
-      btn('up', 'Move up', 'M4 10l4-4 4 4', i === 0).addEventListener('click', () => moveCompared(map.name, -1));
-      btn('down', 'Move down', 'M4 6l4 4 4-4', i === list.length - 1).addEventListener('click', () => moveCompared(map.name, 1));
+      // Drag to reorder; arrow keys move the focused handle for keyboard users.
+      const grip = btn('drag', 'Drag to reorder (or press ↑ ↓):', 'M6 3.5v.01M10 3.5v.01M6 8v.01M10 8v.01M6 12.5v.01M10 12.5v.01');
+      grip.classList.add('cmap-grip');
+      row.prepend(grip); // first column, before the name
+      grip.querySelector('path').setAttribute('stroke-width', '2.6');
+      grip.addEventListener('pointerdown', (e) => startDrag(e, row, i));
+      grip.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        moveCompared(map.name, e.key === 'ArrowUp' ? -1 : 1);
+      });
+      const flip = btn('rev', 'Reverse', 'M3 6h9l-2.5-2.5M13 10H4l2.5 2.5');
+      flip.setAttribute('aria-pressed', String(isRev(map)));
+      flip.title = `${isRev(map) ? 'Reversed: show' : 'Reverse'} ${map.name}${isRev(map) ? ' in its original direction' : ' in the plots and test images'}`;
+      flip.addEventListener('click', () => toggleReversed(map.name));
       btn('remove', 'Remove from comparison:', 'M4 4l8 8M12 4l-8 8').addEventListener('click', () => removeCompared(map.name));
       row.append(actions);
       return row;
@@ -319,7 +334,7 @@
 
     function sineCanvas(map, values) {
       const qual = map.kind === 'qualitative';
-      const colors = viewData(map, sineView).colors;
+      const colors = viewData(map, sineView, isRev(map)).colors;
       const cv = el('canvas', {
         class: 'cmap-sine-img', width: String(SINE_N), height: String(SINE_N), role: 'img',
         'aria-label': `${map.name} applied to the ${SINE_PATTERNS.find((p) => p.key === sinePat).label.toLowerCase()} test image`,
@@ -372,7 +387,9 @@
 
     function renderStrips(list) {
       const box = el('div', { class: 'cmap-compare-rows' });
-      box.append(headerRow());
+      const head = headerRow();
+      head.prepend(el('span'));
+      box.append(head);
       list.forEach((map, i) => {
         const item = el('div', { class: 'cmap-item' });
         item.append(compareRow(map, i, list));
@@ -454,9 +471,7 @@
       ctx.onCompareChange();
       if (!focus) return;
       const q = (act) => cmp.sec.querySelector(`button[data-act="${act}"][data-name="${CSS.escape(focus.name)}"]`);
-      let b = q(focus.act);
-      if (!b || b.disabled) b = q(focus.act === 'up' ? 'down' : 'up');
-      (b && !b.disabled ? b : cmp.count).focus();
+      (q(focus.act) || cmp.count).focus();
     }
 
     function setCompared(name, on) {
@@ -472,7 +487,51 @@
       const j = i + d;
       if (i < 0 || j < 0 || j >= selected.length) return;
       [selected[i], selected[j]] = [selected[j], selected[i]];
-      commit({ name, act: d < 0 ? 'up' : 'down' });
+      commit({ name, act: 'drag' });
+    }
+
+    function toggleReversed(name) {
+      if (!flipped.delete(name)) flipped.add(name);
+      commit({ name, act: 'rev' });
+    }
+
+    // Pointer-based drag (works for touch too): the row follows the pointer and
+    // a line shows where it will land; the order changes on release.
+    function startDrag(e, row, from) {
+      if (e.button > 0) return;
+      e.preventDefault();
+      const grip = e.currentTarget;
+      const items = [...cmp.strips.querySelectorAll('.cmap-item')];
+      const item = items[from];
+      const mids = items.map((x) => { const r = x.getBoundingClientRect(); return r.top + r.height / 2; });
+      let to = from;
+      grip.setPointerCapture(e.pointerId);
+      item.classList.add('dragging');
+      const mark = () => items.forEach((x, k) => {
+        x.classList.toggle('drop-before', k === to && to < from);
+        x.classList.toggle('drop-after', k === to && to > from);
+      });
+      const move = (ev) => {
+        item.style.transform = `translateY(${ev.clientY - e.clientY}px)`;
+        to = mids.reduce((best, m, k) => (Math.abs(m - ev.clientY) < Math.abs(mids[best] - ev.clientY) ? k : best), 0);
+        mark();
+      };
+      const end = (ev) => {
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', end);
+        grip.removeEventListener('pointercancel', end);
+        item.classList.remove('dragging');
+        item.style.transform = '';
+        items.forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+        if (ev.type === 'pointerup' && to !== from) {
+          const [name] = selected.splice(from, 1);
+          selected.splice(to, 0, name);
+          commit({ name, act: 'drag' });
+        }
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', end);
+      grip.addEventListener('pointercancel', end);
     }
 
     function removeCompared(name) {
