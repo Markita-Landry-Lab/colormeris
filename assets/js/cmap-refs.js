@@ -47,6 +47,10 @@
       text: 'CarbonPlan (2021). CarbonPlan colormaps, perceptually uniform in light and dark versions. Tables from the colormaps Python package by Pratiman Patel.',
       url: 'https://carbonplan.org/design/colormaps',
     },
+    ncl: {
+      text: 'NCAR Command Language (NCL) color tables (UCAR/NCAR/CISL). Tables from the colormaps Python package by Pratiman Patel; stepped tables are shown as steps.',
+      url: 'https://www.ncl.ucar.edu/Document/Graphics/color_table_gallery.shtml',
+    },
     carto: {
       text: 'CARTO. CARTOColors: color schemes for maps, version 5.0.2 (CC BY 4.0). Continuous versions here interpolate the 7-step palettes linearly in sRGB.',
       url: 'https://carto.com/carto-colors/',
@@ -149,7 +153,7 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom, CarbonPlan (carbonplan.*) CarbonPlan. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom, CarbonPlan (carbonplan.*) CarbonPlan, NCL (ncl.*) NCAR. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
@@ -159,6 +163,7 @@
     if (name.startsWith('cet_')) return ['colorcet'];
     if (SEABORN.includes(name)) return ['seaborn'];
     if (name.startsWith('carbonplan.')) return ['carbonplan'];
+    if (name.startsWith('ncl.')) return ['ncl'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

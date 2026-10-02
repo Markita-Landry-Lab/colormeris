@@ -4,8 +4,8 @@ Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
 Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
-cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021), CarbonPlan (from the colormaps
-package by Pratiman Patel, which ships CarbonPlan's 255-color tables) and
+cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021), CarbonPlan and NCAR's NCL color tables (both
+from the colormaps package by Pratiman Patel, which ships their color tables) and
 CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
 version). CARTOColors are discrete palettes of up to 7 steps; like
 palettable's mpl_colormap, the continuous versions interpolate the 7-step
@@ -212,6 +212,71 @@ def carbonplan_groups():
         yield group, sub, out
 
 
+# NCL's tables are lists of colors (2 to 256), many of them stepped
+# contour levels (precip_11lev). They are shown as matplotlib draws a
+# ListedColormap: steps, not blends. NCL has no types, so the groups are
+# ours, chosen by looking at each table's lightness and hues.
+NCL_GROUPS = [
+    ("sequential", "NCL", [
+        "GMT_copper", "GMT_cool", "GMT_gebco", "GMT_gray", "GMT_hot", "GMT_nighttime",
+        "GMT_ocean", "GreenYellow", "gsdtol", "gsltod", "GSFC_landsat_udf_density", "helix", "helix1",
+        "thelix", "matlab_hot", "NEO_modis_ndvi", "SVG_es_landscape_79", "sunshine_9lev", "WhiteBlue",
+        "WhiteGreen", "WhiteYellowOrangeRed", "WhiteBlueGreenYellowRed"]),
+    ("diverging", "NCL", [
+        "amwg_blueyellowred", "BlAqGrWh2YeOrReVi22", "BlRe", "BlueDarkOrange18", "BlueDarkRed18",
+        "BlueGreen14", "BlueRed", "BlueRedGray", "BlueWhiteOrangeRed", "BlueYellowRed", "BlWhRe",
+        "BrownBlue12", "cmp_b2r", "drought_severity", "GHRSST_anomaly", "GMT_no_green", "GMT_panoply",
+        "GMT_polar", "GMT_red2green", "GMT_seis", "GMT_split", "GrayWhiteGray", "GreenMagenta16",
+        "hotcold_18lev", "hotcolr_19lev", "NCV_blu_red", "NCV_blue_red", "NCV_jaisnd", "ncview_default",
+        "NEO_div_vegetation_a", "NEO_div_vegetation_b", "NEO_div_vegetation_c", "nrl_sirkes",
+        "nrl_sirkes_nowhite", "precip_diff_12lev", "precip4_diff_19lev", "sunshine_diff_12lev",
+        "temp_19lev", "temp_diff_18lev", "UKM_hadcrut", "vegetation_ClarkU", "ViBlGrWhYeOrRe"]),
+    ("cyclic", "NCL", ["circular_0", "circular_1", "circular_2", "cyclic", "gscyclic", "matlab_hsv"]),
+    ("rainbow", "NCL", [
+        "amwg", "amwg256", "BkBlAqGrYeOrReViWh200", "BlAqGrYeOrRe", "BlAqGrYeOrReVi200",
+        "BlGrYeOrReVi200", "cb_rainbow", "cb_rainbow_inv", "cmp_haxby", "cosam", "cosam12", "detail",
+        "extrema", "gauss3", "GMT_haxby", "GMT_jet", "GMT_wysiwyg", "GMT_wysiwygcont", "grads_rainbow",
+        "gui_default", "matlab_jet", "NCV_bright", "NCV_jet", "NCV_rainbow2", "ncl_default", "rainbow",
+        "rainbow_gray", "rainbow_white", "rainbow_white_gray", "saw3", "WhBlGrYeRe", "wh_bl_gr_ye_re",
+        "WhViBlGrYeOrRe", "WhViBlGrYeOrReWh", "precip2_15lev", "precip2_17lev", "precip3_16lev",
+        "precip4_11lev", "precip_11lev", "prcp_1", "prcp_2", "prcp_3", "rh_19lev", "wind_17lev",
+        "spread_15lev", "perc2_9lev", "percent_11lev", "t2m_29lev", "temp1", "NMCRef", "NMCVel", "wgne15"]),
+    ("others", "Qualitative (NCL)", ["Cat12", "GMT_paired", "default", "hlu_default", "grads_default"]),
+    ("others", "NCL", [
+        "cb_9step", "StepSeq25", "cmp_flux", "GMT_drywet", "GMT_globe", "GMT_relief",
+        "GMT_relief_oceanonly", "GMT_topo", "NCV_gebco", "OceanLakeLandSnow", "topo_15lev",
+        "vegetation_modis", "NOC_ndvi", "nice_gfdl", "hotres", "NCV_banded", "NCV_manga", "NCV_roullet",
+        "posneg_1", "posneg_2", "seaice_1", "seaice_2", "so4_21", "so4_23", "srip_reanalysis",
+        "mch_default", "radar", "radar_1", "SVG_bhw3_22", "SVG_feb_sunrise", "SVG_foggy_sunrise",
+        "SVG_fs2006", "SVG_Gallet13", "SVG_Lindaa06", "SVG_Lindaa07", "tbr_240_300", "tbr_stdev_0_30",
+        "tbr_var_0_500", "tbrAvg1", "tbrStd1", "tbrVar1", "wxpEnIR", "WhBlReWh"]),
+]
+# Test tables, 2-color tables and long lists of categories (matlab_lines
+# repeats 7 colors; lithology, uniform and psgcap have 170+ classes).
+# NCL's cividis is an earlier table of matplotlib's cividis (up to 23/255
+# apart), so it is the same map, not a new one.
+NCL_SKIP = ["cividis", "example", "testcmap", "precip_diff_1lev", "temp_diff_1lev", "matlab_lines", "lithology",
+            "uniform", "psgcap"]
+
+
+# A table is "ncolors=N", maybe a header, then "r g b" per line, 0–255 or 0–1.
+def read_ncl(path):
+    rows = [r.split()[:3] for r in path.read_text().splitlines()]
+    rgb = np.array([r for r in rows if len(r) == 3 and all(re.fullmatch(r"[0-9.]+", v) for v in r)], float)
+    return rgb / 255 if rgb.max() > 1 + 1e-6 else rgb
+
+
+def ncl_groups():
+    folder = Path(distribution("colormaps").locate_file("colormaps/colormaps/ncar_ncl"))
+    found = {f.stem for f in folder.glob("*.rgb")}
+    listed = {n for _, _, names in NCL_GROUPS for n in names}
+    assert found == listed | set(NCL_SKIP), f"NCL tables changed: {found ^ (listed | set(NCL_SKIP))}"
+    for group, sub, names in NCL_GROUPS:
+        for n in names:
+            EXTRA[f"ncl.{n}"] = ListedColormap(read_ncl(folder / f"{n}.rgb"), name=f"ncl.{n}")
+        yield group, sub, [f"ncl.{n}" for n in names]
+
+
 CARTO_VERSION = "5.0.2"
 CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
 # CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
@@ -246,13 +311,21 @@ def carto_groups():
 
 # A map from a later source that matches an earlier one (or its reverse) to
 # within 2/255 is not added. Cyclic maps also match when rotated (CET_C1s is
-# CET_C1 started a quarter turn later).
-def duplicate_of(rgb, seen, cyclic=False):
+# CET_C1 started a quarter turn later). A short table (ncl.matlab_jet, 64
+# colors) is also compared at its own colors: the earlier map is sampled at
+# the table's positions, both ends-in and bin centers, within 3/255.
+def duplicate_of(rgb, seen, cyclic=False, table=None):
     shifts = range(len(rgb)) if cyclic else [0]
     for name, other in seen.items():
         for flip in (rgb, rgb[::-1]):
             if any(np.abs(np.roll(flip, k, axis=0) - other).max() < 2 / 255 for k in shifts):
                 return name
+        if table is not None and len(table) < N:
+            n = len(table)
+            for t in (np.linspace(0, 1, n), (np.arange(n) + 0.5) / n):
+                at = np.stack([np.interp(t, X, other[:, c]) for c in range(3)], axis=1)
+                if min(np.abs(table - at).max(), np.abs(table[::-1] - at).max()) < 3 / 255:
+                    return name
     return None
 
 
@@ -261,7 +334,8 @@ seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
                        ("crameri", list(crameri_groups())), ("cmocean", list(cmocean_groups())),
                        ("colorcet", list(colorcet_groups())),
-                       ("seaborn", list(seaborn_groups())), ("carbonplan", list(carbonplan_groups())), ("carto", list(carto_groups()))]:
+                       ("seaborn", list(seaborn_groups())), ("carbonplan", list(carbonplan_groups())),
+                       ("ncl", list(ncl_groups())), ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -269,7 +343,8 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
             assert not qualitative or isinstance(cmap, ListedColormap), name
             if not qualitative:
                 rgb = cmap(X)[:, :3]
-                twin = source != "matplotlib" and duplicate_of(rgb, seen, cyclic=group == "cyclic")
+                table = np.asarray(cmap.colors)[:, :3] if isinstance(cmap, ListedColormap) else None
+                twin = source != "matplotlib" and duplicate_of(rgb, seen, cyclic=group == "cyclic", table=table)
                 if twin:
                     print(f"skipped {name}: same colors as {twin}")
                     continue
@@ -289,6 +364,91 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
                 "colors": colors_of(cmap, qualitative),
             })
 
+# ---- order each sub-heading by similarity ----
+# Neighbors in the list should look alike, so a reader scanning a section
+# sees families together (blues next to blues). Distance is the mean CIELAB
+# ΔE76 at 32 positions, taking the closer of the two directions (and, for
+# cyclic maps, of all starting points); qualitative palettes use the mean
+# distance from each color to the nearest color of the other palette. The
+# order is the shortest path through all maps (greedy from every start,
+# then 2-opt), turned so the old first map sits in the top half.
+
+K = 32
+
+
+def to_lab(rgb):
+    rgb = np.asarray(rgb, float)
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    xyz = lin @ np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]]).T
+    f = xyz / [0.95047, 1, 1.08883]
+    f = np.where(f > 0.008856, np.cbrt(f), 7.787 * f + 16 / 116)
+    return np.stack([116 * f[:, 1] - 16, 500 * (f[:, 0] - f[:, 1]), 200 * (f[:, 1] - f[:, 2])], 1)
+
+
+def lab_of(m):
+    h = m["colors"]
+    rgb = np.array([[int(h[i + k:i + k + 2], 16) for k in (0, 2, 4)] for i in range(0, len(h), 6)]) / 255
+    if m["kind"] == "continuous":
+        rgb = rgb[np.linspace(0, len(rgb) - 1, K).round().astype(int)]
+    return to_lab(rgb)
+
+
+def distance(a, b, kind, cyclic):
+    if kind == "qualitative":
+        d = np.linalg.norm(a[:, None] - b[None], axis=2)
+        return (d.min(1).mean() + d.min(0).mean()) / 2
+    shifts = range(K) if cyclic else [0]
+    return min(np.linalg.norm(np.roll(x, k, axis=0) - b, axis=1).mean() for x in (a, a[::-1]) for k in shifts)
+
+
+def path_length(order, d):
+    return sum(d[order[i], order[i + 1]] for i in range(len(order) - 1))
+
+
+def shortest_path(d):
+    n = len(d)
+    best = None
+    for start in range(n):
+        order, left = [start], set(range(n)) - {start}
+        while left:
+            nxt = min(left, key=lambda j: d[order[-1], j])
+            order.append(nxt)
+            left.remove(nxt)
+        if best is None or path_length(order, d) < path_length(best, d):
+            best = order
+    improved = True
+    while improved:  # 2-opt: reverse any stretch that shortens the path
+        improved = False
+        for i in range(1, n - 1):
+            for j in range(i + 1, n):
+                new = best[:i] + best[i:j + 1][::-1] + best[j + 1:]
+                if path_length(new, d) < path_length(best, d) - 1e-9:
+                    best, improved = new, True
+    return best
+
+
+def by_similarity(block):
+    if len(block) < 3:
+        return block
+    labs = [lab_of(m) for m in block]
+    kind, cyclic = block[0]["kind"], block[0]["group"] == "cyclic"
+    n = len(block)
+    d = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1, n):
+            d[i, j] = d[j, i] = distance(labs[i], labs[j], kind, cyclic)
+    order = shortest_path(d)
+    if order[-1] == 0 or order.index(0) > n - 1 - order.index(0):
+        order = order[::-1]  # the old first map stays near the top
+    return [block[i] for i in order]
+
+
+# Sub-headings keep their first-appearance order; maps move only within one.
+blocks = {}
+for m in maps:
+    blocks.setdefault((m["group"], m["sub"]), []).append(m)
+maps = [m for block in blocks.values() for m in by_similarity(block)]
+
 # In the order of the source filter in colormaps.html.
 sources = [
     {"key": "matplotlib", "label": "Matplotlib", "version": matplotlib.__version__},
@@ -298,6 +458,7 @@ sources = [
     {"key": "colorcet", "label": "colorcet", "version": colorcet.__version__},
     {"key": "seaborn", "label": "seaborn", "version": seaborn.__version__},
     {"key": "carbonplan", "label": "CarbonPlan", "version": pkg_version("colormaps")},
+    {"key": "ncl", "label": "NCL", "version": pkg_version("colormaps")},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
@@ -311,4 +472,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan and NCL (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION})")

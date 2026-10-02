@@ -66,7 +66,9 @@ test('every map gets metrics quickly', () => {
     const r = colormapMetrics(parseHexColors(m.colors), { kind: m.kind, cyclic: m.group === 'cyclic' });
     for (const k of ['orig', 'protanopia', 'deuteranopia', 'tritanopia', 'gray']) assert.ok(r.separations[k], `${m.name} ${k}`);
   }
-  assert.ok(performance.now() - t0 < 3000);
+  // The viewer rates every map; keep it near 6 ms per map on a laptop.
+  const per = (performance.now() - t0) / cmapData.maps.length;
+  assert.ok(per < 15, `${per.toFixed(1)} ms per map`);
 });
 
 test('parseCompare keeps known names once, in order, up to the cap', () => {
