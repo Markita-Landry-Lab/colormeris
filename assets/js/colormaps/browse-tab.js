@@ -8,7 +8,8 @@
   // the viewport. The detail view and Compare are reached through ctx.detail
   // and ctx.compare, set once they exist.
 
-  // [group, title, open at first]. With over 300 maps, all start closed.
+  // [group, title, open at first]. With over 300 maps, all start closed; inside a
+  // section, only Matplotlib's sub-headings start open.
   const SECTIONS = [
     ['sequential', 'Sequential', false],
     ['diverging', 'Diverging', false],
@@ -356,7 +357,10 @@
         entry.item.hidden = (q !== '' && !entry.item.dataset.name.includes(q)) || fails;
       }
       for (const sub of root.querySelectorAll('.cmap-browse .cmap-sub')) {
-        sub.hidden = !sub.querySelector('.cmap-item:not([hidden])');
+        const has = !!sub.querySelector('.cmap-item:not([hidden])');
+        sub.hidden = !has;
+        // Like sections: open the ones with matches while searching.
+        sub.open = filtering() ? has : sub._userOpen;
       }
       // While searching or filtering, sections with matches open and show how many.
       const active = filtering();
@@ -387,6 +391,8 @@
       }
       const sec = entry.item.closest('.cmap-section');
       if (sec && !sec.open) { sec.open = true; sec._userOpen = true; }
+      const sub = entry.item.closest('.cmap-sub');
+      if (sub && !sub.open) { sub.open = true; sub._userOpen = true; }
       ctx.detail.open(name);
       // Above 820px only the page pane scrolls; scrollIntoView would also
       // scroll the overflow-hidden document and push the top bar away.
@@ -421,9 +427,16 @@
     const subs = [];
     for (const m of maps) if (!subs.includes(m.sub)) subs.push(m.sub);
     for (const sub of subs) {
-      const box = el('div', { class: 'cmap-sub' });
-      if (sub) box.append(el('h3', {}, sub));
-      for (const m of maps.filter((x) => x.sub === sub)) box.append(makeRow(m));
+      const box = el('details', { class: 'cmap-sub' });
+      const rows = maps.filter((x) => x.sub === sub);
+      // Matplotlib's sub-headings start open, and in Sequential only its
+      // perceptually uniform ones; the others are a click away.
+      box._userOpen = box.open = group === 'sequential' ? /perceptually uniform/.test(sub) : rows.some((m) => m.source === 'matplotlib');
+      box.addEventListener('toggle', () => { if (!filtering()) box._userOpen = box.open; });
+      const subSum = el('summary');
+      subSum.append(el('h3', {}, sub));
+      box.append(subSum);
+      for (const m of rows) box.append(makeRow(m));
       sec.append(box);
     }
     sections.push(sec);

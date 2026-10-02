@@ -58,7 +58,13 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-section > summary h2 { font-size: 16px; }
 .cmap-section > summary:hover h2 { color: var(--accent); }
 .cmap-count { color: var(--muted); font-size: 12px; }
-.cmap-sub > h3 { margin: 14px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cmap-sub > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 5px 0; }
+.cmap-sub[open] { margin-bottom: 6px; }
+.cmap-sub > summary::-webkit-details-marker { display: none; }
+.cmap-sub > summary::before { content: "▶\FE0E"; color: var(--muted); font-size: 9px; width: 12px; transition: transform 0.15s; }
+.cmap-sub[open] > summary::before { transform: rotate(90deg); }
+.cmap-sub > summary h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.cmap-sub > summary:hover h3 { color: var(--accent); }
 
 /* Name, five strips (or one), four rating glyphs, actions. */
 .cmap-head, .cmap-row {
