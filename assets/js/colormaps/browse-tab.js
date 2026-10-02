@@ -207,43 +207,60 @@
       // Filters: keep maps rated yes.
       const filtBtn = el('button', { type: 'button', class: 'btn small', 'aria-expanded': 'false' }, 'Filters');
       const filtPop = el('div', { id: 'cmap-pop-filters', popover: '', class: 'cmap-pop' });
+      // Ratings in one row, sources in columns: Python packages, other sources, R packages.
       filtPop.append(el('div', { class: 'cmap-pop-title' }, 'Only maps rated yes for'));
+      const ratingRow = el('div', { class: 'cmap-filter-ratings' });
       const boxes = {};
       for (const [k, t, tip] of FILTERS) {
         const l = el('label', { class: 'check', title: tip });
         boxes[k] = el('input', { type: 'checkbox' });
         l.append(boxes[k], t);
-        filtPop.append(l);
+        ratingRow.append(l);
         boxes[k].addEventListener('change', applyFilter);
       }
+      filtPop.append(ratingRow);
       // Sources: none ticked shows every library.
       filtPop.append(el('div', { class: 'cmap-pop-title' }, 'Only maps from'));
       const sources = {};
-      // A family (the R packages) is one checkbox that ticks its members, listed indented under it.
+      // A family (Python or R packages) is one checkbox that ticks its members, listed under it;
+      // sources without a family share one column.
       const families = {}; // family -> { box, keys }
-      const source = (src, n, box, label, nested) => {
-        const l = el('label', { class: nested ? 'check nested' : 'check', title: `Only colormaps from ${label}` });
+      const groups = {}; // family (or '') -> its column
+      const sourceRow = el('div', { class: 'cmap-filter-sources' });
+      const checkbox = (box, label, n) => {
+        const l = el('label', { class: 'check', title: `Only colormaps from ${label}` });
         l.append(box, `${label} (${n})`);
-        filtPop.append(l);
+        return l;
       };
       for (const src of data.sources) {
         const n = data.maps.filter((m) => m.source === src.key).length;
         if (!n) continue;
-        if (src.family && !families[src.family]) {
-          const total = data.maps.filter((m) => data.sources.find((s) => s.key === m.source).family === src.family).length;
-          const box = el('input', { type: 'checkbox' });
-          families[src.family] = { box, keys: [] };
-          source(src, total, box, src.family, false);
-          box.addEventListener('change', () => {
-            for (const k of families[src.family].keys) sources[k].checked = box.checked;
-            applyFilter();
-          });
+        const fam = src.family ?? '';
+        if (!groups[fam]) {
+          const col = el('div', { class: 'cmap-filter-group' });
+          const list = el('div', { class: 'cmap-filter-list' });
+          if (fam) {
+            const total = data.maps.filter((m) => data.sources.find((x) => x.key === m.source).family === fam).length;
+            const box = el('input', { type: 'checkbox' });
+            families[fam] = { box, keys: [] };
+            box.addEventListener('change', () => {
+              for (const k of families[fam].keys) sources[k].checked = box.checked;
+              applyFilter();
+            });
+            col.append(checkbox(box, fam, total));
+          } else {
+            col.append(el('div', { class: 'cmap-filter-name' }, 'Other sources'));
+          }
+          col.append(list);
+          groups[fam] = { col, list };
+          sourceRow.append(col);
         }
         sources[src.key] = el('input', { type: 'checkbox' });
-        source(src, n, sources[src.key], src.label, !!src.family);
+        groups[fam].list.append(checkbox(sources[src.key], src.label, n));
         sources[src.key].addEventListener('change', () => { syncFamilies(); applyFilter(); });
-        if (src.family) families[src.family].keys.push(src.key);
+        if (fam) families[fam].keys.push(src.key);
       }
+      filtPop.append(sourceRow);
       function syncFamilies() {
         for (const { box, keys } of Object.values(families)) {
           const on = keys.filter((k) => sources[k].checked).length;
