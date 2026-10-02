@@ -50,7 +50,7 @@ test('lightnessStats: viridis is linear, jet is not', () => {
 
 test('colormap data: valid colors, groups, sources and citations', () => {
   const sources = new Set(cmapData.sources.map((s) => s.key));
-  assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri', 'carto']);
+  assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri', 'cmocean', 'carto']);
   const groups = new Set(['sequential', 'diverging', 'cyclic', 'rainbow', 'others']);
   const names = new Set();
   for (const m of cmapData.maps) {
@@ -59,6 +59,7 @@ test('colormap data: valid colors, groups, sources and citations', () => {
     assert.equal(m.source === 'cmasher', m.name.startsWith('cmr.'), m.name);
     assert.equal(m.source === 'crameri', m.name.startsWith('cmc.'), m.name);
     assert.equal(m.source === 'carto', m.name.startsWith('carto.'), m.name);
+    assert.equal(m.source === 'cmocean', m.name.startsWith('cmo.'), m.name);
     assert.ok(!names.has(m.name), `duplicate ${m.name}`);
     names.add(m.name);
     assert.match(m.colors, /^([0-9a-f]{6})+$/, m.name);
@@ -75,6 +76,8 @@ test('colormap data: valid colors, groups, sources and citations', () => {
   assert.deepEqual(citeFor('cmr.amber'), ['cmasher']);
   assert.deepEqual(citeFor('cmc.batlow'), ['crameri', 'scm']);
   assert.deepEqual(citeFor('carto.Burg'), ['carto']);
+  assert.deepEqual(citeFor('cmo.thermal'), ['cmocean']);
+  assert.equal(cmapData.maps.find((m) => m.name === 'cmo.oxy').group, 'others');
 });
 
 test('image simulation: grays stay gray, severity 0 is the identity', () => {
@@ -163,7 +166,7 @@ test('achromatopsia: the gray of the same L*, blended by severity', () => {
   assert.ok(half[0] < 255 && half[0] > 127 && half[1] > 0);
 });
 
-test('colormap data: CMasher, Crameri and CARTOColors add only maps that are new', () => {
+test('colormap data: CMasher, Crameri, cmocean and CARTOColors add only maps that are new', () => {
   // Same colors as another map, or as its reverse, to within 2/255.
   const same = (a, b) => [b, [...b].reverse()].some((c) => a.every((x, i) => x.every((v, k) => Math.abs(v - c[i][k]) <= 2)));
   const cont = cmapData.maps.filter((m) => m.kind === 'continuous').map((m) => ({ ...m, rgbs: parseHexColors(m.colors) }));
@@ -172,7 +175,7 @@ test('colormap data: CMasher, Crameri and CARTOColors add only maps that are new
     for (const o of cont.slice(0, i)) assert.ok(!same(m.rgbs, o.rgbs), `${m.name} = ${o.name}`);
   }
   const by = (src) => cmapData.maps.filter((m) => m.source === src);
-  assert.ok(by('cmasher').length >= 50 && by('crameri').length >= 30 && by('carto').length >= 30);
+  assert.ok(by('cmasher').length >= 50 && by('crameri').length >= 30 && by('carto').length >= 30 && by('cmocean').length >= 20);
   const lists = cmapData.maps.filter((m) => m.kind === 'qualitative').map((m) => m.colors);
   assert.equal(new Set(lists).size, lists.length);
   // CARTOColors run through their 7-step palettes, ends included.
@@ -183,4 +186,6 @@ test('colormap data: CMasher, Crameri and CARTOColors add only maps that are new
   assert.ok(!by('crameri').some((m) => /S$/.test(m.name)));
   // berlin, managua and vanimo already come with matplotlib.
   assert.ok(!cmapData.maps.some((m) => m.name === 'cmc.berlin'));
+  // cmocean's gray is CMasher's neutral.
+  assert.ok(!cmapData.maps.some((m) => m.name === 'cmo.gray'));
 });

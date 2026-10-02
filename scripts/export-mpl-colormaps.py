@@ -1,9 +1,10 @@
 """Write assets/js/cmap-data.js with the colormaps for colormaps.html.
 
-Run:  uv run --with matplotlib --with cmasher --with cmcrameri python scripts/export-mpl-colormaps.py
+Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean python scripts/export-mpl-colormaps.py
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
 Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
+cmocean (Thyng et al. 2016) and
 CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
 version). CARTOColors are discrete palettes of up to 7 steps; like
 palettable's mpl_colormap, the continuous versions interpolate the 7-step
@@ -24,6 +25,7 @@ from pathlib import Path
 import cmasher
 import cmcrameri
 import cmcrameri.cm
+import cmocean
 import matplotlib
 import numpy as np
 from matplotlib import colormaps
@@ -92,6 +94,25 @@ def crameri_groups():
         yield group, sub, [f"cmc.{n}" for n in names]
 
 
+# cmocean's classes, from its docs (matplotlib.org/cmocean), except oxy.
+CMO_GROUPS = [
+    ("sequential", "cmocean", ["thermal", "haline", "solar", "ice", "gray", "deep", "dense",
+                               "algae", "matter", "turbid", "speed", "amp", "tempo", "rain"]),
+    ("diverging", "cmocean", ["balance", "delta", "curl", "diff", "tarn"]),
+    ("cyclic", "cmocean", ["phase"]),
+    ("others", "Multi-sequential (cmocean)", ["topo"]),
+    # oxy is gray with red and yellow ends for out-of-range values, not one sequence.
+    ("others", "Miscellaneous (cmocean)", ["oxy"]),
+]
+
+
+def cmocean_groups():
+    listed = {n for _, _, names in CMO_GROUPS for n in names}
+    assert set(cmocean.cm.cmapnames) == listed, f"cmocean maps changed: {set(cmocean.cm.cmapnames) ^ listed}"
+    for group, sub, names in CMO_GROUPS:
+        yield group, sub, [f"cmo.{n}" for n in names]
+
+
 CARTO_VERSION = "5.0.2"
 CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
 # CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
@@ -136,7 +157,8 @@ def duplicate_of(rgb, seen):
 maps = []
 seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
-                       ("crameri", list(crameri_groups())), ("carto", list(carto_groups()))]:
+                       ("crameri", list(crameri_groups())), ("cmocean", list(cmocean_groups())),
+                       ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -169,6 +191,7 @@ sources = [
     {"key": "matplotlib", "label": "Matplotlib", "version": matplotlib.__version__},
     {"key": "cmasher", "label": "CMasher", "version": cmasher.__version__},
     {"key": "crameri", "label": "Crameri", "version": cmcrameri.__scm_version__},
+    {"key": "cmocean", "label": "cmocean", "version": cmocean.__version__.lstrip("v")},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
@@ -182,4 +205,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, CARTOColors {CARTO_VERSION})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, CARTOColors {CARTO_VERSION})")

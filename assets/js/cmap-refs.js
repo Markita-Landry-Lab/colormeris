@@ -31,6 +31,10 @@
       text: 'Crameri F, Shephard GE, Heron PJ (2020). The misuse of colour in science communication. Nature Communications 11:5444. Scientific colour maps (berlin, managua, vanimo in Matplotlib; the cmc.* maps).',
       url: 'https://doi.org/10.1038/s41467-020-19160-7',
     },
+    cmocean: {
+      text: 'Thyng KM, Greene CA, Hetland RD, Zimmerle HM, DiMarco SF (2016). True colors of oceanography: guidelines for effective and accurate colormap selection. Oceanography 29(3):9–13.',
+      url: 'https://doi.org/10.5670/oceanog.2016.66',
+    },
     carto: {
       text: 'CARTO. CARTOColors: color schemes for maps, version 5.0.2 (CC BY 4.0). Continuous versions here interpolate the 7-step palettes linearly in sRGB.',
       url: 'https://carto.com/carto-colors/',
@@ -131,12 +135,13 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
     if (name.startsWith('cmc.')) return ['crameri', 'scm'];
     if (name.startsWith('carto.')) return ['carto'];
+    if (name.startsWith('cmo.')) return ['cmocean'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }
