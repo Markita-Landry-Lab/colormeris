@@ -40,7 +40,7 @@
     function buildIdentify() {
       const d = el('section', { class: 'cmap-identify', 'aria-labelledby': 'cmap-identify-title', hidden: '' });
       d.append(el('h2', { id: 'cmap-identify-title' }, 'Identify a colormap from a figure'));
-      d.append(el('p', { class: 'muted' }, 'Give an image of a figure and find which Matplotlib, CMasher, Crameri, cmocean, colorcet, seaborn, CarbonPlan, NCL, SciVisColor or CARTOColors colormap it uses. The image stays in your browser.'));
+      d.append(el('p', { class: 'muted' }, 'Give an image of a figure and find which Matplotlib, CMasher, Crameri, cmocean, colorcet, seaborn, CarbonPlan, NCL, SciVisColor, CARTOColors or MATLAB colormap it uses. The image stays in your browser.'));
 
       const whole = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Use the whole image');
       const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or click to choose a file (PNG, JPEG, WebP or GIF).';
