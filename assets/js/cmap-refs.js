@@ -39,6 +39,10 @@
       text: 'Kovesi P (2015). Good colour maps: how to design them. arXiv:1509.03700. As packaged in colorcet (HoloViz).',
       url: 'https://colorcet.holoviz.org/',
     },
+    seaborn: {
+      text: 'Waskom ML (2021). seaborn: statistical data visualization. Journal of Open Source Software 6(60):3021. Palettes: seaborn.pydata.org.',
+      url: 'https://doi.org/10.21105/joss.03021',
+    },
     carto: {
       text: 'CARTO. CARTOColors: color schemes for maps, version 5.0.2 (CC BY 4.0). Continuous versions here interpolate the 7-step palettes linearly in sRGB.',
       url: 'https://carto.com/carto-colors/',
@@ -118,6 +122,8 @@
   };
 
   const BY_NAME = {};
+  // seaborn's names have no prefix (it registers rocket and vlag that way).
+  const SEABORN = ['rocket', 'mako', 'flare', 'crest', 'vlag', 'icefire', 'deep', 'muted', 'pastel', 'bright', 'dark', 'colorblind'];
   const set = (key, names) => names.forEach((n) => (BY_NAME[n] = key));
   set('viridis', ['viridis', 'plasma', 'inferno', 'magma']);
   set('cividis', ['cividis']);
@@ -139,7 +145,7 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
@@ -147,6 +153,7 @@
     if (name.startsWith('carto.')) return ['carto'];
     if (name.startsWith('cmo.')) return ['cmocean'];
     if (name.startsWith('cet_')) return ['colorcet'];
+    if (SEABORN.includes(name)) return ['seaborn'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

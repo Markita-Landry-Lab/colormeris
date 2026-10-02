@@ -1,10 +1,10 @@
 """Write assets/js/cmap-data.js with the colormaps for colormaps.html.
 
-Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet python scripts/export-mpl-colormaps.py
+Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet --with seaborn python scripts/export-mpl-colormaps.py
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
 Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
-cmocean (Thyng et al. 2016), colorcet (Kovesi 2015) and
+cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021) and
 CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
 version). CARTOColors are discrete palettes of up to 7 steps; like
 palettable's mpl_colormap, the continuous versions interpolate the 7-step
@@ -27,6 +27,8 @@ import cmcrameri
 import cmcrameri.cm
 import cmocean
 import colorcet
+import seaborn
+from seaborn.palettes import SEABORN_PALETTES
 import matplotlib
 import numpy as np
 from matplotlib import colormaps
@@ -149,6 +151,29 @@ def colorcet_groups():
         yield CET_PREFIX[i][1], CET_PREFIX[i][2], groups[i]
 
 
+EXTRA = {}  # name -> colormap, for maps matplotlib does not register
+
+
+# seaborn registers its continuous maps in matplotlib without a prefix
+# (rocket, vlag); its qualitative palettes are only in seaborn, and the
+# 6-color ones (deep6) are subsets of the 10-color ones.
+SNS_GROUPS = [
+    ("sequential", "seaborn", ["rocket", "mako", "flare", "crest"]),
+    ("diverging", "seaborn", ["vlag", "icefire"]),
+    ("others", "Qualitative (seaborn)", ["deep", "muted", "pastel", "bright", "dark", "colorblind"]),
+]
+
+
+def seaborn_groups():
+    listed = {n for _, _, names in SNS_GROUPS for n in names}
+    assert {n for n in SEABORN_PALETTES if not n.endswith("6")} <= listed, "new seaborn palettes"
+    for group, sub, names in SNS_GROUPS:
+        if sub.startswith("Qualitative"):
+            for n in names:
+                EXTRA[n] = ListedColormap(SEABORN_PALETTES[n], name=n)
+        yield group, sub, names
+
+
 CARTO_VERSION = "5.0.2"
 CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
 # CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
@@ -158,7 +183,6 @@ CARTO_TAGS = {
     "diverging": ("diverging", "CARTOColors"),
     "qualitative": ("others", "Qualitative (CARTOColors)"),
 }
-EXTRA = {}  # name -> colormap, for maps matplotlib does not register
 
 
 # carto.js is `export const Burg = { 2: [...], …, 7: [...], tags: [...] };` per palette.
@@ -198,7 +222,8 @@ maps = []
 seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
                        ("crameri", list(crameri_groups())), ("cmocean", list(cmocean_groups())),
-                       ("colorcet", list(colorcet_groups())), ("carto", list(carto_groups()))]:
+                       ("colorcet", list(colorcet_groups())),
+                       ("seaborn", list(seaborn_groups())), ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -233,6 +258,7 @@ sources = [
     {"key": "crameri", "label": "Crameri", "version": cmcrameri.__scm_version__},
     {"key": "cmocean", "label": "cmocean", "version": cmocean.__version__.lstrip("v")},
     {"key": "colorcet", "label": "colorcet", "version": colorcet.__version__},
+    {"key": "seaborn", "label": "seaborn", "version": seaborn.__version__},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
@@ -246,4 +272,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, CARTOColors {CARTO_VERSION})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CARTOColors {CARTO_VERSION})")
