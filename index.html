@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Colormeris</title>
-  <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and signal inside regions of interest (ROI).">
+  <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids, signal inside regions of interest (ROI) and near-continuous maps.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/base.css?v=1">
   <link rel="stylesheet" href="assets/css/landing.css?v=1">
@@ -18,6 +18,7 @@
     <nav class="tool-switch" aria-label="Tools">
       <a href="extract.html#heatmap">Heatmap</a>
       <a href="extract.html#roi">ROI</a>
+      <a href="extract.html#map">Map</a>
       <a href="colormaps.html">Colormaps</a>
     </nav>
   </header>
@@ -75,6 +76,29 @@
             <li>Total, mean, max and signal area; optional scale bar</li>
           </ul>
           <span class="go">Open the ROI tool →</span>
+        </a>
+
+        <a class="tool-card" href="extract.html#map">
+          <svg viewBox="0 0 240 120" aria-hidden="true">
+            <defs>
+              <linearGradient id="mf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#440154"/><stop offset="0.3" stop-color="#3b528b"/><stop offset="0.55" stop-color="#21918c"/><stop offset="0.8" stop-color="#5ec962"/><stop offset="1" stop-color="#fde725"/></linearGradient>
+              <linearGradient id="mb" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#440154"/><stop offset="0.5" stop-color="#21918c"/><stop offset="1" stop-color="#fde725"/></linearGradient>
+            </defs>
+            <rect x="30" y="14" width="130" height="80" fill="url(#mf)"/>
+            <rect x="30" y="14" width="130" height="80" fill="none" stroke="#e22bd0" stroke-width="2"/>
+            <line x1="30" y1="50" x2="160" y2="50" stroke="#00e5ff" stroke-width="2"/>
+            <g stroke="currentColor" stroke-width="1"><line x1="30" y1="94" x2="30" y2="100"/><line x1="95" y1="94" x2="95" y2="100"/><line x1="160" y1="94" x2="160" y2="100"/></g>
+            <text x="22" y="111" font-size="9" fill="currentColor">400</text><text x="150" y="111" font-size="9" fill="currentColor">700 nm</text>
+            <rect x="182" y="14" width="12" height="80" fill="url(#mb)" stroke="#999"/>
+          </svg>
+          <h2>Map</h2>
+          <p>Near-continuous images, such as spectroscopy maps and fluorescence images.</p>
+          <ul>
+            <li>One value per pixel, or medians over bins</li>
+            <li>Calibrated x and y axes, linear or log</li>
+            <li>Line profiles, ΔE and clipping flags</li>
+          </ul>
+          <span class="go">Open the map tool →</span>
         </a>
 
         <a class="tool-card" href="colormaps.html">

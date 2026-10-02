@@ -18,14 +18,14 @@
   // Shared workspace for the Colormeris tools (extract.html): source loading
   // and PDF pages, the zoomable viewer, panels, the grid and colorbar
   // calibration, undo, keyboard shortcuts and project zips. Tools
-  // (heatmap/heatmap-tool.js, roi/roi-tool.js) register with addTool and plug
-  // in their results and overlay through the hooks in TOOL_HOOKS. One project
-  // holds the panels of every tool (panel.tool); the active tool (setTool)
-  // shows and edits its own panels, and a project zip carries the data of all
-  // tools.
+  // (heatmap/heatmap-tool.js, roi/roi-tool.js, map/map-tool.js) register with
+  // addTool and plug in their results and overlay through the hooks in
+  // TOOL_HOOKS. One project holds the panels of every tool (panel.tool); the
+  // active tool (setTool) shows and edits its own panels, and a project zip
+  // carries the data of all tools.
   //
   // TOOL_HOOKS (all optional unless noted):
-  //   kind                      'heatmap' | 'roi' (required)
+  //   kind                      'heatmap' | 'roi' | 'map' (required)
   //   title                     page title while the tool is active
   //   computeResult(panel, img) result object or {error} (required)
   //   resultKey(panel)          JSON-able key of everything computeResult depends on
@@ -47,6 +47,8 @@
   //   onHoverCell(cell)
   //   onKey(e)                  return true when handled (hotkeys are added with ws.addHotkey)
   //   gridTexts                 mode texts for placing the grid
+  //   plotArea                  true when the grid is one plot area (map/map-tool.js):
+  //                             no size detection, inner lines or cell highlight
   //
   // This file holds the state, modes, sidebar rendering and tool switching,
   // and builds the public `ws` object used by tools, the agent and settings.
@@ -286,13 +288,14 @@
       }
     }
     tool = tools[kind];
-    for (const el of document.querySelectorAll('[data-tool]')) el.hidden = el.dataset.tool !== kind;
+    // data-tool may name several tools, e.g. "heatmap roi".
+    for (const el of document.querySelectorAll('[data-tool]')) el.hidden = !el.dataset.tool.split(' ').includes(kind);
     for (const a of document.querySelectorAll('[data-tool-link]')) {
       if (a.dataset.toolLink === kind) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }
     if (tool.title) document.title = tool.title;
-    // Keep the URL (#heatmap / #roi) in step, e.g. when undo switches tools.
+    // Keep the URL (#heatmap / #roi / #map) in step, e.g. when undo switches tools.
     if (location.hash !== `#${kind}`) history.replaceState(null, '', `#${kind}`);
     app.tableCell = null;
     app.hoverCell = null;

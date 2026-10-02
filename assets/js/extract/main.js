@@ -1,10 +1,10 @@
 (function (CM) {
   'use strict';
-  const { createWorkspace, setupHeatmapTool, setupRoiTool, createAgentApi, setupAgentPanel, setupSettings } = CM;
+  const { createWorkspace, setupHeatmapTool, setupRoiTool, setupMapTool, createAgentApi, setupAgentPanel, setupSettings } = CM;
 
-  // One page, two tools sharing one workspace: the loaded file, pages and
+  // One page, three tools sharing one workspace: the loaded file, pages and
   // project (with every tool's panels) persist when switching tools. The tool
-  // follows the URL hash (#heatmap or #roi) so links and reloads keep it.
+  // follows the URL hash (#heatmap, #roi or #map) so links and reloads keep it.
 
   // If anything here fails (a script that did not load, a stale cached file),
   // say so on the page. Otherwise the example buttons work but no tool exists.
@@ -23,8 +23,9 @@
     const settings = setupSettings(ws);
     setupHeatmapTool(ws);
     setupRoiTool(ws);
+    setupMapTool(ws);
 
-    const toolFromHash = () => (location.hash === '#roi' ? 'roi' : 'heatmap');
+    const toolFromHash = () => ({ '#roi': 'roi', '#map': 'map' })[location.hash] || 'heatmap';
     ws.setTool(toolFromHash());
     window.addEventListener('hashchange', () => ws.setTool(toolFromHash()));
     ws.render();

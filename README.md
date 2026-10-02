@@ -5,12 +5,13 @@ Colormeris is a set of static web pages that turn colors in scientific figures b
 There are three pages:
 
 - `index.html` is the landing page.
-- `extract.html` turns figure colors into numbers. It has two tools, which share the loaded file, viewer, colorbar calibration and project:
+- `extract.html` turns figure colors into numbers. It has three tools, which share the loaded file, viewer, colorbar calibration and project:
   - **Heatmap** (`extract.html#heatmap`) gives one value per cell of a gridded heatmap.
   - **ROI** (`extract.html#roi`) measures signal inside regions of interest drawn on an image, such as an IVIS luminescence image.
+  - **Map** (`extract.html#map`) reads near-continuous images, such as spectroscopy maps with many bins or fluorescence images, as a dense value matrix with axis coordinates, plus line profiles.
 - `colormaps.html` browses, compares and identifies colormaps (see [Colormaps](#colormaps)).
 
-In `extract.html`, switch tools at any time with the Heatmap | ROI control in the top bar. The file, the PDF page and each tool's panels stay. One project zip holds the work of both tools.
+In `extract.html`, switch tools at any time with the Heatmap | ROI | Map control in the top bar. The file, the PDF page and each tool's panels stay. One project zip holds the work of every tool.
 
 Everything runs in the browser. Files are never uploaded anywhere, except when you run the heatmap agent: it sends page images and extracted values to OpenRouter and the models you pick.
 
@@ -58,6 +59,27 @@ Measurements for each region copy:
 | `area_<unit>2`, `signal_area_<unit>2`, `sum_x_area` | with a scale bar: areas in real units, and `sum` × pixel area |
 
 **Background**: a pixel whose CIELAB chroma is at or below the *gray* threshold is the photograph, i.e. no signal. The default is 20, which removes the JPEG color noise seen in published IVIS figures while keeping the dimmest overlay colors. Adjust it under *Settings → Matching* and check with *Show signal*.
+
+## Map tool
+
+For figures whose pixels are the data: spectroscopy maps with so many bins that they look continuous, or false-color fluorescence images with a calibration bar.
+
+1. **Open** the figure as for the heatmap tool. Panels work the same way.
+2. **Plot area**: press *Place plot area* (`G`) and click the top-left and bottom-right corners of the image area, inside the axes.
+3. **Colorbar**: place the ends and ticks as for heatmaps.
+4. **Axes** (optional): press *Add x ticks* (`X`), click two or more labelled ticks on the x axis and type their values. Do the same for y (`Y`). Each axis can be linear or Log₁₀. Without ticks, coordinates are pixels from the plot's top-left corner.
+5. **Results**: *Bin size* 1 gives one value per pixel. Larger bins give one value per N × N pixels, the median of each channel, which smooths out JPEG noise. Hover the image for the value and axis coordinates under the pointer. *Reconstruct* repaints the plot with the matched values. *Show flags* marks colors far from the colorbar in red (ΔE above the threshold) and colors at the top or bottom end of the colorbar in magenta or cyan.
+6. **Profiles**: press *Draw profile* (`L`) and click both ends of a line, for example a spectrum at one delay or a line scan across a cell. The card plots its values against the axis the line mostly runs along. *Width* averages ± pixels across the line. Drag the ends or the line to move it.
+7. **Export**: *Download CSV* saves the matrix, with x of each column in the header and y of each row in the first column. *Long CSV* saves one row per value with ΔE and flags. *Download profile CSV* saves the selected profile. The project zip includes all of them.
+
+What the numbers can and cannot tell you:
+
+- **Compression.** JPEG stores color at half resolution and in 8 × 8 blocks. Single pixels can be off by several percent of the range; the summary and *Show flags* show where. Bins of 4–8 px bring the worst case down a lot. On a synthetic viridis map saved at JPEG quality 0.6, the worst pixel was off by 10% of the range at bin 1 and by 2.4% at bin 8; the mean error was 0.6%.
+- **Levels.** A colorbar can only tell so many values apart. The summary reports how many distinct colors the sampled bar has, at most 256 for an 8-bit colormap and fewer for a short bar.
+- **Display units.** Published fluorescence images are almost always contrast-adjusted. Values are in the units of the colorbar as displayed, which supports comparisons within the image, not absolute intensities.
+- **Clipping.** Pixels at the top or bottom color of the bar may be saturated: their true value can lie beyond the bar. The summary counts them.
+
+Large maps take a moment: a 600 × 400 px map at bin 1 takes about 1–2 s with CIEDE2000, and CIE76 (in *Settings*) is about 10× faster.
 
 ## Heatmap agent
 
@@ -118,15 +140,19 @@ await colormeris.run('get_results');   // → { ok, result } or { ok: false, err
 ## Project zip layout
 
 ```
-project.json            per panel: tool (heatmap or roi), page, grid, colorbar,
-                        labels, settings, review (accepted/rejected), and for
-                        ROI the regions and scale bar
+project.json            per panel: tool (heatmap, roi or map), page, grid, colorbar,
+                        labels, settings, review (accepted/rejected), for ROI
+                        the regions and scale bar, and for maps the bin size,
+                        axis ticks and profiles
 README.txt
 source/<original file>  the uploaded PDF/image
 source/page-<n>.png     the rendered image of each page that has panels
 data/<panel>.csv        heatmap: matrix of values
 data/<panel>_long.csv   heatmap: per-cell values with page, RGB and ΔE
 data/<panel>_rois.csv   ROI: measurements per region copy
+data/<panel>_map.csv    map: matrix of values with x and y at bin centres
+data/<panel>_map_long.csv  map: one row per value with ΔE and flags
+data/<panel>_profile_<name>.csv  map: values along each profile
 agent/actions.json      changes made through the agent API, in order
 agent/decisions.json    typed decisions (answer, confidence, source, applied)
 ```

@@ -66,7 +66,7 @@
     }
 
     function isEmptyPanel(p) {
-      return !p.grid.corners && !p.colorbar.start && !p.grid.rowLabels.length && !p.grid.colLabels.length && !p.grid.boxLabels.length && !p.rois.length;
+      return !p.grid.corners && !p.colorbar.start && !p.grid.rowLabels.length && !p.grid.colLabels.length && !p.grid.boxLabels.length && !p.rois.length && !p.map.x.ticks.length && !p.map.y.ticks.length && !p.map.profiles.length;
     }
 
     // Every page shown gets at least one panel of the active tool to calibrate.

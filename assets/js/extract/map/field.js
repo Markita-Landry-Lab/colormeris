@@ -3,6 +3,7 @@
   const {
     rgbToLab,
     deltaE76,
+    colorDistance,
     sampleColorbar,
     makeValueFn,
     labToT,
@@ -13,7 +14,6 @@
     bilinear,
     invertBilinear,
     readPixel,
-    sampleCell,
   } = CM;
 
   // Map tool: read a near-continuous field (spectroscopy maps, fluorescence
@@ -65,10 +65,19 @@
     return { fn: makeValueFn(ticks, axis.scale), problem: null };
   }
 
-  // rgb → {t, value, deltaE}, cached per color: maps repeat colors heavily, and
-  // the colorbar search is the expensive part.
+  // A color counts as at an end of the colorbar (possibly clipped) when it is
+  // about as close to the end color as to its best match. A t threshold would
+  // miss it: the end pixel of a bar covers several equal samples, and the match
+  // lands on the first of them.
+  const CLIP_DELTA_E = 0.5;
+
+  // rgb → {t, value, deltaE, clip}, cached per color: maps repeat colors
+  // heavily, and the colorbar search is the expensive part.
   function makeColorReader(samples, valueAt, settings) {
     const cache = new Map();
+    const dist = colorDistance(settings.distance);
+    const low = samples[0].lab;
+    const high = samples[samples.length - 1].lab;
     return (rgb) => {
       const r = Math.round(rgb[0]);
       const g = Math.round(rgb[1]);
@@ -76,8 +85,10 @@
       const key = (r << 16) | (g << 8) | b;
       let hit = cache.get(key);
       if (!hit) {
-        const { t, deltaE } = labToT(rgbToLab([r, g, b]), samples, settings.distance);
-        hit = { t, value: valueAt(t), deltaE };
+        const lab = rgbToLab([r, g, b]);
+        const { t, deltaE } = labToT(lab, samples, settings.distance);
+        const clip = dist(lab, low) <= deltaE + CLIP_DELTA_E ? FLAG_LOW : dist(lab, high) <= deltaE + CLIP_DELTA_E ? FLAG_HIGH : 0;
+        hit = { t, value: valueAt(t), deltaE, clip };
         cache.set(key, hit);
       }
       return hit;
@@ -92,11 +103,6 @@
     return n;
   }
 
-  function clipFlags(t, nSamples) {
-    const edge = 0.5 / nSamples;
-    return t < edge ? FLAG_LOW : t > 1 - edge ? FLAG_HIGH : 0;
-  }
-
   function prepare(img, panel) {
     const cb = panel.colorbar;
     const samples = sampleColorbar(img, cb.start, cb.end, cb.halfWidth, cb.nSamples);
@@ -104,36 +110,34 @@
     return { samples, read: makeColorReader(samples, valueAt, panel.settings) };
   }
 
-  // Result: {rows, cols, bin, width, height, values, t, deltaE, flags (typed
-  // arrays, row-major), xs, ys (axis values at bin centres, or pixel offsets
-  // when xAxis/yAxis is false), xAxis, yAxis, axisProblems, samples, stats,
-  // profiles} or {error, profiles}. profiles maps profile id → sampleProfile();
-  // profiles only need the colorbar, so they are read even without a plot area.
-  function extractMap(img, panel) {
-    const profiles = Object.fromEntries(panel.map.profiles.map((l) => [l.id, sampleProfile(img, panel, l)]));
+  // The value field. Result: {rows, cols, bin, width, height, values, t,
+  // deltaE, flags (typed arrays, row-major), xs, ys (axis values at bin
+  // centres, or pixel offsets when xAxis/yAxis is false), xAxis, yAxis,
+  // axisProblems, samples, stats} or {error}.
+  function extractField(img, panel) {
     const error = mapProblem(panel);
-    if (error) return { error, profiles };
+    if (error) return { error };
     const { samples, read } = prepare(img, panel);
     const { width, height, rows, cols } = mapSize(panel);
     const corners = panel.grid.corners;
-    const grid = { corners, rows, cols, sampleFraction: 1 };
+    // Pixels read per bin side: one per pixel of the bin, at least one.
+    const nu = Math.max(1, Math.round(width / cols));
+    const nv = Math.max(1, Math.round(height / rows));
     const n = rows * cols;
     const values = new Float64Array(n);
     const ts = new Float32Array(n);
     const deltaE = new Float32Array(n);
     const flags = new Uint8Array(n);
-    const native = panel.map.bin <= 1;
     const stats = { min: Infinity, max: -Infinity, flagged: 0, clippedLow: 0, clippedHigh: 0, levels: colorbarLevels(samples) };
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        // A native bin is one pixel: read it directly instead of taking a median.
-        const rgb = native ? readPixelAt(img, corners, (c + 0.5) / cols, (r + 0.5) / rows) : sampleCell(img, grid, r, c);
+        const rgb = sampleBin(img, corners, (c + 0.5) / cols, (r + 0.5) / rows, 1 / cols, 1 / rows, nu, nv);
         const hit = read(rgb);
         const i = r * cols + c;
         values[i] = hit.value;
         ts[i] = hit.t;
         deltaE[i] = hit.deltaE;
-        let f = clipFlags(hit.t, samples.length);
+        let f = hit.clip;
         if (hit.deltaE > panel.settings.maxDeltaE) f |= FLAG_DELTA_E;
         flags[i] = f;
         if (f & FLAG_DELTA_E) stats.flagged++;
@@ -164,13 +168,50 @@
       axisProblems: [x.problem, y.problem].filter(Boolean),
       samples,
       stats,
-      profiles,
     };
   }
 
-  function readPixelAt(img, corners, u, v) {
-    const p = bilinear(corners, u, v);
-    return readPixel(img, p.x - 0.5, p.y - 0.5);
+  // profile id → sampleProfile(). Profiles only need the colorbar, so they are
+  // read even without a plot area.
+  function sampleProfiles(img, panel) {
+    return Object.fromEntries(panel.map.profiles.map((l) => [l.id, sampleProfile(img, panel, l)]));
+  }
+
+  // Field and profiles together: extractField() plus {profiles}.
+  function extractMap(img, panel) {
+    return { ...extractField(img, panel), profiles: sampleProfiles(img, panel) };
+  }
+
+  // Per-channel median of nu × nv pixels spread over the bin centred at
+  // (u, v) of size du × dv. Page points put pixel i at [i, i + 1), as in the
+  // status bar, so a point is read at p − 0.5. (sampleCell in core/grid.js
+  // reads pixel i at i; with full-size bins that reaches half a pixel past
+  // the plot area.)
+  const bufs = { r: [], g: [], b: [] };
+  function sampleBin(img, corners, u, v, du, dv, nu, nv) {
+    if (nu === 1 && nv === 1) {
+      const p = bilinear(corners, u, v);
+      return readPixel(img, p.x - 0.5, p.y - 0.5);
+    }
+    const { r, g, b } = bufs;
+    r.length = g.length = b.length = 0;
+    for (let j = 0; j < nv; j++) {
+      const vv = v + ((j + 0.5) / nv - 0.5) * dv;
+      for (let i = 0; i < nu; i++) {
+        const p = bilinear(corners, u + ((i + 0.5) / nu - 0.5) * du, vv);
+        const [pr, pg, pb] = readPixel(img, p.x - 0.5, p.y - 0.5);
+        r.push(pr);
+        g.push(pg);
+        b.push(pb);
+      }
+    }
+    return [median(r), median(g), median(b)];
+  }
+
+  function median(values) {
+    values.sort((a, b) => a - b);
+    const m = values.length >> 1;
+    return values.length % 2 ? values[m] : (values[m - 1] + values[m]) / 2;
   }
 
   // Axis coordinates of a page point: {x, y}, with null for an uncalibrated
@@ -203,9 +244,11 @@
     const { a, b } = profile;
     const length = Math.hypot(b.x - a.x, b.y - a.y);
     if (length < 1) return { error: 'Profile is too short.' };
-    const { samples, read } = prepare(img, panel);
+    const { read } = prepare(img, panel);
     const n = Math.round(length) + 1;
-    const line = sampleColorbar(img, a, b, profile.halfWidth, n);
+    // Page points put pixel i at [i, i + 1), as in the status bar; the
+    // colorbar sampler reads pixel i at i.
+    const line = sampleColorbar(img, { x: a.x - 0.5, y: a.y - 0.5 }, { x: b.x - 0.5, y: b.y - 0.5 }, profile.halfWidth, n);
     const x = panel.grid.corners ? axisFn(panel, 'x').fn : null;
     const y = panel.grid.corners ? axisFn(panel, 'y').fn : null;
     return line.map((s) => {
@@ -227,7 +270,7 @@
         value: hit.value,
         deltaE: hit.deltaE,
         flagged: hit.deltaE > panel.settings.maxDeltaE,
-        clipped: clipFlags(hit.t, samples.length) !== 0,
+        clipped: hit.clip !== 0,
       };
     });
   }
@@ -243,6 +286,8 @@
     axisFn,
     makeColorReader,
     colorbarLevels,
+    extractField,
+    sampleProfiles,
     extractMap,
     axisCoords,
     mapAt,

@@ -29,7 +29,7 @@
           w.setMode(null);
           w.commit((panel) => {
             panel.grid.corners = rectCorners(a, b);
-            applyDetectedSize(panel);
+            if (!w.tool().plotArea) applyDetectedSize(panel);
           });
         } else w.updateModebar();
       } else if (mode.type === 'colorbar') {
@@ -115,7 +115,7 @@
       w.tool().onHandleDrop?.(handle);
       // Re-detect the cell count after moving a corner unless the user set it by hand.
       const panel = w.activePanel();
-      if (handle.kind === 'corner' && panel.grid.autoSize) applyDetectedSize(panel, { onlyIfChanged: true });
+      if (handle.kind === 'corner' && panel.grid.autoSize && !w.tool().plotArea) applyDetectedSize(panel, { onlyIfChanged: true });
       w.changed();
     }
 

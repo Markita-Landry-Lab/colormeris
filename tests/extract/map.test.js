@@ -56,6 +56,10 @@ test('extractMap reads a smooth field at native resolution and in bins', () => {
   const binned = extractMap(img, panel);
   assert.deepEqual([binned.cols, binned.rows], [50, 25]);
   assert.ok(maxError(binned) < 0.02, `binned error ${maxError(binned)}`);
+  // Bins of 2 px: a bin reaching half a pixel past the plot area (white) would
+  // pull the edge bins' medians off.
+  panel.map.bin = 2;
+  assert.ok(maxError(extractMap(img, panel)) < 0.01, `bin 2 error ${maxError(extractMap(img, panel))}`);
   // Without axes, coordinates are pixel offsets of bin centres.
   assert.equal(binned.xAxis, false);
   assert.deepEqual([binned.xs[0], binned.ys[24]], [2, 98]);
@@ -115,6 +119,7 @@ test('sampleProfile reads one value per pixel along a line', () => {
   close(samples[0].value, truth(0.5 / W, 0.5), 0.02);
   close(samples[199].value, truth(1 - 0.5 / W, 0.5), 0.02);
   close(samples[199].d, 199, 1e-9);
+  assert.ok(samples.every((q) => !q.flagged));
   assert.equal(samples[0].x, null);
   panel.map.profiles.push(prof);
   assert.equal(extractMap(img, panel).profiles[prof.id].length, 200);

@@ -1,8 +1,9 @@
 (function (CM) {
   'use strict';
-  const { parseLabelText } = CM;
+  const { parseLabelText, gridPixelSize } = CM;
 
-  // The Grid card: corners, rows and columns, labels.
+  // The Grid card: corners, rows and columns, labels. For the Map tool it is
+  // the Plot area card (TOOL_HOOKS plotArea): corners only.
   //
   // w is the workspace's private context (workspace.js). Other modules'
   // functions are called through it at call time (setMode, commit, applyDetectedSize, ...).
@@ -16,11 +17,14 @@
       if ($('grid-row-labels')) w.setValue($('grid-row-labels'), g.rowLabels.join('\n'));
       if ($('grid-col-labels')) w.setValue($('grid-col-labels'), g.colLabels.join('\n'));
       if ($('grid-box-labels')) w.setValue($('grid-box-labels'), g.boxLabels.join('\n'));
-      w.setBadge($('grid-state'), g.corners ? `${g.rows} × ${g.cols}` : 'not placed', !!g.corners);
+      // A plot area (Map tool) has no cells; its size in pixels is what matters.
+      const plotArea = w.tool().plotArea;
+      const size = g.corners && plotArea ? gridPixelSize(g.corners) : null;
+      w.setBadge($('grid-state'), !g.corners ? 'not placed' : size ? `${Math.round(size.width)} × ${Math.round(size.height)} px` : `${g.rows} × ${g.cols}`, !!g.corners);
       $('grid-labels-note').textContent = g.rowLabels.length || g.colLabels.length ? 'custom' : 'R1…, C1…';
       $('grid-boxes-note').textContent = g.boxLabels.length ? `${g.boxLabels.length} names` : 'R1 C1, …';
       // ROI works without a grid, so its grid is never the next step.
-      w.setNextStep($('grid-place'), !g.corners && w.tool().kind === 'heatmap');
+      w.setNextStep($('grid-place'), !g.corners && (w.tool().kind === 'heatmap' || plotArea));
       $('grid-zoom').disabled = !g.corners;
       $('grid-detect').disabled = !g.corners;
     }

@@ -1,7 +1,7 @@
 (function (CM) {
   'use strict';
   const {
-    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, normalizeArgs, toolDefinitions, stateSnapshot, heatmapResultJson, roiResultJson, openQuestions, resultKeyHash,
+    AGENT_ACTIONS, AGENT_SCHEMA, AGENT_VERSION, validate, validateAction, normalizeArgs, toolDefinitions, stateSnapshot, heatmapResultJson, roiResultJson, mapResultJson, openQuestions, resultKeyHash,
     createPanel, createRoi, rectCorners, detectGridSize, projectT, pointAtT, refineColorbar, snapTick, readPixel, rgbToLab, sampleColorbar, labToT, makeValueFn, ticksWithT, tickProblem,
     cellAt, centroid, geomToBox, boxLabel, fileKind,
   } = CM;
@@ -47,7 +47,9 @@
 
     function rawResultsJson(panel) {
       const res = ws.resultFor(panel);
-      return panel.tool === 'heatmap' ? heatmapResultJson(panel, res) : roiResultJson(panel, res, (r, c) => boxLabel(panel.grid, r, c));
+      if (panel.tool === 'heatmap') return heatmapResultJson(panel, res);
+      if (panel.tool === 'map') return mapResultJson(panel, res);
+      return roiResultJson(panel, res, (r, c) => boxLabel(panel.grid, r, c));
     }
 
     // Hash of the panel's current values, or null while it has no result.
@@ -81,7 +83,8 @@
     }
 
     function questions(panelId) {
-      const panels = app.project.panels.filter((p) => !panelId || p.id === panelId);
+      // The reviewer's questions cover heatmaps and ROI; maps have none yet.
+      const panels = app.project.panels.filter((p) => p.tool !== 'map' && (!panelId || p.id === panelId));
       const results = {};
       const detections = {};
       for (const p of panels) {

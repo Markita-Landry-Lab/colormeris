@@ -74,7 +74,7 @@
       polyPath(ctx, v, c);
       strokeDual(ctx, w.COLORS.grid, 2);
 
-      const hl = active && (app.tableCell || app.hoverCell);
+      const hl = active && !w.tool().plotArea && (app.tableCell || app.hoverCell);
       if (hl && hl.row < g.rows && hl.col < g.cols) {
         const corners = [
           bilinear(c, hl.col / g.cols, hl.row / g.rows),

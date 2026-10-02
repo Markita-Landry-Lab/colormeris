@@ -323,6 +323,9 @@
       settings: { ...p.settings },
       review: p.review ? { status: reviewStatus || p.review.status, by: p.review.by, confidence: p.review.confidence, note: p.review.note || null } : null,
     };
+    if (p.tool === 'map') {
+      out.map = { bin: p.map.bin, xTicks: p.map.x.ticks.length, yTicks: p.map.y.ticks.length, profiles: p.map.profiles.map((l) => ({ id: l.id, name: l.name })) };
+    }
     if (p.tool === 'roi') {
       out.regions = p.rois.map((r) => ({ id: r.id, name: r.name, shape: r.shape, replicate: r.replicate, nudged: Object.keys(r.offsets).length }));
       out.scaleBar = p.scale ? { p1: pt(p.scale.p1), p2: pt(p.scale.p2), length: p.scale.length, unit: p.scale.unit } : null;
@@ -346,6 +349,30 @@
       deltaE: result.cells.map((row) => row.map((c) => r2(c.deltaE))),
       maxDeltaE: panel.settings.maxDeltaE,
       flagged,
+    };
+  }
+
+  // Map result → agent JSON: a summary only, since a map can hold a million
+  // values. The agent does not calibrate maps yet; this keeps get_results and
+  // the review hash working for map panels.
+  function mapResultJson(panel, result) {
+    if (result.error) return { panelId: panel.id, error: result.error };
+    const s = result.stats;
+    return {
+      panelId: panel.id,
+      tool: 'map',
+      rows: result.rows,
+      cols: result.cols,
+      bin: result.bin,
+      xAxis: result.xAxis,
+      yAxis: result.yAxis,
+      min: s.min,
+      max: s.max,
+      flaggedCount: s.flagged,
+      clippedLow: s.clippedLow,
+      clippedHigh: s.clippedHigh,
+      levels: s.levels,
+      profiles: panel.map.profiles.map((l) => ({ id: l.id, name: l.name, samples: Array.isArray(result.profiles?.[l.id]) ? result.profiles[l.id].length : 0 })),
     };
   }
 
@@ -493,6 +520,7 @@
     stateSnapshot,
     heatmapResultJson,
     roiResultJson,
+    mapResultJson,
     openQuestions,
     resultKeyHash,
   });

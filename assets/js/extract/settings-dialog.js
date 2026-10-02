@@ -92,6 +92,8 @@
       ws.setValue($('set-roi-distance'), iv.distance);
       ws.setValue($('set-roi-maxde'), iv.maxDeltaE);
       ws.setValue($('set-roi-gray'), iv.grayChroma);
+      ws.setValue($('set-map-distance'), settings.matching.map.distance);
+      ws.setValue($('set-map-maxde'), settings.matching.map.maxDeltaE);
       $('matching-note').textContent = matchingNote();
       renderHotkeys();
     }
@@ -133,7 +135,7 @@
       settings.matching[kind][key] = value;
       ws.applyMatching(kind, settings.matching[kind]);
     }
-    for (const [id, kind] of [['set-hm-distance', 'heatmap'], ['set-roi-distance', 'roi']]) {
+    for (const [id, kind] of [['set-hm-distance', 'heatmap'], ['set-roi-distance', 'roi'], ['set-map-distance', 'map']]) {
       $(id).addEventListener('change', (e) => {
         setMatching(kind, 'distance', e.target.value);
         changed();
@@ -143,6 +145,7 @@
     bindNumber('set-hm-maxde', 0, 1000, (v) => setMatching('heatmap', 'maxDeltaE', v));
     bindNumber('set-roi-maxde', 0, 1000, (v) => setMatching('roi', 'maxDeltaE', v));
     bindNumber('set-roi-gray', 0, 60, (v) => setMatching('roi', 'grayChroma', v));
+    bindNumber('set-map-maxde', 0, 1000, (v) => setMatching('map', 'maxDeltaE', v));
     $('matching-reset').addEventListener('click', () => {
       for (const [kind, defs] of Object.entries(MATCHING_DEFAULTS)) {
         settings.matching[kind] = { ...defs };
@@ -156,12 +159,13 @@
     function matchingNote() {
       if (!app.sourceCanvas) return '';
       const parts = [];
-      for (const [kind, label] of [['heatmap', 'heatmap'], ['roi', 'ROI']]) {
+      for (const [kind, label] of [['heatmap', 'heatmap'], ['roi', 'ROI'], ['map', 'map']]) {
         const m = settings.matching[kind];
         const n = app.project.panels.filter((p) => p.tool === kind && Object.entries(m).some(([k, v]) => p.settings[k] !== v)).length;
         if (n) parts.push(`${n} ${label} panel${n === 1 ? '' : 's'}`);
       }
-      return parts.length ? `In the open project, ${parts.join(' and ')} use other values. They keep them until you change a value of that tool here.` : '';
+      const list = parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts.join(' and ');
+      return parts.length ? `In the open project, ${list} use other values. They keep them until you change a value of that tool here.` : '';
     }
 
     // ------------------------------------------------------------ hotkeys

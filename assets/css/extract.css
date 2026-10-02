@@ -324,3 +324,8 @@ kbd {
 .bar-match { margin: 0; line-height: 1.4; }
 .bar-match code { color: var(--text); font-weight: 600; }
 .bar-match.exact code { color: var(--good-text); }
+
+/* Map tool: axis tick tables and the profile plot. */
+.axis-block + .axis-block { margin-top: var(--space-2); }
+.axis-block .card-actions select { width: auto; }
+.profile-plot { display: block; width: 100%; height: 140px; margin-top: var(--space-2); border-radius: var(--radius); background: var(--surface-2); }

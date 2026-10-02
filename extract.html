@@ -7,43 +7,46 @@
   <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and signal inside regions of interest (ROI).">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/base.css?v=1">
-  <link rel="stylesheet" href="assets/css/extract.css?v=1">
+  <link rel="stylesheet" href="assets/css/extract.css?v=2">
   <script src="assets/vendor/jszip/jszip.min.js" defer></script>
   <!-- Classic (non-module) scripts so the page also works when opened from disk. Order matters. -->
   <script src="assets/js/core/color.js?v=1" defer></script>
-  <script src="assets/js/core/grid.js?v=1" defer></script>
+  <script src="assets/js/core/grid.js?v=2" defer></script>
   <script src="assets/js/core/colorbar.js?v=1" defer></script>
   <script src="assets/js/core/colormap-library.js?v=8" defer></script>
   <script src="assets/js/core/colormap-match.js?v=1" defer></script>
-  <script src="assets/js/extract/project.js?v=1" defer></script>
+  <script src="assets/js/extract/project.js?v=2" defer></script>
   <script src="assets/js/extract/heatmap/sampling.js?v=1" defer></script>
-  <script src="assets/js/extract/project-files.js?v=1" defer></script>
+  <script src="assets/js/extract/project-files.js?v=2" defer></script>
   <script src="assets/js/extract/pdf-loader.js?v=1" defer></script>
   <script src="assets/js/extract/viewer.js?v=1" defer></script>
   <script src="assets/js/extract/roi/geometry.js?v=1" defer></script>
   <script src="assets/js/extract/roi/quantify.js?v=1" defer></script>
-  <script src="assets/js/extract/settings.js?v=1" defer></script>
+  <script src="assets/js/extract/map/field.js?v=1" defer></script>
+  <script src="assets/js/extract/settings.js?v=2" defer></script>
   <script src="assets/js/extract/workspace/history.js?v=1" defer></script>
-  <script src="assets/js/extract/workspace/overlay.js?v=1" defer></script>
-  <script src="assets/js/extract/workspace/interact.js?v=1" defer></script>
-  <script src="assets/js/extract/workspace/grid-card.js?v=1" defer></script>
+  <script src="assets/js/extract/workspace/overlay.js?v=2" defer></script>
+  <script src="assets/js/extract/workspace/interact.js?v=2" defer></script>
+  <script src="assets/js/extract/workspace/grid-card.js?v=2" defer></script>
   <script src="assets/js/extract/workspace/colorbar-card.js?v=1" defer></script>
-  <script src="assets/js/extract/workspace/panels.js?v=1" defer></script>
+  <script src="assets/js/extract/workspace/panels.js?v=2" defer></script>
   <script src="assets/js/extract/workspace/source.js?v=1" defer></script>
   <script src="assets/js/extract/workspace/export.js?v=1" defer></script>
   <script src="assets/js/extract/workspace/hotkeys.js?v=1" defer></script>
-  <script src="assets/js/extract/workspace/workspace.js?v=1" defer></script>
+  <script src="assets/js/extract/workspace/workspace.js?v=2" defer></script>
   <script src="assets/js/extract/heatmap/heatmap-tool.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-overlay.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-sidebar.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-tool.js?v=1" defer></script>
-  <script src="assets/js/agent/schema.js?v=1" defer></script>
-  <script src="assets/js/agent/api.js?v=1" defer></script>
+  <script src="assets/js/extract/map/map-sidebar.js?v=1" defer></script>
+  <script src="assets/js/extract/map/map-tool.js?v=1" defer></script>
+  <script src="assets/js/agent/schema.js?v=2" defer></script>
+  <script src="assets/js/agent/api.js?v=2" defer></script>
   <script src="assets/js/agent/llm.js?v=1" defer></script>
   <script src="assets/js/agent/runner.js?v=1" defer></script>
   <script src="assets/js/agent/agent-card.js?v=1" defer></script>
-  <script src="assets/js/extract/settings-dialog.js?v=1" defer></script>
-  <script src="assets/js/extract/main.js?v=1" defer></script>
+  <script src="assets/js/extract/settings-dialog.js?v=2" defer></script>
+  <script src="assets/js/extract/main.js?v=2" defer></script>
 </head>
 <body class="extract">
   <header class="topbar">
@@ -54,6 +57,7 @@
     <nav class="tool-switch" aria-label="Tools">
       <a href="#heatmap" data-tool-link="heatmap">Heatmap</a>
       <a href="#roi" data-tool-link="roi">ROI</a>
+      <a href="#map" data-tool-link="map">Map</a>
       <a href="colormaps.html">Colormaps</a>
     </nav>
     <label class="btn primary">
@@ -86,6 +90,14 @@
           <li><b>Regions</b>: draw ellipses (Shift = circle), rectangles (Shift = square) or polygons. A region drawn in one box is copied into every box; drag a copy to nudge it in that box only.</li>
           <li>Grayscale pixels (the photo) count as no signal. Read the results table, download the CSV, or export the project zip.</li>
         </ol>
+        <ol data-tool="map" hidden>
+          <li>Open a figure with a near-continuous map: a spectroscopy map, a fluorescence image with a calibration bar (or drop / paste it).</li>
+          <li><b>Plot area</b>: click the top-left and bottom-right corners of the image area, inside the axes.</li>
+          <li><b>Colorbar</b>: click the two ends of the colorbar, then click at least two ticks and type their values.</li>
+          <li><b>Axes</b> (optional): click two or more labelled ticks on each axis and type their values. Without them, coordinates are pixels.</li>
+          <li><b>Results</b>: bin size 1 gives one value per pixel; larger bins take the median and smooth out JPEG noise. <b>Profiles</b> give values along a line. Download CSVs or export the project zip.</li>
+        </ol>
+        <p class="muted" data-tool="map" hidden>Published images are usually compressed and contrast-adjusted: values are in the units of the colorbar as displayed, the colorbar limits how many levels can be told apart, and colors at its ends may be clipped (<i>Show flags</i>).</p>
         <p class="muted">Switch tools at the top at any time: the file and both tools' work stay, and one project zip holds everything. Scroll to zoom, drag to pan, ← → to flip PDF pages, drag handles to adjust. Esc cancels, Ctrl/⌘+Z undoes; change the hotkeys in <i>Settings</i>. Everything runs in your browser; files are never uploaded, except page images sent to OpenRouter when you run the agent.</p>
       </details>
 
@@ -145,15 +157,15 @@
 
       <section class="card" id="sec-grid" hidden>
         <div class="card-head">
-          <h2><span class="step-dot grid-dot"></span>Grid <span class="tag" data-tool="roi" hidden>optional</span></h2>
+          <h2><span class="step-dot grid-dot"></span><span data-tool="heatmap roi">Grid</span><span data-tool="map" hidden>Plot area</span> <span class="tag" data-tool="roi" hidden>optional</span></h2>
           <span id="grid-state" class="badge"></span>
         </div>
         <div class="card-actions">
-          <button class="btn" id="grid-place" title="Shortcut: G" data-hotkey="grid" data-title="Shortcut: {key}">Place grid corners</button>
-          <button class="btn subtle" id="grid-zoom" title="Zoom to grid">Zoom to</button>
+          <button class="btn" id="grid-place" title="Shortcut: G" data-hotkey="grid" data-title="Shortcut: {key}"><span data-tool="heatmap roi">Place grid corners</span><span data-tool="map" hidden>Place plot area</span></button>
+          <button class="btn subtle" id="grid-zoom" title="Zoom to the grid or plot area">Zoom to</button>
           <button class="btn danger" id="grid-clear" data-tool="roi" hidden>Remove</button>
         </div>
-        <div class="fields">
+        <div class="fields" data-tool="heatmap roi">
           <label class="field">Rows <input id="grid-rows" type="number" min="1" max="1000"></label>
           <label class="field">Columns <input id="grid-cols" type="number" min="1" max="1000"></label>
           <button class="btn" id="grid-detect" title="Guess rows and columns from the image inside the grid">Detect</button>
@@ -264,6 +276,85 @@
           </label>
         </div>
         <p id="scale-info" class="hint">Click both ends of a scale bar (or any known distance) to report areas in real units.</p>
+      </section>
+
+      <section class="card" id="sec-axes" hidden>
+        <div class="card-head">
+          <h2>Axes <span class="tag">optional</span></h2>
+          <span id="axes-state" class="badge"></span>
+        </div>
+        <div class="axis-block">
+          <div class="card-actions">
+            <button class="btn" id="axis-x-add" aria-pressed="false" title="Shortcut: X" data-hotkey="xtick" data-title="Shortcut: {key}">Add x ticks</button>
+            <select id="axis-x-scale" aria-label="X axis scale">
+              <option value="linear">Linear</option>
+              <option value="log10">Log₁₀</option>
+            </select>
+          </div>
+          <table class="ticks" hidden>
+            <thead><tr><th>X value</th><th>Position</th><th></th></tr></thead>
+            <tbody id="axis-x-ticks"></tbody>
+          </table>
+          <p id="axis-x-problem" class="hint"></p>
+        </div>
+        <div class="axis-block">
+          <div class="card-actions">
+            <button class="btn" id="axis-y-add" aria-pressed="false" title="Shortcut: Y" data-hotkey="ytick" data-title="Shortcut: {key}">Add y ticks</button>
+            <select id="axis-y-scale" aria-label="Y axis scale">
+              <option value="linear">Linear</option>
+              <option value="log10">Log₁₀</option>
+            </select>
+          </div>
+          <table class="ticks" hidden>
+            <thead><tr><th>Y value</th><th>Position</th><th></th></tr></thead>
+            <tbody id="axis-y-ticks"></tbody>
+          </table>
+          <p id="axis-y-problem" class="hint"></p>
+        </div>
+        <p class="hint">Click labelled ticks on each axis and type their values. Without them, coordinates are pixels from the plot's top-left corner.</p>
+      </section>
+
+      <section class="card" id="sec-profiles" hidden>
+        <div class="card-head">
+          <h2>Profiles</h2>
+          <span id="profile-state" class="badge"></span>
+        </div>
+        <div class="card-actions">
+          <button class="btn" id="profile-add" aria-pressed="false" title="Shortcut: L" data-hotkey="profile" data-title="Shortcut: {key}">Draw profile</button>
+        </div>
+        <ul id="profile-list" class="chip-list"></ul>
+        <p id="profile-empty" class="hint">No profiles yet. Draw a line to read values along it, e.g. a spectrum at one time or a line scan across a cell.</p>
+        <div id="profile-edit" class="row" hidden>
+          <label class="field grow">Name <input id="profile-name" type="text" spellcheck="false"></label>
+          <label class="field" title="Values are averaged over this many pixels on each side of the line">Width (± px) <input id="profile-width" type="number" min="0" max="50" step="1" class="num"></label>
+          <button class="btn subtle" id="profile-zoom" title="Zoom to the profile">Zoom to</button>
+          <button class="btn danger" id="profile-delete" title="Delete (Del)">Delete</button>
+        </div>
+        <div id="profile-view" hidden>
+          <p id="profile-problem" class="notice"></p>
+          <canvas id="profile-plot" class="profile-plot" aria-label="Values along the selected profile"></canvas>
+          <div class="card-actions">
+            <button class="btn" id="profile-csv">Download profile CSV</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="sec-map-results" hidden>
+        <div class="card-head">
+          <h2>Results</h2>
+          <label class="check"><input id="map-recon" type="checkbox"> Reconstruct</label>
+          <label class="check" title="Red: color far from the colorbar (ΔE). Magenta / cyan: at the top / bottom end of the colorbar, possibly clipped."><input id="map-flags" type="checkbox"> Show flags</label>
+        </div>
+        <div class="fields">
+          <label class="field" title="Side of the square bins in pixels of the rendered image; each bin is the median of its pixels. 1 = one value per pixel.">Bin size (px) <input id="map-bin" type="number" min="1" max="256" step="1"></label>
+        </div>
+        <p id="map-problem" class="notice"></p>
+        <p id="map-summary" class="hint"></p>
+        <p id="map-axis-hint" class="hint"></p>
+        <div class="card-actions">
+          <button class="btn primary" id="map-dl-csv">Download CSV</button>
+          <button class="btn" id="map-dl-long">Long CSV</button>
+        </div>
       </section>
 
       <section class="card" id="sec-hm-results" hidden>
@@ -425,6 +516,19 @@
             <label class="field">Flag colors with ΔE above <input id="set-roi-maxde" type="number" min="0" step="0.5" class="num"></label>
           </div>
           <p class="muted small">Pixels whose color is nearly gray (CIELAB chroma at or below the threshold) are background with no signal. Colored pixels that match no colorbar color (ΔE above the limit, e.g. colored text) are counted as signal but reported as flagged.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Map</legend>
+          <div class="row wrap">
+            <label class="field">Color difference
+              <select id="set-map-distance">
+                <option value="de2000">CIEDE2000</option>
+                <option value="de76">CIE76 (Lab distance)</option>
+              </select>
+            </label>
+            <label class="field">Flag colors with ΔE above <input id="set-map-maxde" type="number" min="0" step="0.5" class="num"></label>
+          </div>
+          <p class="muted small">Values whose color is further than the ΔE limit from every colorbar color are shown in red under <i>Show flags</i>. CIE76 is about 10× faster on large maps.</p>
         </fieldset>
         <div class="row"><button type="button" class="btn small" id="matching-reset">Reset matching to defaults</button></div>
       </section>

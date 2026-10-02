@@ -28,6 +28,9 @@
     { id: 'ellipse', label: 'Ellipse region (ROI)', keys: ['E'], tool: 'roi' },
     { id: 'rect', label: 'Rectangle region (ROI)', keys: ['R'], tool: 'roi' },
     { id: 'polygon', label: 'Polygon region (ROI)', keys: ['P'], tool: 'roi' },
+    { id: 'xtick', label: 'Add x-axis ticks (Map)', keys: ['X'], tool: 'map' },
+    { id: 'ytick', label: 'Add y-axis ticks (Map)', keys: ['Y'], tool: 'map' },
+    { id: 'profile', label: 'Draw a line profile (Map)', keys: ['L'], tool: 'map' },
   ];
   // Keys with a fixed meaning: cancel, pan, and finishing or editing a polygon.
   const RESERVED_KEYS = ['Escape', 'Space', 'Enter', 'Backspace', 'Delete', 'Tab'];
@@ -36,6 +39,7 @@
     heatmap: { distance: 'de2000', maxDeltaE: 10 },
     // IVIS photos carry JPEG color noise up to about chroma 20 (see project.js).
     roi: { distance: 'de2000', maxDeltaE: 20, grayChroma: 20 },
+    map: { distance: 'de2000', maxDeltaE: 10 },
   };
 
   const AGENT_DEFAULTS = { key: '', rememberKey: false, minConfidence: 0.9, maxSteps: 80, base: '', llm: '', reviewer: '' };
