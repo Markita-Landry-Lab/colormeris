@@ -9,6 +9,7 @@ import '../assets/js/core/colormap-library.js';
 import '../assets/js/core/colormap-match.js';
 import '../assets/js/colormaps/metrics.js';
 import '../assets/js/colormaps/references.js';
+import '../assets/js/colormaps/route.js';
 import '../assets/js/colormaps/recolor.js';
 import '../assets/js/extract/project.js';
 import '../assets/js/extract/settings.js';
