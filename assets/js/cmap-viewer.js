@@ -719,7 +719,7 @@
         sources[src.key].addEventListener('change', applyFilter);
       }
       const presets = el('div', { class: 'cmap-pop-row' });
-      const allYes = el('button', { type: 'button', class: 'btn small' }, 'All four ✓');
+      const allYes = el('button', { type: 'button', class: 'btn small', title: 'Tick all four ratings; the sources stay as they are' }, 'All ratings ✓');
       const none = el('button', { type: 'button', class: 'btn small' }, 'Clear');
       allYes.addEventListener('click', () => { for (const b of Object.values(boxes)) b.checked = true; applyFilter(); });
       none.addEventListener('click', () => { clearFilters(); applyFilter(); });
@@ -845,7 +845,7 @@
         if (n) shown++;
       }
       empty.hidden = shown > 0;
-      const nOn = on.length + (srcs.length ? 1 : 0); // the sources count as one filter
+      const nOn = on.length + srcs.length;
       ui.filtBtn.textContent = nOn ? `Filters (${nOn})` : 'Filters';
       ui.filtBtn.classList.toggle('active', nOn > 0);
     }
