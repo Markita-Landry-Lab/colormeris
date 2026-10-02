@@ -442,6 +442,17 @@
     sections.push(sec);
     browse.append(sec);
   }
+  // Expand all opens every section and sub-heading, and becomes Collapse all.
+  const folds = () => [...sections, ...browse.querySelectorAll('.cmap-sub')].filter((d) => !d.hidden);
+  const foldBtn = el('button', { type: 'button', class: 'btn small' }, 'Expand all');
+  const syncFoldBtn = () => { foldBtn.textContent = folds().every((d) => d.open) ? 'Collapse all' : 'Expand all'; };
+  foldBtn.addEventListener('click', () => {
+    const open = foldBtn.textContent === 'Expand all';
+    for (const d of folds()) d.open = d._userOpen = open;
+    syncFoldBtn();
+  });
+  browse.addEventListener('toggle', syncFoldBtn, true);
+  ui.bar.insertBefore(foldBtn, ui.bar.querySelector('#cmap-pop-filters'));
   const empty = el('p', { class: 'muted', hidden: '' }, 'No colormap matches your search.');
   browse.append(empty);
 
