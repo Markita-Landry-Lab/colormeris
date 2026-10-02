@@ -57,8 +57,12 @@
       const ol2 = el('ol', { start: String(refOrder.length + 1) });
       for (const k of ['machado', 'cielab', 'ciede2000', 'brettel', 'vienot', 'daltonlens']) ol2.append(refItem(k));
       d.append(ol2);
-      // Sources of one family (the R packages) are named once.
-      const versions = [...new Map(data.sources.map((src) => [src.family ?? src.key, src.family ? `${src.family} (${src.version})` : `${src.label} ${src.version}`])).values()];
+      // A family whose members share one version (the R packages, from paletteer) is named once;
+      // the Python packages each have their own.
+      const shared = (fam) => new Set(data.sources.filter((s) => s.family === fam).map((s) => s.version)).size === 1;
+      const versions = [...new Map(data.sources.map((src) => src.family && shared(src.family)
+        ? [src.family, `${src.family} (${src.version})`]
+        : [src.key, `${src.label} ${src.version}`])).values()];
       d.append(el('p', { class: 'muted small' }, `Colormap data comes from ${versions.slice(0, -1).join(', ')}${versions.length > 1 ? ' and ' : ''}${versions.at(-1)}.`));
       return d;
     }

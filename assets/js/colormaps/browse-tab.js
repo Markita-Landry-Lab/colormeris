@@ -187,6 +187,8 @@
       return b;
     }
 
+    let syncFamilyBoxes = () => {}; // set by buildControls
+
     function buildControls() {
       const bar = el('div', { class: 'cmap-controls' });
       const search = el('input', { type: 'search', placeholder: 'Search colormaps…', 'aria-label': 'Search colormaps', class: 'cmap-search' });
@@ -217,20 +219,39 @@
       // Sources: none ticked shows every library.
       filtPop.append(el('div', { class: 'cmap-pop-title' }, 'Only maps from'));
       const sources = {};
-      let family = null; // sources of one family (the R packages) sit under their own title
+      // A family (the R packages) is one checkbox that ticks its members, listed indented under it.
+      const families = {}; // family -> { box, keys }
+      const source = (src, n, box, label, nested) => {
+        const l = el('label', { class: nested ? 'check nested' : 'check', title: `Only colormaps from ${label}` });
+        l.append(box, `${label} (${n})`);
+        filtPop.append(l);
+      };
       for (const src of data.sources) {
         const n = data.maps.filter((m) => m.source === src.key).length;
         if (!n) continue;
-        if (src.family !== family) {
-          family = src.family;
-          if (family) filtPop.append(el('div', { class: 'cmap-pop-title' }, `${family} (${data.maps.filter((m) => data.sources.find((s) => s.key === m.source).family === family).length})`));
+        if (src.family && !families[src.family]) {
+          const total = data.maps.filter((m) => data.sources.find((s) => s.key === m.source).family === src.family).length;
+          const box = el('input', { type: 'checkbox' });
+          families[src.family] = { box, keys: [] };
+          source(src, total, box, src.family, false);
+          box.addEventListener('change', () => {
+            for (const k of families[src.family].keys) sources[k].checked = box.checked;
+            applyFilter();
+          });
         }
-        const l = el('label', { class: 'check', title: `Only colormaps from ${src.label}` });
         sources[src.key] = el('input', { type: 'checkbox' });
-        l.append(sources[src.key], `${src.label} (${n})`);
-        filtPop.append(l);
-        sources[src.key].addEventListener('change', applyFilter);
+        source(src, n, sources[src.key], src.label, !!src.family);
+        sources[src.key].addEventListener('change', () => { syncFamilies(); applyFilter(); });
+        if (src.family) families[src.family].keys.push(src.key);
       }
+      function syncFamilies() {
+        for (const { box, keys } of Object.values(families)) {
+          const on = keys.filter((k) => sources[k].checked).length;
+          box.checked = on === keys.length;
+          box.indeterminate = on > 0 && on < keys.length;
+        }
+      }
+      syncFamilyBoxes = syncFamilies;
       const presets = el('div', { class: 'cmap-pop-row' });
       const allYes = el('button', { type: 'button', class: 'btn small', title: 'Tick all four ratings; the sources stay as they are' }, 'All ratings ✓');
       const none = el('button', { type: 'button', class: 'btn small' }, 'Clear');
@@ -263,7 +284,7 @@
         state.reversed = rev.checked;
         redirect(items);
       });
-      return { bar, search, sort, boxes, sources, filtBtn, viewBtns, rev };
+      return { bar, search, sort, boxes, sources, families, filtBtn, viewBtns, rev };
     }
 
     function syncRevBtn(entry) {
@@ -349,6 +370,7 @@
 
     function clearFilters() {
       for (const b of filterBoxes()) b.checked = false;
+      syncFamilyBoxes();
     }
 
     function applyFilter() {
@@ -380,7 +402,9 @@
         if (n) shown++;
       }
       empty.hidden = shown > 0;
-      const nOn = on.length + srcs.length;
+      // A fully ticked family counts once, like a library.
+      const famKeys = Object.values(ui.families).filter((f) => f.keys.every((k) => srcs.includes(k)));
+      const nOn = on.length + srcs.length - famKeys.reduce((s, f) => s + f.keys.length - 1, 0);
       ui.filtBtn.textContent = nOn ? `Filters (${nOn})` : 'Filters';
       ui.filtBtn.classList.toggle('active', nOn > 0);
     }

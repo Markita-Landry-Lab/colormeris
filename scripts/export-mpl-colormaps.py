@@ -418,7 +418,7 @@ R_GROUP = {
     "cartography::harmo.pal": "qualitative", "cartography::multi.pal": "qualitative",
 }
 R_BY_LIGHTNESS = {"colorBlindness", "dichromat"}  # discrete packages of ramps
-R_PACKAGE_LABEL = {"ggthemes_solarized": "ggthemes Solarized", "ggthemes_ptol": "ggthemes"}
+R_PACKAGE_QUALIFIER = {"ggthemes_solarized": "Solarized"}  # ggthemes_ptol and ggthemes_solarized are ggthemes
 
 
 def lightness(rgb):
@@ -464,8 +464,9 @@ def r_groups():
             EXTRA[name] = ListedColormap(rgb, name=name)
         else:
             EXTRA[name] = LinearSegmentedColormap.from_list(name, rgb, N=N)
-        label = R_PACKAGE_LABEL.get(pkg, pkg)
-        sub = f"{label} (R)" if group != "others" else f"{label} (R, miscellaneous)"
+        # Sub-headings read "Library" or "Library (qualifier)", the R packages under "R packages: ".
+        qualifier = "miscellaneous" if group == "others" else R_PACKAGE_QUALIFIER.get(pkg)
+        sub = f"R packages: {pkg.split('_')[0]}" + (f" ({qualifier})" if qualifier else "")
         blocks.setdefault((group, sub), []).append(name)
     for (group, sub), names in blocks.items():
         yield group, sub, names
@@ -491,6 +492,7 @@ def duplicate_of(rgb, seen, cyclic=False, table=None):
     return None
 
 
+PYTHON_SOURCES = {"matplotlib", "cmasher", "crameri", "cmocean", "colorcet", "seaborn"}  # Python libraries (not CarbonPlan, NCL, SciVisColor: tables of the colormaps package)
 maps = []
 seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
@@ -522,7 +524,8 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
             maps.append({
                 "name": name,
                 "group": group,
-                "sub": sub,
+                # Python packages sit under "Python packages: " like the R ones; the rest are libraries of their own.
+                "sub": f"Python packages: {sub}" if source in PYTHON_SOURCES else sub,
                 # Each R package is its own source, so Browse can filter by package.
                 "source": f"r-{name.split('::')[0].split('_')[0]}" if source == "r" else source,
                 "kind": "qualitative" if qualitative else "continuous",
@@ -626,12 +629,12 @@ print(f"pre-reversed {sum('flip' in m for m in maps)} sequential maps")
 
 # In the order of the source filter in colormaps.html.
 sources = [
-    {"key": "matplotlib", "label": "Matplotlib", "version": matplotlib.__version__},
-    {"key": "cmasher", "label": "CMasher", "version": cmasher.__version__},
-    {"key": "crameri", "label": "Crameri", "version": cmcrameri.__scm_version__},
-    {"key": "cmocean", "label": "cmocean", "version": cmocean.__version__.lstrip("v")},
-    {"key": "colorcet", "label": "colorcet", "version": colorcet.__version__},
-    {"key": "seaborn", "label": "seaborn", "version": seaborn.__version__},
+    {"key": "matplotlib", "label": "Matplotlib", "family": "Python packages", "version": matplotlib.__version__},
+    {"key": "cmasher", "label": "CMasher", "family": "Python packages", "version": cmasher.__version__},
+    {"key": "crameri", "label": "Crameri", "family": "Python packages", "version": cmcrameri.__scm_version__},
+    {"key": "cmocean", "label": "cmocean", "family": "Python packages", "version": cmocean.__version__.lstrip("v")},
+    {"key": "colorcet", "label": "colorcet", "family": "Python packages", "version": colorcet.__version__},
+    {"key": "seaborn", "label": "seaborn", "family": "Python packages", "version": seaborn.__version__},
     {"key": "carbonplan", "label": "CarbonPlan", "version": pkg_version("colormaps")},
     {"key": "ncl", "label": "NCL", "version": pkg_version("colormaps")},
     {"key": "sciviz", "label": "SciVisColor", "version": pkg_version("colormaps")},
@@ -689,6 +692,6 @@ out.write_text(
     "  CM.cmapData = data;\n"
     "})((globalThis.Colormeris ??= {}));\n"
 )
-counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources if "family" not in s}
-counts["R packages"] = sum("family" in next(s for s in sources if s["key"] == m["source"]) for m in maps)
+counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources if s.get("family") != "R packages"}
+counts["R packages"] = sum(m["source"].startswith("r-") for m in maps)
 print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan, NCL and SciVisColor (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION}, MATLAB R2014b)")
