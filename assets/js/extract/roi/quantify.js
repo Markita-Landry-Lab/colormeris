@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { rgbToLab, sampleColorbar, makeValueFn, labToT, tickProblem, ticksWithT, readPixel, roiInstances, forEachPixelInPolygon, cellAt, centroid } = CM;
+  const { rgbToLab, sampleColorbar, makeValueFn, labToT, tickProblem, ticksWithT, readPixel, roiInstances, forEachPixelInPolygon, cellAt, centroid, boxLabel } = CM;
 
   // Quantify signal inside ROIs of images such as IVIS luminescence overlays:
   // colored pixels are read through the calibrated colorbar, grayscale pixels
@@ -107,5 +107,47 @@
     return { rows, pxArea, unit: pxArea ? panel.scale.unit : null };
   }
 
-  Object.assign(CM, { colorbarProblem, roiPanelProblem, pixelArea, makeClassifier, quantifyOutline, quantifyPanel });
+  // ---------------------------------------------------------------- results table
+
+  // One statistic of a region measurement, or null when it does not apply
+  // (e.g. areas in real units without a scale bar).
+  function metricValue(stats, metric) {
+    const v = stats[metric];
+    return v === undefined ? null : v;
+  }
+
+  // Four significant digits, exponent notation for very large or small values.
+  function shortNumber(v) {
+    if (!Number.isFinite(v)) return '';
+    if (v === 0) return '0';
+    const a = Math.abs(v);
+    if (a >= 1e5 || a < 1e-2) return v.toExponential(2).replace('e+', 'e');
+    return String(Number(v.toPrecision(4)));
+  }
+
+  // Results table: one row per box (or "Image" without a grid), one column per
+  // region. Boxes in reading order, the image row last.
+  function roiTableModel(panel, result) {
+    const rowsByKey = new Map();
+    const order = [];
+    const keyOf = (r) => (r.row === null ? 'image' : `${r.row},${r.col}`);
+    for (const r of result.rows) {
+      const key = keyOf(r);
+      if (!rowsByKey.has(key)) {
+        rowsByKey.set(key, { label: r.row === null ? 'Image' : boxLabel(panel.grid, r.row, r.col), row: r.row, col: r.col, cells: new Map() });
+        order.push(key);
+      }
+      rowsByKey.get(key).cells.set(r.roi.id, r);
+    }
+    order.sort((a, b) => {
+      const ra = rowsByKey.get(a);
+      const rb = rowsByKey.get(b);
+      if (ra.row === null) return 1;
+      if (rb.row === null) return -1;
+      return ra.row - rb.row || ra.col - rb.col;
+    });
+    return { rows: order.map((k) => rowsByKey.get(k)), rois: panel.rois };
+  }
+
+  Object.assign(CM, { colorbarProblem, roiPanelProblem, pixelArea, makeClassifier, quantifyOutline, quantifyPanel, metricValue, shortNumber, roiTableModel });
 })((globalThis.Colormeris ??= {}));

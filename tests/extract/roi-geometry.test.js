@@ -73,3 +73,29 @@ test('box coordinates round-trip on a skewed grid', () => {
   close(back.x, 0.3, 1e-6);
   close(back.y, 0.7, 1e-6);
 });
+
+test('local coordinates round-trip through a nudged copy', () => {
+  const grid = { corners: rectCorners({ x: 0, y: 0 }, { x: 200, y: 100 }), rows: 1, cols: 2 };
+  const roi = createRoi('ellipse', { cx: 0.5, cy: 0.5, rx: 0.2, ry: 0.2 });
+  roi.offsets['0,1'] = { dx: 0.1, dy: 0 };
+  const p = CM.roiFromLocal(roi, grid, 0, 1, { x: 0.5, y: 0.5 });
+  close(p.x, 160, 1e-9); // box 1 spans x 100–200; centre 0.5 + nudge 0.1
+  close(p.y, 50, 1e-9);
+  const q = CM.roiToLocal(roi, grid, 0, 1, p);
+  close(q.x, 0.5, 1e-9);
+  close(q.y, 0.5, 1e-9);
+  const single = createRoi('rect', { cx: 5, cy: 5, rx: 1, ry: 1 }, { replicate: false });
+  assert.deepEqual(CM.roiToLocal(single, grid, 0, 0, { x: 3, y: 4 }), { x: 3, y: 4 });
+});
+
+test('control points, box size, equal shapes and translation', () => {
+  const rect = createRoi('rect', { cx: 5, cy: 5, rx: 2, ry: 1 });
+  assert.deepEqual(CM.roiControlPoints(rect), [{ x: 3, y: 4 }, { x: 7, y: 4 }, { x: 7, y: 6 }, { x: 3, y: 6 }]);
+  const grid = { corners: rectCorners({ x: 0, y: 0 }, { x: 200, y: 100 }), rows: 2, cols: 4 };
+  assert.deepEqual(CM.gridBoxSize(grid), { w: 50, h: 50 });
+  // One box unit is 50 × 25 px, so a circle is twice as tall in box units.
+  const g = CM.equalBoxGeom({ x: 0, y: 0 }, { x: 0.2, y: 0.1 }, { w: 50, h: 25 });
+  close(g.rx * 50, g.ry * 25, 1e-9);
+  assert.deepEqual(CM.translateGeom('rect', rect.geom, 1, -1), { cx: 6, cy: 4, rx: 2, ry: 1 });
+  assert.deepEqual(CM.translateGeom('polygon', { points: [{ x: 0, y: 0 }] }, 2, 3), { points: [{ x: 2, y: 3 }] });
+});

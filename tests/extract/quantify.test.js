@@ -95,3 +95,21 @@ test('quantifyOutline counts off-colormap colors as flagged signal', () => {
   assert.equal(s.areaPx, 100);
   assert.equal(s.flaggedPx, 100);
 });
+
+test('results table helpers: metric values, short numbers, rows in reading order', () => {
+  assert.equal(CM.metricValue({ sum: 3 }, 'sum'), 3);
+  assert.equal(CM.metricValue({ sum: 3 }, 'area'), null);
+  assert.deepEqual([0, 12.3456, 123456, 0.001, NaN].map(CM.shortNumber), ['0', '12.35', '1.23e5', '1.00e-3', '']);
+  const a = { id: 'a', name: 'A' };
+  const b = { id: 'b', name: 'B' };
+  const panel = { rois: [a, b], grid: { rows: 1, cols: 2, rowLabels: [], colLabels: [], boxLabels: ['m1', 'm2'] } };
+  const stats = {};
+  const result = { rows: [
+    { roi: a, row: 0, col: 1, stats },
+    { roi: b, row: null, col: null, stats },
+    { roi: a, row: 0, col: 0, stats },
+  ] };
+  const model = CM.roiTableModel(panel, result);
+  assert.deepEqual(model.rows.map((r) => r.label), ['m1', 'm2', 'Image']);
+  assert.deepEqual([...model.rows[2].cells.keys()], ['b']);
+});

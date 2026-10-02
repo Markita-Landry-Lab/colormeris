@@ -150,6 +150,59 @@
     return { cx: c.x, cy: c.y, rx: Math.abs(ex.x - c.x), ry: Math.abs(ey.y - c.y) };
   }
 
+  // ---------------------------------------------------------------- editing helpers
+
+  // Image point → the region's own coordinates in copy (row, col).
+  function roiToLocal(roi, grid, row, col, p) {
+    if (!roi.replicate) return { x: p.x, y: p.y };
+    const q = toBox(grid, p, row, col);
+    const o = boxOffset(roi, row, col);
+    return { x: q.x - o.dx, y: q.y - o.dy };
+  }
+
+  // The region's own coordinates in copy (row, col) → image point.
+  function roiFromLocal(roi, grid, row, col, q) {
+    if (!roi.replicate) return { x: q.x, y: q.y };
+    const o = boxOffset(roi, row, col);
+    return fromBox(grid, { x: q.x + o.dx, y: q.y + o.dy }, row, col);
+  }
+
+  // Editable points of a shape in its own coordinates: bounding-box corners for
+  // ellipses/rects, vertices for polygons.
+  function roiControlPoints(roi) {
+    const g = roi.geom;
+    if (roi.shape === 'polygon') return g.points;
+    return [
+      { x: g.cx - g.rx, y: g.cy - g.ry },
+      { x: g.cx + g.rx, y: g.cy - g.ry },
+      { x: g.cx + g.rx, y: g.cy + g.ry },
+      { x: g.cx - g.rx, y: g.cy + g.ry },
+    ];
+  }
+
+  // Size of one grid box in pixels (box coordinates span 1 × 1).
+  function gridBoxSize(grid) {
+    const c = grid.corners;
+    return {
+      w: Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y) / grid.cols,
+      h: Math.hypot(c[3].x - c[0].x, c[3].y - c[0].y) / grid.rows,
+    };
+  }
+
+  // Like boxGeom(a, b, true) but equal in pixels when one unit is w × h pixels,
+  // so Shift gives a real circle/square for regions stored in box coordinates.
+  function equalBoxGeom(a, b, { w, h }) {
+    const s = Math.max(Math.abs(b.x - a.x) * w, Math.abs(b.y - a.y) * h) / 2;
+    const rx = s / w;
+    const ry = s / h;
+    return { cx: a.x + Math.sign(b.x - a.x || 1) * rx, cy: a.y + Math.sign(b.y - a.y || 1) * ry, rx, ry };
+  }
+
+  function translateGeom(shape, geom, dx, dy) {
+    if (shape === 'polygon') return { points: geom.points.map((q) => ({ x: q.x + dx, y: q.y + dy })) };
+    return { ...geom, cx: geom.cx + dx, cy: geom.cy + dy };
+  }
+
   Object.assign(CM, {
     shapeOutline,
     offsetKey,
@@ -163,5 +216,11 @@
     centroid,
     boxGeom,
     geomToBox,
+    roiToLocal,
+    roiFromLocal,
+    roiControlPoints,
+    gridBoxSize,
+    equalBoxGeom,
+    translateGeom,
   });
 })((globalThis.Colormeris ??= {}));
