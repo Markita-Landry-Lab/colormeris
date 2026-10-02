@@ -2,12 +2,13 @@
   "name": "colormeris",
   "version": "0.1.0",
   "private": true,
-  "description": "Static web app to extract numeric data from gridded heatmap images and PDFs.",
+  "description": "Static web app that turns colors in scientific figures back into numbers (heatmap and ROI tools) and browses colormaps.",
   "type": "module",
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
     "serve": "python3 -m http.server 8000",
     "proxy": "node scripts/openrouter-proxy.mjs",
-    "docs": "node scripts/agent-docs.mjs"
+    "docs": "node scripts/agent-docs.mjs",
+    "fixtures": "node scripts/make-calibration.mjs"
   }
 }

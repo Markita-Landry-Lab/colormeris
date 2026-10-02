@@ -1,15 +1,16 @@
 # Colormeris: notes for Claude sessions
 
-Colormeris is a static web app (Landry lab, UC Berkeley) that turns colors in scientific figures back into numbers. It has two tools: **heatmap** (one value per grid cell) and **IVIS** (signal inside regions on in vivo luminescence images). It also has an **agent layer**: a typed API plus an LLM agent that calibrates heatmaps by itself, checked by a smaller vision LLM (the reviewer). Start with [README.md](README.md) for users and [docs/agent.md](docs/agent.md) for the agent. [docs/research.md](docs/research.md) has the literature, novelty and experiment plan.
+Colormeris is a static web app (Landry lab, UC Berkeley) that turns colors in scientific figures back into numbers. It has two pages: `extract.html` with two tools, **heatmap** (one value per grid cell) and **ROI** (signal inside regions of interest, e.g. on IVIS luminescence images), and `colormaps.html`, a colormap viewer. `index.html` is the landing page. It also has an **agent layer**: a typed API plus an LLM agent that calibrates heatmaps by itself, checked by a smaller vision LLM (the reviewer). Start with [README.md](README.md) for users and [docs/agent.md](docs/agent.md) for the agent. [docs/research.md](docs/research.md) has the literature, novelty and experiment plan.
 
 ## Commands
 
 ```bash
-npm test          # node:test unit tests, no dependencies (must pass before commits)
-npm run serve     # python3 -m http.server 8000 → http://localhost:8000/app.html#heatmap
+npm test          # node:test unit tests in tests/**, no dependencies (must pass before commits)
+npm run serve     # python3 -m http.server 8000 → http://localhost:8000/extract.html#heatmap
 npm run proxy     # OpenRouter proxy on :8787 that adds the key from .env
-uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet --with seaborn --with colormaps python scripts/export-mpl-colormaps.py   # regenerate assets/js/cmap-data.js
+uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet --with seaborn --with colormaps python scripts/export-mpl-colormaps.py   # regenerate assets/js/core/colormap-library.js
 npm run docs      # regenerate docs/agent.md (a test fails if it is stale)
+npm run fixtures  # regenerate tests/fixtures/calibration (synthetic heatmaps with known truth)
 node scripts/bundle-openrouter.mjs   # rebuild the vendored OpenRouter SDK bundle
 node scripts/embed-pdfjs.mjs         # rebuild the pdf.js embed after updating pdf.js
 ```
@@ -26,19 +27,20 @@ node scripts/embed-pdfjs.mjs         # rebuild the pdf.js embed after updating p
 
 ## Architecture
 
-There is no build step. Pages load plain classic scripts (not modules, so `file://` works) that register on `globalThis.Colormeris` (`CM`) with the pattern `(function (CM) { … Object.assign(CM, {…}); })((globalThis.Colormeris ??= {}));`. Load order is in `app.html` and matters. Pure files are also imported by the Node tests through `tests/load.js`.
+There is no build step. Pages load plain classic scripts (not modules, so `file://` works) that register on `globalThis.Colormeris` (`CM`) with the pattern `(function (CM) { … Object.assign(CM, {…}); })((globalThis.Colormeris ??= {}));`. Load order is in the `<script>` tags of `extract.html` and `colormaps.html` and matters: a file destructures what it needs from `CM` when it loads.
 
-| Layer | Files |
+Files are grouped by page. **Pure** files (no DOM) are exactly the ones imported by `tests/load.js`; the Node tests use them, and tests in `tests/<folder>/` mirror `assets/js/<folder>/`. Every file starts with a comment saying what it does. UI files are named for what they render: `*-tool.js`, `*-tab.js`, `*-card.js`.
+
+| Folder | Files |
 | --- | --- |
-| Color, geometry, sampling (pure) | `color.js`, `grid.js` (bilinear grid, `detectGridSize`), `colormap.js`, `extract.js`, `roi.js`, `quantify.js` |
-| Project model and files (pure) | `state.js` (`project.json` schema v2, panels incl. `review`), `export.js` (CSV, zip) |
-| UI shell | `workspace.js` (pages, panels, grid/colorbar placement, undo, zip, tool switching, hotkey dispatch via `ws.addHotkey`; `ws` object with hooks), `viewer.js`, `loader.js` (pdf.js) |
-| Settings | `settings.js` (pure: defaults, `normalizeSettings`, hotkey combos `comboFromEvent`/`findHotkey`, settings zip with `settings.json`), `settings-dialog.js` (the Settings dialog; owns `ws.settings`, saved in localStorage `colormeris.settings`; the key only with *Remember*) |
-| Tools | `heatmap.js`, `ivis.js`, registered with `ws.addTool` (see TOOL_HOOKS at the top of `workspace.js`) |
-| Agent API | `agent-schema.js` (pure: action catalogue as JSON Schema, `validate`, `normalizeArgs`, state snapshot, typed questions `openQuestions`, `resultKeyHash`) and `agent.js` (binds it to the workspace as `window.colormeris`: `run`, `batch`, `tools`, `policy`, `log`) |
-| Heatmap agent | `agent-llm.js` (pure: system prompt, LLM tool list, question ↔ reviewer mapping (`toReviewItem`, `reviewTool`, `fromReviewAnswer`), `reviewAdvice`, `createRetryGuard`, limits), `agent-runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, one reviewer call per panel), `agent-panel.js` (Agent card UI: models, run, Needs review; key, base URL and limits come from `ws.settings.agent`) |
-| Colormap viewer | `colormaps.html` (own page; script order is in the file). Tabs Browse/Compare/Identify/Recolor/CVD, routed by `CM.parseViewerRoute` (`#tab`, `?map=`, `?compare=`). `cmap-viewer.js` (`setupColormapViewer`) builds a shared `ctx` and passes it to the tab modules `cmap-detail.js`, `cmap-compare.js`, `cmap-identify-ui.js`, `cmap-recolor-ui.js`, `cmap-cvd-ui.js`; `cmap-figure-input.js` (image load/drop/paste and drag-a-line canvas) and `cmap-map-picker.js` are shared. Pure files: `cvd.js` (CVD models, L*), `cmap-metrics.js` (ΔE2000 steps, readability, ratings), `cmap-identify.js` (`identifyColorbar`, `identifyColors`, `suggestColormap`; also gives the reference colormap under the Colorbar card in `app.html` via `scheduleBarMatch`; not part of the agent API), `cmap-recolor.js` (recoloring, sine test images), `cmap-refs.js` (references). `cmap-data.js` is generated by `scripts/export-mpl-colormaps.py` (sources, dedup, similarity order, `flip`, packed colors; read the script): do not edit. |
-| Entry | `app.js` creates the workspace, both tools, `window.colormeris` and the agent panel |
+| `assets/js/core/` (pure, both apps) | `color.js`, `cvd.js` (CVD models, L*, `parseHexColors`), `grid.js` (bilinear grid, `detectGridSize`, `readPixel`), `colorbar.js` (colorbar calibration, `refineColorbar`, `snapTick`), `colormap-library.js` (generated by `scripts/export-mpl-colormaps.py`: do not edit), `colormap-match.js` (`identifyColorbar`, `identifyColors`, `suggestColormap`) |
+| `assets/js/extract/` | pure: `project.js` (`project.json` schema v2, panels incl. `review`; unknown tools are refused), `project-files.js` (CSV, zip), `settings.js` (defaults, `normalizeSettings`, hotkey combos, settings zip). UI: `settings-dialog.js` (owns `ws.settings`, localStorage `colormeris.settings`; the key only with *Remember*), `pdf-loader.js` (pdf.js, found relative to this file), `viewer.js` (canvas), `main.js` (creates the workspace, both tools, `window.colormeris`, the Agent card; `#heatmap` / `#roi`) |
+| `assets/js/extract/workspace/` | `workspace.js` builds state, modes, sidebar dispatch, tool switching (`addTool`, `setTool`, TOOL_HOOKS at the top) and the public `ws`. The rest get the private context `w` and are called through it at call time: `history.js` (undo, `commit`), `overlay.js`, `interact.js` (clicks, handle drags, hover), `grid-card.js`, `colorbar-card.js` (ticks, strip, reference colormap via `scheduleBarMatch`), `panels.js`, `source.js` (files, zips, pages, resolution), `export.js`, `hotkeys.js` (`ws.addHotkey`) |
+| `assets/js/extract/heatmap/` | `sampling.js` (pure: `panelProblem`, `extractPanel`), `heatmap-tool.js` |
+| `assets/js/extract/roi/` | pure: `geometry.js` (shapes, copies into boxes, local coordinates), `quantify.js` (signal classification, region stats, results table model). UI: `roi-tool.js` (setup, drawing and editing regions) shares `rctx` with `roi-overlay.js` and `roi-sidebar.js` |
+| `assets/js/agent/` | `schema.js` (pure: action catalogue as JSON Schema, `validate`, `normalizeArgs`, state snapshot, typed questions `openQuestions`, `resultKeyHash`), `llm.js` (pure: system prompt, LLM tool list, question ↔ reviewer mapping (`toReviewItem`, `reviewTool`, `fromReviewAnswer`), `reviewAdvice`, `createRetryGuard`, limits), `api.js` (`window.colormeris`: `run`, `batch`, `tools`, `policy`, `log`), `runner.js` (chat loop via the OpenRouter SDK, page images with rulers and overlays, one reviewer call per panel), `agent-card.js` (Agent card UI; key, base URL and limits come from `ws.settings.agent`) |
+| `assets/js/colormaps/` | pure: `metrics.js` (ΔE2000 steps, readability, ratings), `route.js` (`parseViewerRoute`: `#tab`, `?map=`, `?compare=`), `recolor.js`, `references.js`. UI: `viewer.js` (`setupColormapViewer`: state, colors per view, ratings, tabs, page) builds `ctx` and passes it to `common.js` (DOM helpers), `strips.js` (strips, tooltip), `plots.js`, `footer.js`, `browse-tab.js`, `detail-drawer.js`, `compare-tab.js`, `identify-tab.js`, `recolor-tab.js`, `cvd-tab.js`; `figure-input.js` and `map-picker.js` are shared; `scroll-anchor.js` keeps the reader's place on resize |
+| `assets/css/` | `base.css` (all pages: tokens, top bar, buttons, UI standard components), `landing.css`, `extract.css`, `colormaps.css` |
 
 Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter SDK 1.4.10 as an IIFE bundle (`OpenRouterSDK.OpenRouter`, 834 KB, loaded lazily by the Agent card). `assets/examples/` holds `example.pdf` (a 26-page paper on ionizable lipids for mRNA delivery, with heatmaps on pages 3 and 5) and `example-jet.png` (a copy of the synthetic jet calibration figure), loaded by the empty-state buttons. `assets/img/` is git-ignored.
 
@@ -48,7 +50,7 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 - **Reviewer**: `get_questions` produces typed questions (`confirm_grid_size`, `classify_flagged` for ≤ 3 flagged cells, `classify_flagged_cells` for more, `confirm_tick_order`, `confirm_extraction`). The runner sends each panel's open questions to the reviewer (`anthropic/claude-haiku-4.5` by default, via `chat.send`) in one request, with four images (figure, calibration overlay, reconstruction, colorbar zoom). Each question becomes a choice between named options; the reviewer must answer through a forced `answer` tool call with option, confidence and reason. The reason is passed on to the LLM in `reviewAdvice`. Jev (`/api/alpha/decisions`) was removed on 2026-09-30: it saw no images and was unsure on `confirm_extraction`. `policy.minConfidence` (0.9) gates applying; lower answers are "escalated" to *Needs review*. `source: "human"` always applies. The reviewer's confidence is self-reported, not calibrated.
 - **Reviews** (`panel.review`) are stored with the `resultHash` of the values they judged. They are `stale` once the values change; rejected panels get a red dot and Redo / Accept anyway in *Needs review*.
 - **Forgiving arguments**: `normalizeArgs` drops `null` optionals, and `add_tick` with both `at` and `t` uses `at`. Models did send both, which caused endless "give exactly one of t or at" loops.
-- **Snapping**: `set_colorbar` and `add_tick` (agent API only, `snap: false` to skip) move the LLM's rough points onto the colored strip and the tick marks (`refineColorbar`, `snapTick` in `colormap.js`). Measured on `example.pdf` page 5, Fig h: ends and ticks within 1 px. Ticks keep their page positions when the colorbar moves.
+- **Snapping**: `set_colorbar` and `add_tick` (agent API only, `snap: false` to skip) move the LLM's rough points onto the colored strip and the tick marks (`refineColorbar`, `snapTick` in `core/colorbar.js`). Measured on `example.pdf` page 5, Fig h: ends and ticks within 1 px. Ticks keep their page positions when the colorbar moves.
 - **Finish check**: `finishCheck` refuses `finish` for unseen pages or half-done panels and gives a per-page checklist once; after 3 refusals any finish is accepted.
 - **Retry guard**: 3 attempts per tool per panel, then blocked; 3 `resolve_questions` per panel; the run stops after 8 failures in a row.
 - **Docs**: `docs/agent.md` is generated from the schemas, prompt and limits by `scripts/agent-docs.mjs`. After changing any action, prompt or limit, run `npm run docs`.
@@ -57,24 +59,24 @@ Vendored in `assets/vendor/`: pdf.js 6.3.289, JSZip 3.10.2, and the OpenRouter S
 
 - Match the surrounding code: small functions, comments that explain *why*, and the existing naming. README and docs use short, plain sentences.
 - Commit only when the user says "commit". Messages have a short title and a body explaining why, ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The branch is `main`; nothing has been pushed by Claude.
-- Scripts and the stylesheet in `app.html` carry `?v=N`. Bump N (for example `sed -i '' 's/\.js?v=1"/.js?v=2"/' app.html`) with every deploy so browsers never mix old and new files.
+- Scripts and stylesheets in the pages carry `?v=N`. Bump N of the changed files (for example `sed -i '' 's#roi/roi-tool.js?v=1"#roi/roi-tool.js?v=2"#' extract.html`) with every deploy so browsers never mix old and new files.
 - Add a unit test for pure logic (`tests/*.test.js`); browser behaviour is checked in the preview.
 
-### UI standard (`app.html`, heatmap and IVIS)
+### UI standard (`extract.html`, heatmap and ROI)
 
-- **Tokens** on `:root`: `--control-h` (32 px, topbar and empty state) and `--control-h-sm` (28 px, everything in the sidebar and viewbar), `--space-1..3`, `--fs-xs/sm/md`. In `body.app .sidebar`, every button, input and select is `--control-h-sm` tall, so mixed rows line up. Don't add `.small` there.
+- **Tokens** on `:root`: `--control-h` (32 px, topbar and empty state) and `--control-h-sm` (28 px, everything in the sidebar and viewbar), `--space-1..3`, `--fs-xs/sm/md`. In `body.extract .sidebar`, every button, input and select is `--control-h-sm` tall, so mixed rows line up. Don't add `.small` there.
 - **Buttons**: default (bordered) for secondary actions; `primary` only for the card's next step (`setNextStep` in `workspace.js` moves it as steps finish) or its main output (Run agent, Download CSV); `danger` (bordered, red) for Remove, Delete, Clear and Stop, always last in its row; `subtle` (borderless, with a hover background) for utilities such as Zoom to, Show and ×. Don't use `ghost` in the sidebar.
 - **Toggles and modes** use `ws.setPressed(el, on)`, which sets `.active` and `aria-pressed` together.
 - **Chips** (`.chip` in a `.chip-list`, with the name in `.chip-label`) are for selectable items: panels, regions, other pages. Selected = `aria-pressed="true"`. Never use `.btn` for list items.
 - **Card anatomy**: `.card-head` (h2, optional `.tag`, status `.badge`), then `.card-actions` (one row of buttons), then the fields, then `details.options` (summary, optional `.summary-note`, `.options-body`) for rarely changed settings, then at most one `.hint`.
 - **Fields**: labels above inputs, short, with units and explanations in `title`. Fields side by side go in `.fields` (a grid; `.fields.wide` for longer selects). Empty `.hint` and `.chip-list` elements collapse.
-- New rules for the app go in the "UI standard" block of `style.css`. `index.html` and `colormaps.html` share the stylesheet, so scope anything that would change them under `.app`.
+- Shared components go in the "UI standard" block of `base.css`; rules for one page go in its own sheet (`extract.css`, `colormaps.css`, `landing.css`).
 
 ## Browser testing tips (Claude's built-in browser)
 
-- The dev server caches aggressively. After editing, `fetch('/assets/js/<file>', {cache: 'reload'})` for the changed files, then load `app.html?v=<n>#heatmap` with a new `n`.
+- The dev server caches aggressively. After editing, `fetch('/assets/js/<file>', {cache: 'reload'})` for the changed files, then load `extract.html?v=<n>#heatmap` with a new `n`.
 - When the Browser pane is hidden, `requestAnimationFrame` is paused, so pdf.js page rendering (`open_url` of a PDF, `go_to_page`) stalls. Start the call without awaiting it, then take a `screenshot` (which advances frames) and poll.
-- Resizing with `resize_window` fires no `resize` event and no media-query `change`: dispatch `window.dispatchEvent(new Event('resize'))` yourself. Scroll events are not delivered while the pane is hidden either (they run in rendering steps), so after setting `scrollTop` dispatch `new Event('scroll')` on the scroller; a screenshot advances frames but also fires `resize`. The colormap viewer keeps the reader's place on resize (`keepPlaceOnResize` in `cmap-viewer.js`) from the anchor saved on scroll.
+- Resizing with `resize_window` fires no `resize` event and no media-query `change`: dispatch `window.dispatchEvent(new Event('resize'))` yourself. Scroll events are not delivered while the pane is hidden either (they run in rendering steps), so after setting `scrollTop` dispatch `new Event('scroll')` on the scroller; a screenshot advances frames but also fires `resize`. The colormap viewer keeps the reader's place on resize (`keepPlaceOnResize` in `colormaps/scroll-anchor.js`) from the anchor saved on scroll.
 - `javascript_tool` calls time out after 45 s. Start long agent runs with a click and poll in separate calls.
 - Opening a file over an existing project calls `confirm()`; set `window.confirm = () => true` first.
 - The agent can be exercised without cost by assigning a mock `globalThis.OpenRouterSDK = { OpenRouter: class { get chat() {…} get models() {…} } }` before pressing *Run agent*. Both the LLM and the reviewer go through `chat.send`; tell them apart by `chatRequest.model` (the reviewer's request has `toolChoice` forced to `answer`).
@@ -91,5 +93,5 @@ Verified with real runs on `example.pdf` page 5 (Fig 2f, 9 × 12): the grid and 
 3. The LLM can set rows/cols directly (`set_grid` with rows/cols, `set_grid_size`), which skips the reviewer's grid-size check.
 4. Exclusions (`excluded` in results) are not applied to the CSV exports, and `agent/*.json` logs are not reloaded from a zip.
 5. No typed questions yet for tick-label reading or colorbar direction (would need OCR/vision evidence).
-6. The agent only handles heatmaps, not IVIS.
-7. The research plan in [docs/research.md](docs/research.md) (synthetic benchmark, VLM baselines, IVIS validation, reviewer calibration curves) has not been started.
+6. The agent only handles heatmaps, not ROI.
+7. The research plan in [docs/research.md](docs/research.md) (synthetic benchmark, VLM baselines, IVIS validation of the ROI tool, reviewer calibration curves) has not been started.
