@@ -43,6 +43,10 @@
       text: 'Waskom ML (2021). seaborn: statistical data visualization. Journal of Open Source Software 6(60):3021. Palettes: seaborn.pydata.org.',
       url: 'https://doi.org/10.21105/joss.03021',
     },
+    carbonplan: {
+      text: 'CarbonPlan (2021). CarbonPlan colormaps, perceptually uniform in light and dark versions. Tables from the colormaps Python package by Pratiman Patel.',
+      url: 'https://carbonplan.org/design/colormaps',
+    },
     carto: {
       text: 'CARTO. CARTOColors: color schemes for maps, version 5.0.2 (CC BY 4.0). Continuous versions here interpolate the 7-step palettes linearly in sRGB.',
       url: 'https://carto.com/carto-colors/',
@@ -145,7 +149,7 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom, CarbonPlan (carbonplan.*) CarbonPlan. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
@@ -154,6 +158,7 @@
     if (name.startsWith('cmo.')) return ['cmocean'];
     if (name.startsWith('cet_')) return ['colorcet'];
     if (SEABORN.includes(name)) return ['seaborn'];
+    if (name.startsWith('carbonplan.')) return ['carbonplan'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

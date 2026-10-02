@@ -1,10 +1,11 @@
 """Write assets/js/cmap-data.js with the colormaps for colormaps.html.
 
-Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet --with seaborn python scripts/export-mpl-colormaps.py
+Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet --with seaborn --with colormaps python scripts/export-mpl-colormaps.py
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
 Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
-cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021) and
+cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021), CarbonPlan (from the colormaps
+package by Pratiman Patel, which ships CarbonPlan's 255-color tables) and
 CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
 version). CARTOColors are discrete palettes of up to 7 steps; like
 palettable's mpl_colormap, the continuous versions interpolate the 7-step
@@ -29,6 +30,7 @@ import cmocean
 import colorcet
 import seaborn
 from seaborn.palettes import SEABORN_PALETTES
+from importlib.metadata import distribution, version as pkg_version
 import matplotlib
 import numpy as np
 from matplotlib import colormaps
@@ -174,6 +176,42 @@ def seaborn_groups():
         yield group, sub, names
 
 
+# CarbonPlan's maps come in a light and a dark version (for light and dark
+# backgrounds); both are kept, as their colors differ. Groups follow
+# carbonplan.org/design/colormaps; the *grey maps diverge through white
+# (light) or near-black (dark) to grey.
+CP_GROUPS = [
+    ("sequential", "CarbonPlan", ["reds", "oranges", "yellows", "greens", "teals", "blues", "purples",
+                                  "pinks", "greys", "fire", "earth", "water", "heart", "wind",
+                                  "warm", "cool"]),
+    ("diverging", "CarbonPlan", ["pinkgreen", "redteal", "orangeblue", "yellowpurple", "redgrey",
+                                 "orangegrey", "yellowgrey", "greengrey", "tealgrey", "bluegrey",
+                                 "purplegrey", "pinkgrey"]),
+    ("cyclic", "CarbonPlan", ["sinebow"]),
+    ("rainbow", "CarbonPlan", ["rainbow"]),
+]
+
+
+# Each .rgb file is "ncolors=255", a header line "r g b", then one color per line.
+def carbonplan_groups():
+    # Found through the package metadata: the colormaps module's __getattr__
+    # hides __spec__, so importlib.resources cannot see it.
+    folder = Path(distribution("colormaps").locate_file("colormaps/colormaps/carbonplan"))
+    found = {f.name.removesuffix(".rgb") for f in folder.iterdir() if f.name.endswith(".rgb")}
+    listed = {f"{n}_{t}" for _, _, names in CP_GROUPS for n in names for t in ("light", "dark")}
+    assert found == listed, f"CarbonPlan maps changed: {found ^ listed}"
+    for group, sub, names in CP_GROUPS:
+        out = []
+        for n in names:
+            for theme in ("light", "dark"):
+                rows = (folder / f"{n}_{theme}.rgb").read_text().split("\n")[2:]
+                rgb = [[int(v) / 255 for v in r.split()] for r in rows if r.strip()]
+                full = f"carbonplan.{n}_{theme}"
+                EXTRA[full] = LinearSegmentedColormap.from_list(full, rgb, N=N)
+                out.append(full)
+        yield group, sub, out
+
+
 CARTO_VERSION = "5.0.2"
 CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
 # CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
@@ -223,7 +261,7 @@ seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
                        ("crameri", list(crameri_groups())), ("cmocean", list(cmocean_groups())),
                        ("colorcet", list(colorcet_groups())),
-                       ("seaborn", list(seaborn_groups())), ("carto", list(carto_groups()))]:
+                       ("seaborn", list(seaborn_groups())), ("carbonplan", list(carbonplan_groups())), ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -259,6 +297,7 @@ sources = [
     {"key": "cmocean", "label": "cmocean", "version": cmocean.__version__.lstrip("v")},
     {"key": "colorcet", "label": "colorcet", "version": colorcet.__version__},
     {"key": "seaborn", "label": "seaborn", "version": seaborn.__version__},
+    {"key": "carbonplan", "label": "CarbonPlan", "version": pkg_version("colormaps")},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
@@ -272,4 +311,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CARTOColors {CARTO_VERSION})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION})")
