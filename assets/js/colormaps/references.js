@@ -63,6 +63,10 @@
       text: 'The MathWorks, Inc. MATLAB colormap function: parula (default colormap since R2014b) and the lines color order. Parula values as published in the BIDS/colormap repository.',
       url: 'https://www.mathworks.com/help/matlab/ref/colormap.html',
     },
+    paletteer: {
+      text: 'Hvitfeldt E (2021). paletteer: comprehensive collection of color palettes. R package (github.com/EmilHvitfeldt/paletteer), which collects palettes from the R packages named in each palette (ggthemes, ggsci, grDevices, wesanderson, tvthemes and others), as listed and sampled by R Charts. Continuous palettes here are 30 samples, interpolated linearly.',
+      url: 'https://r-charts.com/color-palettes/',
+    },
     scm: {
       text: 'Crameri F (2023). Scientific colour maps, version 8.0.1. Zenodo. Read through the cmcrameri package.',
       url: 'https://doi.org/10.5281/zenodo.8409685',
@@ -161,7 +165,7 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom, CarbonPlan (carbonplan.*) CarbonPlan, NCL (ncl.*) NCAR, SciVisColor (sciviz.*) Samsel et al., MATLAB (matlab.*) MathWorks. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi, seaborn Waskom, CarbonPlan (carbonplan.*) CarbonPlan, NCL (ncl.*) NCAR, SciVisColor (sciviz.*) Samsel et al., MATLAB (matlab.*) MathWorks, R palettes (package::name) paletteer. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
@@ -174,6 +178,7 @@
     if (name.startsWith('ncl.')) return ['ncl'];
     if (name.startsWith('sciviz.')) return ['sciviz'];
     if (name.startsWith('matlab.')) return ['mathworks'];
+    if (name.includes('::')) return ['paletteer'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

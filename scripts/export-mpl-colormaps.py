@@ -387,6 +387,90 @@ def matlab_groups():
     yield from MATLAB_GROUPS
 
 
+# R's palettes, as listed by R Charts (r-charts.com/color-palettes), which
+# shows the palettes of the paletteer package. scripts/fetch-r-palettes.py
+# saved them in scripts/data/r-palettes.json: continuous ones as 30 samples
+# (interpolated linearly here), discrete ones with every color (shown as
+# steps, like NCL's tables). Names are paletteer's: "ggthemes::Blue".
+# paletteer has no types, so the groups are ours: the continuous and the
+# stepped ramps by their lightness profile (monotone: sequential; lighter or
+# darker in the middle than at both ends: diverging), the discrete sets of
+# colors by package, with the exceptions below.
+R_FILE = Path(__file__).resolve().parent / "data" / "r-palettes.json"
+# RColorBrewer is Matplotlib's ColorBrewer; the viridis package and the
+# grDevices copies of viridis and Crameri's maps are in earlier sources.
+R_SKIP_PACKAGES = {"RColorBrewer", "viridis"}
+# ggsci::default_igv has 51 colors, too many categories for the viewer (32 at most).
+R_SKIP = {"ggsci::default_igv"} | {f"grDevices::{n}" for n in ["Viridis", "Plasma", "Inferno", "Cividis", "Lajolla", "Turku", "Broc", "Cork",
+                                      "Vik", "Berlin", "Lisbon", "Tofino", "Oslo"]}
+# By hand where the lightness rule fails.
+R_GROUP = {
+    "grDevices::rainbow": "rainbow", "grDevices::topo.colors": "rainbow", "grDevices::terrain.colors": "rainbow",
+    "grDevices::cm.colors": "diverging",
+    "ggthemes::Blue Light": "sequential", "ggthemes::Orange Light": "sequential",
+    "ggthemes::Orange-Blue Light Diverging": "diverging", "ggthemes::Classic Red-Green Light": "diverging",
+    "colorBlindness::paletteMartin": "qualitative", "colorBlindness::PairedColor12Steps": "qualitative",
+    "dichromat::Categorical_12": "qualitative", "cartography::pastel.pal": "qualitative",
+    "colorBlindness::Blue2Green14Steps": "diverging", "dichromat::BluetoGreen_14": "diverging",
+    "colorBlindness::SteppedSequential5Steps": "others", "dichromat::SteppedSequential_5": "others",
+    "grDevices::blues9": "sequential",
+    "ggthemes::Seattle_Grays": "sequential", "ggthemes::Classic_Gray_5": "sequential",
+    "cartography::harmo.pal": "qualitative", "cartography::multi.pal": "qualitative",
+}
+R_BY_LIGHTNESS = {"colorBlindness", "dichromat"}  # discrete packages of ramps
+R_PACKAGE_LABEL = {"ggthemes_solarized": "ggthemes Solarized", "ggthemes_ptol": "ggthemes"}
+
+
+def lightness(rgb):
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    f = lin @ np.array([0.2126, 0.7152, 0.0722])
+    f = np.where(f > 0.008856, np.cbrt(f), 7.787 * f + 16 / 116)
+    return 116 * f - 16
+
+
+def r_group(name, kind, rgb):
+    if name in R_GROUP:
+        return R_GROUP[name]
+    pkg = name.split("::")[0]
+    if kind == "discrete" and pkg not in R_BY_LIGHTNESS:
+        if pkg == "ggsci" and name.endswith("_material"):
+            return "sequential"
+        if pkg == "ggthemes" and re.search(r"Classic_(Purple_Gray|Green_Orange|Blue_Red)_\d+", name):
+            return "diverging"
+        return "qualitative"
+    if kind == "dynamic":  # cartography's ramps (its three mixed palettes are in R_GROUP); the rest are accents
+        return "sequential" if pkg == "cartography" else "qualitative"
+    L = lightness(rgb)
+    steps = np.diff(L)
+    if (steps >= -0.5).mean() >= 0.9 or (steps <= 0.5).mean() >= 0.9:
+        return "sequential" if L.max() - L.min() >= 12 or pkg != "grDevices" else "others"
+    mid, ends = L[len(L) // 2], (L[0], L[-1])
+    if mid - max(ends) > 10 or min(ends) - mid > 10:
+        return "diverging"
+    return "others"
+
+
+def r_groups():
+    rows = json.loads(R_FILE.read_text())
+    blocks = {}
+    for kind, name, hexes in rows:
+        pkg = name.split("::")[0]
+        if pkg in R_SKIP_PACKAGES or name in R_SKIP:
+            continue
+        rgb = np.array([[int(h[i:i + 2], 16) for i in (1, 3, 5)] for h in hexes]) / 255
+        group = r_group(name, kind, rgb)
+        assert name not in EXTRA, f"duplicate R palette {name}"
+        if group == "qualitative" or kind != "continuous":
+            EXTRA[name] = ListedColormap(rgb, name=name)
+        else:
+            EXTRA[name] = LinearSegmentedColormap.from_list(name, rgb, N=N)
+        label = R_PACKAGE_LABEL.get(pkg, pkg)
+        sub = f"{label} (R)" if group != "others" else f"{label} (R, miscellaneous)"
+        blocks.setdefault((group, sub), []).append(name)
+    for (group, sub), names in blocks.items():
+        yield group, sub, names
+
+
 # A map from a later source that matches an earlier one (or its reverse) to
 # within 2/255 is not added. Cyclic maps also match when rotated (CET_C1s is
 # CET_C1 started a quarter turn later). A short table (ncl.matlab_jet, 64
@@ -414,7 +498,8 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
                        ("colorcet", list(colorcet_groups())),
                        ("seaborn", list(seaborn_groups())), ("carbonplan", list(carbonplan_groups())),
                        ("ncl", list(ncl_groups())), ("sciviz", list(sciviz_groups())), ("carto", list(carto_groups())),
-                       ("matlab", list(matlab_groups()))]:
+                       ("matlab", list(matlab_groups())),
+                       ("r", list(r_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -551,6 +636,7 @@ sources = [
     {"key": "sciviz", "label": "SciVisColor", "version": pkg_version("colormaps")},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
     {"key": "matlab", "label": "MATLAB", "version": "R2014b"},
+    {"key": "r", "label": "R packages", "version": "paletteer"},
 ]
 
 
