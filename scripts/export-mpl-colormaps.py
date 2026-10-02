@@ -3,7 +3,11 @@
 Run:  uv run --with matplotlib --with cmasher --with cmcrameri python scripts/export-mpl-colormaps.py
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
-Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685).
+Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
+CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
+version). CARTOColors are discrete palettes of up to 7 steps; like
+palettable's mpl_colormap, the continuous versions interpolate the 7-step
+palette linearly in sRGB. Qualitative ones keep their longest palette.
 Continuous maps are sampled at 256 evenly spaced points (matplotlib's own
 lookup-table size); qualitative maps keep their listed colors. Groups follow the
 categories of matplotlib's colormap reference, regrouped into sequential,
@@ -13,6 +17,8 @@ maps likewise (cmc.batlow). A map already shown under an earlier source
 (berlin, managua and vanimo ship with matplotlib) is not added again.
 """
 import json
+import re
+import urllib.request
 from pathlib import Path
 
 import cmasher
@@ -21,7 +27,7 @@ import cmcrameri.cm
 import matplotlib
 import numpy as np
 from matplotlib import colormaps
-from matplotlib.colors import ListedColormap, to_hex
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap, to_hex
 
 # Aliases (grey, Grays, gist_grey, gist_yerg) and _r variants are left out.
 # (group, sub-heading, names); order is the display order.
@@ -86,7 +92,40 @@ def crameri_groups():
         yield group, sub, [f"cmc.{n}" for n in names]
 
 
-# A CMasher or Crameri map that matches an earlier one (or its reverse) to within 2/255 is not added.
+CARTO_VERSION = "5.0.2"
+CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
+# CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
+CARTO_TAGS = {
+    "quantitative": ("sequential", "CARTOColors"),
+    "aggregation": ("sequential", "CARTOColors"),
+    "diverging": ("diverging", "CARTOColors"),
+    "qualitative": ("others", "Qualitative (CARTOColors)"),
+}
+EXTRA = {}  # name -> colormap, for maps matplotlib does not register
+
+
+# carto.js is `export const Burg = { 2: [...], …, 7: [...], tags: [...] };` per palette.
+def carto_groups():
+    js = urllib.request.urlopen(CARTO_URL).read().decode()
+    groups = {}
+    for name, body in re.findall(r"export const (\w+) = \{(.*?)\n\};", js, re.S):
+        sizes = {int(k): re.findall(r"#[0-9A-Fa-f]{6}", v)
+                 for k, v in re.findall(r"(\d+): \[(.*?)\]", body, re.S)}
+        tags = re.findall(r'"(\w+)"', re.search(r"tags: \[(.*?)\]", body, re.S).group(1))
+        group, sub = CARTO_TAGS[tags[0]]
+        colors = [c.lower() for c in sizes[max(sizes)]]
+        full = f"carto.{name}"
+        if sub.startswith("Qualitative"):
+            EXTRA[full] = ListedColormap(colors, name=full)
+        else:
+            EXTRA[full] = LinearSegmentedColormap.from_list(full, colors, N=N)
+        groups.setdefault((group, sub), []).append(full)
+    assert len(EXTRA) >= 34, f"only {len(EXTRA)} CARTO palettes parsed"
+    for (group, sub), names in groups.items():
+        yield group, sub, names
+
+
+# A map from a later source that matches an earlier one (or its reverse) to within 2/255 is not added.
 def duplicate_of(rgb, seen):
     for name, other in seen.items():
         if min(np.abs(rgb - other).max(), np.abs(rgb[::-1] - other).max()) < 2 / 255:
@@ -97,11 +136,11 @@ def duplicate_of(rgb, seen):
 maps = []
 seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
-                       ("crameri", list(crameri_groups()))]:
+                       ("crameri", list(crameri_groups())), ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
-            cmap = colormaps[name]
-            qualitative = sub == "Qualitative"
+            cmap = EXTRA.get(name) or colormaps[name]
+            qualitative = sub.startswith("Qualitative")
             assert not qualitative or isinstance(cmap, ListedColormap), name
             if not qualitative:
                 rgb = cmap(X)[:, :3]
@@ -110,6 +149,12 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
                     print(f"skipped {name}: same colors as {twin}")
                     continue
                 seen[name] = rgb
+            else:
+                hexes = colors_of(cmap, True)
+                twin = next((m["name"] for m in maps if m["colors"] == hexes), None)
+                if twin:
+                    print(f"skipped {name}: same colors as {twin}")
+                    continue
             maps.append({
                 "name": name,
                 "group": group,
@@ -124,6 +169,7 @@ sources = [
     {"key": "matplotlib", "label": "Matplotlib", "version": matplotlib.__version__},
     {"key": "cmasher", "label": "CMasher", "version": cmasher.__version__},
     {"key": "crameri", "label": "Crameri", "version": cmcrameri.__scm_version__},
+    {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
 out = Path(__file__).resolve().parent.parent / "assets" / "js" / "cmap-data.js"
@@ -136,4 +182,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, CARTOColors {CARTO_VERSION})")

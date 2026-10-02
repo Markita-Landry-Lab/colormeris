@@ -1089,7 +1089,7 @@
     root.replaceChildren();
     const inner = el('div', { class: 'cmap-inner' });
     inner.append(el('h1', {}, 'Colormaps'));
-    inner.append(el('p', { class: 'cmap-intro' }, `The ${data.maps.length} colormaps of Matplotlib, CMasher and Crameri’s Scientific colour maps as seen, as simulated for three kinds of color-vision deficiency, and in grayscale, rated for uniformity, CVD and grayscale safety, and how well values can be read back. Hover a strip for its values; click to copy the hex.`));
+    inner.append(el('p', { class: 'cmap-intro' }, `The ${data.maps.length} colormaps of Matplotlib, CMasher, Crameri’s Scientific colour maps and CARTOColors as seen, as simulated for three kinds of color-vision deficiency, and in grayscale, rated for uniformity, CVD and grayscale safety, and how well values can be read back. Hover a strip for its values; click to copy the hex.`));
     const ui = buildControls();
     const header = headerRow(true);
     // Tabs, controls and column names share one sticky bar, so they stay
