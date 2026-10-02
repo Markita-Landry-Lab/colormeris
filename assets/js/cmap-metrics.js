@@ -147,7 +147,10 @@
     return out;
   }
 
-  function readView(feats, dist, cyclic, gap = 0.1) {
+  // One pass per view gives both its readability and its smallest separation
+  // (as `separations` finds it): both look at the same 64 samples and the
+  // same pairs, and the ΔE2000 of each pair is most of the viewer's start-up time.
+  function readScan(feats, dist, cyclic, gap = 0.1) {
     const n = feats.length;
     let levels = 1;
     let anchor = feats[0];
@@ -170,29 +173,42 @@
     const idx = Array.from({ length: m }, (_, k) => Math.round((k * (n - 1)) / (m - 1)));
     const minIdx = Math.max(1, Math.ceil(gap * (cyclic ? m : m - 1) - 1e-9));
     const amb = new Array(m).fill(false);
+    let best = { min: Infinity, i: 0, j: 0 };
     for (let i = 0; i < m; i++) {
       for (let j = i + minIdx; j < m; j++) {
         if (cyclic && m - (j - i) < minIdx) continue;
-        if (dist(feats[idx[i]], feats[idx[j]]) < READ_DE) amb[i] = amb[j] = true;
+        const d = dist(feats[idx[i]], feats[idx[j]]);
+        if (d < READ_DE) amb[i] = amb[j] = true;
+        if (d < best.min) best = { min: d, i, j };
       }
     }
     const half = 0.5 / (m - 1);
     const ambiguousSpans = mergeSpans(amb.flatMap((on, k) => (on ? [[Math.max(0, k / (m - 1) - half), Math.min(1, k / (m - 1) + half)]] : [])));
     return {
-      levels,
-      flat: windows ? flatCount / windows : 0,
-      ambiguous: amb.filter(Boolean).length / m,
-      flatSpans: mergeSpans(flatSpans),
-      ambiguousSpans,
+      view: {
+        levels,
+        flat: windows ? flatCount / windows : 0,
+        ambiguous: amb.filter(Boolean).length / m,
+        flatSpans: mergeSpans(flatSpans),
+        ambiguousSpans,
+      },
+      sep: Number.isFinite(best.min) ? { min: best.min, t: [best.i / (m - 1), best.j / (m - 1)] } : null,
     };
   }
 
+  // Features per view: Lab as seen and in each CVD view, L* in grayscale.
+  function viewScans(rgbs, cyclic) {
+    const out = { orig: readScan(rgbs.map(rgbToLab), labDist, cyclic) };
+    for (const type of CVD_TYPES) out[type] = readScan(rgbs.map((c) => rgbToLab(simulateCvd(c, type))), labDist, cyclic);
+    out.gray = readScan(rgbs.map((c) => rgbToLab(c)[0]), lDist, cyclic);
+    return out;
+  }
+
+  const pick = (scans, key) => Object.fromEntries(Object.entries(scans).map(([k, v]) => [k, v[key]]));
+
   function readability(rgbs, { kind = 'continuous', cyclic = false } = {}) {
     if (kind === 'qualitative' || rgbs.length < 2) return null;
-    const out = { orig: readView(rgbs.map(rgbToLab), labDist, cyclic) };
-    for (const type of CVD_TYPES) out[type] = readView(rgbs.map((c) => rgbToLab(simulateCvd(c, type))), labDist, cyclic);
-    out.gray = readView(rgbs.map((c) => rgbToLab(c)[0]), lDist, cyclic);
-    return out;
+    return pick(viewScans(rgbs, cyclic), 'view');
   }
 
   function gradeReadable({ flat, ambiguous }, { flat: f, ambiguous: a }) {
@@ -212,12 +228,14 @@
     // 64 samples: 8-bit rounding makes neighboring steps of 256 samples noisy.
     const steps = discrete ? [] : perceptualSteps(resample(rgbs, SAMPLES));
     const st = stepStats(steps);
-    const sep = separations(rgbs, { kind, cyclic });
+    // Continuous maps get their separations from the readability scan.
+    const scans = discrete || rgbs.length < 2 ? null : viewScans(rgbs, cyclic);
+    const sep = scans ? pick(scans, 'sep') : separations(rgbs, { kind, cyclic });
     const cvdWorst = Math.min(...CVD_TYPES.map((t) => sep[t]?.min ?? 0));
     const origMin = sep.orig?.min ?? 0;
     const cvdRatio = origMin > 1e-9 ? cvdWorst / origMin : 0;
     const grayMin = sep.gray?.min ?? 0;
-    const read = readability(rgbs, { kind, cyclic });
+    const read = scans && pick(scans, 'view');
     return {
       steps,
       stepStats: st,

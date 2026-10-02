@@ -572,6 +572,30 @@
 
     // ---- list rows ----
 
+    // Ratings need the metrics, a few ms per map, which for every map took
+    // most of the start-up time. List rows fill theirs in when they come near
+    // the viewport (sections start closed), and the rest are computed while
+    // the page is idle, so sorting and filtering by rating stay quick.
+    const rowObserver = 'IntersectionObserver' in window
+      ? new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          rowObserver.unobserve(e.target);
+          e.target._fill();
+        }
+      }, { rootMargin: '400px 0px' })
+      : null;
+
+    function precomputeMetrics() {
+      const queue = data.maps.slice();
+      const idle = window.requestIdleCallback || ((f) => setTimeout(() => f({ timeRemaining: () => 8 }), 50));
+      const step = (deadline) => {
+        while (queue.length && deadline.timeRemaining() > 4) metrics(queue.shift());
+        if (queue.length) idle(step);
+      };
+      idle(step);
+    }
+
     function makeRow(map) {
       const item = el('div', { class: 'cmap-item' });
       const row = el('div', { class: 'cmap-row' });
@@ -580,7 +604,7 @@
 
       const name = el('div', { class: 'cmap-name' });
       const code = el('code', { class: 'cmap-name-link', title: `Show details of ${map.name}` }, map.name);
-      name.append(code, ratingPills(map));
+      name.append(code);
       row.append(name);
 
       const strips = [];
@@ -592,7 +616,15 @@
         cell.append(strip);
         row.append(cell);
       });
-      row.append(...ratingCells(map));
+      const cells = RATING_COLS.map(() => el('span', { class: 'cmap-rc' }));
+      row.append(...cells);
+      row._fill = () => {
+        name.append(ratingPills(map));
+        const filled = ratingCells(map);
+        cells.forEach((c, i) => c.replaceWith(filled[i]));
+      };
+      if (rowObserver) rowObserver.observe(row);
+      else row._fill();
 
       const button = el('button', {
         class: 'cmap-toggle cmap-open-btn', type: 'button', 'aria-expanded': 'false',
@@ -827,8 +859,9 @@
       const on = FILTERS.filter(([k]) => ui.boxes[k].checked);
       const srcs = Object.keys(ui.sources).filter((k) => ui.sources[k].checked);
       for (const entry of items) {
-        const r = metrics(entry.map).rating;
-        const fails = on.some(([, , , key]) => r[key] !== 'yes') || (srcs.length > 0 && !srcs.includes(entry.map.source));
+        // Only rating filters need the metrics; a search must not compute them all.
+        const fails = (on.length > 0 && on.some(([, , , key]) => metrics(entry.map).rating[key] !== 'yes'))
+          || (srcs.length > 0 && !srcs.includes(entry.map.source));
         entry.item.hidden = (q !== '' && !entry.item.dataset.name.includes(q)) || fails;
       }
       for (const sub of root.querySelectorAll('.cmap-browse .cmap-sub')) {
@@ -1150,6 +1183,7 @@
     }
     if (route.map) showRow(route.map, { smooth: false });
     keepPlaceOnResize();
+    precomputeMetrics();
     return { items, setReversed(v) { state.reversed = !!v; } };
   }
 
