@@ -35,6 +35,10 @@
       text: 'Thyng KM, Greene CA, Hetland RD, Zimmerle HM, DiMarco SF (2016). True colors of oceanography: guidelines for effective and accurate colormap selection. Oceanography 29(3):9–13.',
       url: 'https://doi.org/10.5670/oceanog.2016.66',
     },
+    colorcet: {
+      text: 'Kovesi P (2015). Good colour maps: how to design them. arXiv:1509.03700. As packaged in colorcet (HoloViz).',
+      url: 'https://colorcet.holoviz.org/',
+    },
     carto: {
       text: 'CARTO. CARTOColors: color schemes for maps, version 5.0.2 (CC BY 4.0). Continuous versions here interpolate the 7-step palettes linearly in sRGB.',
       url: 'https://carto.com/carto-colors/',
@@ -135,13 +139,14 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release, CARTOColors (carto.*) CARTO, cmocean (cmo.*) Thyng et al., colorcet (cet_*) Kovesi. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
     if (name.startsWith('cmc.')) return ['crameri', 'scm'];
     if (name.startsWith('carto.')) return ['carto'];
     if (name.startsWith('cmo.')) return ['cmocean'];
+    if (name.startsWith('cet_')) return ['colorcet'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

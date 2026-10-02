@@ -1,10 +1,10 @@
 """Write assets/js/cmap-data.js with the colormaps for colormaps.html.
 
-Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean python scripts/export-mpl-colormaps.py
+Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --with colorcet python scripts/export-mpl-colormaps.py
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
 Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
-cmocean (Thyng et al. 2016) and
+cmocean (Thyng et al. 2016), colorcet (Kovesi 2015) and
 CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
 version). CARTOColors are discrete palettes of up to 7 steps; like
 palettable's mpl_colormap, the continuous versions interpolate the 7-step
@@ -26,6 +26,7 @@ import cmasher
 import cmcrameri
 import cmcrameri.cm
 import cmocean
+import colorcet
 import matplotlib
 import numpy as np
 from matplotlib import colormaps
@@ -113,6 +114,41 @@ def cmocean_groups():
         yield group, sub, [f"cmo.{n}" for n in names]
 
 
+# colorcet registers each Kovesi map up to three times: by its descriptive
+# name (linear_kryw_0_100_c71), a short alias (fire) and its CET code
+# (CET_L3). We keep one, under the short alias if there is one, the
+# descriptive name otherwise; CET codes only survive for maps that have no
+# other name (the duplicate check drops the rest). The _s25 maps are the
+# cyclic ones rotated, and the 256-color Glasbey palettes are not colormaps
+# one reads values from, so both are left out.
+CET_PREFIX = [  # (start of the descriptive name, group, sub-heading)
+    ("linear", "sequential", "colorcet"),
+    ("diverging", "diverging", "colorcet"),
+    (("cyclic", "circle"), "cyclic", "colorcet"),
+    ("rainbow", "rainbow", "colorcet"),
+    ("isoluminant", "others", "Isoluminant (colorcet)"),
+]
+CET_CODE = {"L": 0, "D": 1, "C": 2, "R": 3, "I": 4}  # CET_L3, CET_CBL1, CET_CBTD1 -> index in CET_PREFIX
+
+
+def colorcet_groups():
+    registered = sorted(n[4:] for n in colormaps if n.startswith("cet_") and not n.endswith("_r"))
+    aliases = {a for names in colorcet.aliases.values() for a in names}
+    groups = {}
+    for n in registered:
+        if n in aliases or n.startswith(("CET_", "glasbey")) or n.endswith("_s25"):
+            continue
+        i = next(i for i, (pre, _, _) in enumerate(CET_PREFIX) if n.startswith(pre))
+        short = colorcet.aliases.get(n, [n])[0]
+        groups.setdefault(i, []).append(f"cet_{short}")
+    for n in registered:
+        if n.startswith("CET_"):
+            code = re.match(r"CET_(?:CBT|CB)?([LDCRI])\d", n).group(1)
+            groups.setdefault(CET_CODE[code], []).append(f"cet_{n}")
+    for i in sorted(groups):
+        yield CET_PREFIX[i][1], CET_PREFIX[i][2], groups[i]
+
+
 CARTO_VERSION = "5.0.2"
 CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
 # CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
@@ -146,11 +182,15 @@ def carto_groups():
         yield group, sub, names
 
 
-# A map from a later source that matches an earlier one (or its reverse) to within 2/255 is not added.
-def duplicate_of(rgb, seen):
+# A map from a later source that matches an earlier one (or its reverse) to
+# within 2/255 is not added. Cyclic maps also match when rotated (CET_C1s is
+# CET_C1 started a quarter turn later).
+def duplicate_of(rgb, seen, cyclic=False):
+    shifts = range(len(rgb)) if cyclic else [0]
     for name, other in seen.items():
-        if min(np.abs(rgb - other).max(), np.abs(rgb[::-1] - other).max()) < 2 / 255:
-            return name
+        for flip in (rgb, rgb[::-1]):
+            if any(np.abs(np.roll(flip, k, axis=0) - other).max() < 2 / 255 for k in shifts):
+                return name
     return None
 
 
@@ -158,7 +198,7 @@ maps = []
 seen = {}  # name -> sampled rgb, for the duplicate check
 for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
                        ("crameri", list(crameri_groups())), ("cmocean", list(cmocean_groups())),
-                       ("carto", list(carto_groups()))]:
+                       ("colorcet", list(colorcet_groups())), ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -166,7 +206,7 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
             assert not qualitative or isinstance(cmap, ListedColormap), name
             if not qualitative:
                 rgb = cmap(X)[:, :3]
-                twin = source != "matplotlib" and duplicate_of(rgb, seen)
+                twin = source != "matplotlib" and duplicate_of(rgb, seen, cyclic=group == "cyclic")
                 if twin:
                     print(f"skipped {name}: same colors as {twin}")
                     continue
@@ -192,6 +232,7 @@ sources = [
     {"key": "cmasher", "label": "CMasher", "version": cmasher.__version__},
     {"key": "crameri", "label": "Crameri", "version": cmcrameri.__scm_version__},
     {"key": "cmocean", "label": "cmocean", "version": cmocean.__version__.lstrip("v")},
+    {"key": "colorcet", "label": "colorcet", "version": colorcet.__version__},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
@@ -205,4 +246,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, CARTOColors {CARTO_VERSION})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, CARTOColors {CARTO_VERSION})")
