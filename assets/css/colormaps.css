@@ -37,10 +37,11 @@ input.cmap-search { width: 260px; max-width: 100%; }
   padding: 10px 12px;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
-  font-size: 13px;
+  font-size: 13px; font-weight: 400;
+  overflow-y: auto; overscroll-behavior: contain;
 }
 .cmap-pop:popover-open { display: flex; flex-direction: column; gap: 8px; }
-.cmap-pop-wide { max-width: min(460px, calc(100vw - 16px)); max-height: 70vh; overflow-y: auto; }
+.cmap-pop-wide { max-width: min(460px, calc(100vw - 16px)); }
 .cmap-pop-title { font-weight: 650; }
 .cmap-pop-row { display: flex; gap: 6px; }
 .cmap-pop p, .cmap-pop ul { margin: 0; }
@@ -370,6 +371,9 @@ input.cmap-search { width: 260px; max-width: 100%; }
 
 @media (max-width: 900px) {
   .cmap-head { display: none; }
+  /* The columns are gone, but the list's "?" stays at the end of the bar. */
+  .cmap-top .cmap-head { display: flex; justify-content: flex-end; margin-top: -4px; }
+  .cmap-top .cmap-head > :not(.cmap-head-end) { display: none; }
   .cmap-top { padding-bottom: 10px; }
 
   .cmap-row, .cmap-single .cmap-row { grid-template-columns: 1fr 1fr; gap: 6px 10px; }

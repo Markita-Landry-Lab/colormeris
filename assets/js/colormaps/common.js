@@ -42,19 +42,48 @@
     return e;
   }
 
-  // Native popovers open in the middle of the screen; put them under their button.
+  // Native popovers open in the middle of the screen; put them under their
+  // button (above it when there is more room there) and keep them there while
+  // the page scrolls or resizes. A popover whose button leaves the screen closes.
   function anchorPopover(btn, pop) {
     btn.setAttribute('popovertarget', pop.id);
+    const GAP = 6;
+    const EDGE = 8;
     const place = () => {
       const r = btn.getBoundingClientRect();
       const vw = document.documentElement.clientWidth;
-      pop.style.top = `${Math.round(r.bottom + 6)}px`;
-      pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, vw - pop.offsetWidth - 8)))}px`;
+      const vh = window.innerHeight;
+      if (!r.width || r.bottom < 0 || r.top > vh) { pop.hidePopover(); return; }
+      // Measure at the left edge with no height cap: placed near the right
+      // edge, a fixed box shrinks to the space left and wraps every word.
+      Object.assign(pop.style, { left: '0px', top: '0px', maxHeight: '' });
+      const w = pop.offsetWidth;
+      const h = pop.offsetHeight;
+      const below = vh - r.bottom - GAP - EDGE;
+      const above = r.top - GAP - EDGE;
+      const up = h > below && above > below;
+      const room = Math.max(80, up ? above : below);
+      const top = up ? r.top - GAP - Math.min(h, room) : r.bottom + GAP;
+      Object.assign(pop.style, {
+        left: `${Math.round(Math.max(EDGE, Math.min(r.left, vw - w - EDGE)))}px`,
+        top: `${Math.round(top)}px`,
+        maxHeight: `${Math.floor(room)}px`,
+      });
     };
+    // Scrolls inside the popover itself don't move the button.
+    const onScroll = (e) => { if (!pop.contains(e.target)) place(); };
     pop.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') place(); });
     pop.addEventListener('toggle', (e) => {
-      btn.setAttribute('aria-expanded', String(e.newState === 'open'));
-      if (e.newState === 'open') place(); // again, now that its width is known
+      const open = e.newState === 'open';
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) {
+        place(); // again, now that its width is known
+        document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+        window.addEventListener('resize', place);
+      } else {
+        document.removeEventListener('scroll', onScroll, { capture: true });
+        window.removeEventListener('resize', place);
+      }
     });
   }
 
