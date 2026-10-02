@@ -3,8 +3,8 @@
 
 Colormeris can be driven by software agents in two ways:
 
-- **Agent API** (`window.colormeris`, [assets/js/agent.js](../assets/js/agent.js)): typed actions any program can call from the page.
-- **Heatmap agent** (the *Agent* card, [assets/js/agent-runner.js](../assets/js/agent-runner.js)): an LLM that calls those actions to calibrate every heatmap on the chosen pages, with a smaller vision model reviewing its work.
+- **Agent API** (`window.colormeris`, [assets/js/agent/api.js](../assets/js/agent/api.js)): typed actions any program can call from the page.
+- **Heatmap agent** (the *Agent* card, [assets/js/agent/runner.js](../assets/js/agent/runner.js)): an LLM that calls those actions to calibrate every heatmap on the chosen pages, with a smaller vision model reviewing its work.
 
 All coordinates are pixels of the panel's page image, the same space as `project.json`.
 

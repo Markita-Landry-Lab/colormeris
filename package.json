@@ -5,7 +5,7 @@
   "description": "Static web app to extract numeric data from gridded heatmap images and PDFs.",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.js",
+    "test": "node --test \"tests/**/*.test.js\"",
     "serve": "python3 -m http.server 8000",
     "proxy": "node scripts/openrouter-proxy.mjs",
     "docs": "node scripts/agent-docs.mjs"
