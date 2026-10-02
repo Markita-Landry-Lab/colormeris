@@ -1074,7 +1074,14 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-identify { max-width: 920px; font-size: 13px; }
 .cmap-identify > * { margin-top: 8px; }
 .cmap-identify > h2 { margin-top: 4px; font-size: 16px; }
-.cmap-drop { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.cmap-drop-wrap { display: flex; flex-direction: column; gap: 8px; }
+.cmap-drop-wrap > .cmap-id-hint:empty { display: none; }
+.cmap-drop { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 14px 12px; display: flex; align-items: center; gap: 10px; background: var(--surface); cursor: pointer; }
+.cmap-drop:hover { border-color: var(--accent); }
+.cmap-drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cmap-drop-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.cmap-drop-icon svg { width: 20px; height: 20px; }
+.cmap-drop.over .cmap-drop-icon { background: var(--accent); color: var(--surface); }
 .cmap-drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .cmap-id-bar { display: flex; flex-wrap: wrap; gap: 6px; }
 .cmap-id-hint, .cmap-id-status { margin: 0; color: var(--muted); }

@@ -18,14 +18,23 @@
   function createFigureInput(opts) {
     const { el, state, tab, hints } = opts;
     const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
-    const choose = el('button', { type: 'button', class: 'btn small' }, 'Choose image…');
     const example = el('button', { type: 'button', class: 'btn small' }, 'Example image (jet)');
     const clear = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Clear');
     const bar = el('div', { class: 'cmap-id-bar' });
-    bar.append(choose, example, ...(opts.buttons || []), clear);
-    const hint = el('p', { class: 'cmap-id-hint' }, hints.empty);
-    const zone = el('div', { class: 'cmap-drop' });
-    zone.append(bar, hint);
+    bar.append(example, ...(opts.buttons || []), clear);
+    // The box says only how to give an image. How to use the tool goes in `hint`,
+    // below the buttons and outside the box.
+    const dropText = el('p', { class: 'cmap-id-hint' }, hints.empty);
+    const hint = el('p', { class: 'cmap-id-hint' });
+    const zone = el('div', { class: 'cmap-drop-wrap' });
+    // An arrow into a tray, so the dashed box reads as a place to drop an image.
+    const icon = el('span', { class: 'cmap-drop-icon', 'aria-hidden': 'true' });
+    icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    // The whole dashed box is the button that opens the file dialog; Example and
+    // Clear sit outside it, since they do not take a file from the box.
+    const region = el('div', { class: 'cmap-drop', role: 'button', tabindex: '0', 'aria-label': 'Choose an image file' });
+    region.append(icon, dropText);
+    zone.append(region, bar, hint);
     const canvas = el('canvas', { class: 'cmap-id-canvas', hidden: '', role: 'img', tabindex: '0', 'aria-label': opts.label });
 
     const fig = {
@@ -168,7 +177,12 @@
     canvas.addEventListener('pointerup', finish);
     canvas.addEventListener('pointercancel', finish);
 
-    choose.addEventListener('click', () => file.click());
+    region.addEventListener('click', () => file.click());
+    region.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      file.click();
+    });
     file.addEventListener('change', () => { if (file.files[0]) load(file.files[0]); });
     async function loadExample() {
       try {
@@ -181,15 +195,15 @@
       }
     }
     example.addEventListener('click', loadExample);
-    clear.addEventListener('click', () => { reset(false); hint.textContent = hints.empty; });
+    clear.addEventListener('click', () => { reset(false); hint.textContent = ''; });
 
     const fileOf = (dt) => [...(dt?.files || [])].find((f) => /^image\//.test(f.type)) || [...(dt?.files || [])][0];
     for (const t of [zone, canvas]) {
-      t.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('over'); });
-      t.addEventListener('dragleave', () => zone.classList.remove('over'));
+      t.addEventListener('dragover', (e) => { e.preventDefault(); region.classList.add('over'); });
+      t.addEventListener('dragleave', () => region.classList.remove('over'));
       t.addEventListener('drop', (e) => {
         e.preventDefault();
-        zone.classList.remove('over');
+        region.classList.remove('over');
         load(fileOf(e.dataTransfer));
       });
     }

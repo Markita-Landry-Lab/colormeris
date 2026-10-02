@@ -29,7 +29,7 @@
     d.append(el('h2', { id: 'cmap-cvd-title' }, 'Simulate color vision deficiency'));
     d.append(el('p', { class: 'muted' }, 'See a figure next to how it may look to someone with a color vision deficiency (CVD), to check that its colors stay apart. The image stays in your browser.'));
 
-    const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).';
+    const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or click to choose a file (PNG, JPEG, WebP or GIF).';
     const status = el('p', { class: 'cmap-id-status', 'aria-live': 'polite' });
 
     // ---- controls ----

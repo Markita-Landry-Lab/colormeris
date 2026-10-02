@@ -20,7 +20,7 @@
     d.append(el('h2', { id: 'cmap-recolor-title' }, 'Recolor a figure into another colormap'));
     d.append(el('p', { class: 'muted' }, 'Give an image of a figure, drag along its colorbar, and pick a new colormap. Each pixel with a color of the bar gets the new map’s color at the same place. The image stays in your browser.'));
 
-    const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).';
+    const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or click to choose a file (PNG, JPEG, WebP or GIF).';
     const status = el('p', { class: 'cmap-id-status', 'aria-live': 'polite' });
     const oldNote = el('p', { class: 'cmap-rc-old', hidden: '' });
 

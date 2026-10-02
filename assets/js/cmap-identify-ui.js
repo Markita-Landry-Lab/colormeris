@@ -43,7 +43,7 @@
       d.append(el('p', { class: 'muted' }, 'Give an image of a figure and find which matplotlib colormap it uses. The image stays in your browser.'));
 
       const whole = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Use the whole image');
-      const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or choose a file (PNG, JPEG, WebP or GIF).';
+      const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or click to choose a file (PNG, JPEG, WebP or GIF).';
       const sampled = el('div', { class: 'cmap-id-sampled', hidden: '' });
       const status = el('p', { class: 'cmap-id-status', 'aria-live': 'polite' });
       const verdict = el('p', { class: 'cmap-id-verdict', 'aria-live': 'polite' });
