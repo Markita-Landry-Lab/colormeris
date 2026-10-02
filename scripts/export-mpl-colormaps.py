@@ -40,20 +40,20 @@ from matplotlib.colors import LinearSegmentedColormap, ListedColormap, to_hex
 # Aliases (grey, Grays, gist_grey, gist_yerg) and _r variants are left out.
 # (group, sub-heading, names); order is the display order.
 GROUPS = [
-    ("sequential", "Perceptually uniform", ["viridis", "plasma", "inferno", "magma", "cividis"]),
-    ("sequential", "Sequential", ["Greys", "Purples", "Blues", "Greens", "Oranges", "Reds",
+    ("sequential", "Matplotlib (perceptually uniform)", ["viridis", "plasma", "inferno", "magma", "cividis"]),
+    ("sequential", "Matplotlib (ColorBrewer)", ["Greys", "Purples", "Blues", "Greens", "Oranges", "Reds",
                                   "YlOrBr", "YlOrRd", "OrRd", "PuRd", "RdPu", "BuPu", "GnBu",
                                   "PuBu", "YlGnBu", "PuBuGn", "BuGn", "YlGn"]),
-    ("sequential", "Sequential (2)", ["binary", "gist_yarg", "gist_gray", "gray", "bone", "pink",
+    ("sequential", "Matplotlib (classic)", ["binary", "gist_yarg", "gist_gray", "gray", "bone", "pink",
                                       "spring", "summer", "autumn", "winter", "cool", "Wistia",
                                       "hot", "afmhot", "gist_heat", "copper"]),
-    ("diverging", "", ["PiYG", "PRGn", "BrBG", "PuOr", "RdGy", "RdBu", "RdYlBu", "RdYlGn",
+    ("diverging", "Matplotlib", ["PiYG", "PRGn", "BrBG", "PuOr", "RdGy", "RdBu", "RdYlBu", "RdYlGn",
                        "coolwarm", "bwr", "seismic", "berlin", "managua", "vanimo"]),
-    ("cyclic", "", ["twilight", "twilight_shifted", "hsv"]),
-    ("rainbow", "", ["jet", "rainbow", "gist_rainbow", "turbo", "nipy_spectral", "gist_ncar", "Spectral"]),
-    ("others", "Qualitative", ["Pastel1", "Pastel2", "Paired", "Accent", "Dark2", "Set1", "Set2",
+    ("cyclic", "Matplotlib", ["twilight", "twilight_shifted", "hsv"]),
+    ("rainbow", "Matplotlib", ["jet", "rainbow", "gist_rainbow", "turbo", "nipy_spectral", "gist_ncar", "Spectral"]),
+    ("others", "Matplotlib (qualitative)", ["Pastel1", "Pastel2", "Paired", "Accent", "Dark2", "Set1", "Set2",
                                "Set3", "tab10", "tab20", "tab20b", "tab20c", "okabe_ito"]),
-    ("others", "Miscellaneous", ["flag", "prism", "ocean", "gist_earth", "terrain", "gist_stern",
+    ("others", "Matplotlib (miscellaneous)", ["flag", "prism", "ocean", "gist_earth", "terrain", "gist_stern",
                                  "gnuplot", "gnuplot2", "CMRmap", "cubehelix", "brg"]),
 ]
 
@@ -88,7 +88,7 @@ CMC_GROUPS = [
     ("diverging", "Crameri", ["broc", "cork", "vik", "lisbon", "tofino", "berlin", "roma",
                               "bam", "vanimo", "managua"]),
     ("cyclic", "Crameri", ["romaO", "bamO", "brocO", "corkO", "vikO"]),
-    ("others", "Multi-sequential (Crameri)", ["oleron", "bukavu", "fes"]),
+    ("others", "Crameri (multi-sequential)", ["oleron", "bukavu", "fes"]),
 ]
 
 
@@ -106,9 +106,9 @@ CMO_GROUPS = [
                                "algae", "matter", "turbid", "speed", "amp", "tempo", "rain"]),
     ("diverging", "cmocean", ["balance", "delta", "curl", "diff", "tarn"]),
     ("cyclic", "cmocean", ["phase"]),
-    ("others", "Multi-sequential (cmocean)", ["topo"]),
+    ("others", "cmocean (multi-sequential)", ["topo"]),
     # oxy is gray with red and yellow ends for out-of-range values, not one sequence.
-    ("others", "Miscellaneous (cmocean)", ["oxy"]),
+    ("others", "cmocean (miscellaneous)", ["oxy"]),
 ]
 
 
@@ -131,7 +131,7 @@ CET_PREFIX = [  # (start of the descriptive name, group, sub-heading)
     ("diverging", "diverging", "colorcet"),
     (("cyclic", "circle"), "cyclic", "colorcet"),
     ("rainbow", "rainbow", "colorcet"),
-    ("isoluminant", "others", "Isoluminant (colorcet)"),
+    ("isoluminant", "others", "colorcet (isoluminant)"),
 ]
 CET_CODE = {"L": 0, "D": 1, "C": 2, "R": 3, "I": 4}  # CET_L3, CET_CBL1, CET_CBTD1 -> index in CET_PREFIX
 
@@ -163,7 +163,7 @@ EXTRA = {}  # name -> colormap, for maps matplotlib does not register
 SNS_GROUPS = [
     ("sequential", "seaborn", ["rocket", "mako", "flare", "crest"]),
     ("diverging", "seaborn", ["vlag", "icefire"]),
-    ("others", "Qualitative (seaborn)", ["deep", "muted", "pastel", "bright", "dark", "colorblind"]),
+    ("others", "seaborn (qualitative)", ["deep", "muted", "pastel", "bright", "dark", "colorblind"]),
 ]
 
 
@@ -171,7 +171,7 @@ def seaborn_groups():
     listed = {n for _, _, names in SNS_GROUPS for n in names}
     assert {n for n in SEABORN_PALETTES if not n.endswith("6")} <= listed, "new seaborn palettes"
     for group, sub, names in SNS_GROUPS:
-        if sub.startswith("Qualitative"):
+        if sub.endswith("(qualitative)"):
             for n in names:
                 EXTRA[n] = ListedColormap(SEABORN_PALETTES[n], name=n)
         yield group, sub, names
@@ -242,8 +242,8 @@ NCL_GROUPS = [
         "WhViBlGrYeOrRe", "WhViBlGrYeOrReWh", "precip2_15lev", "precip2_17lev", "precip3_16lev",
         "precip4_11lev", "precip_11lev", "prcp_1", "prcp_2", "prcp_3", "rh_19lev", "wind_17lev",
         "spread_15lev", "perc2_9lev", "percent_11lev", "t2m_29lev", "temp1", "NMCRef", "NMCVel", "wgne15"]),
-    ("others", "Qualitative (NCL)", ["Cat12", "GMT_paired", "default", "hlu_default", "grads_default"]),
-    ("others", "NCL", [
+    ("others", "NCL (qualitative)", ["Cat12", "GMT_paired", "default", "hlu_default", "grads_default"]),
+    ("others", "NCL (miscellaneous)", [
         "cb_9step", "StepSeq25", "cmp_flux", "GMT_drywet", "GMT_globe", "GMT_relief",
         "GMT_relief_oceanonly", "GMT_topo", "NCV_gebco", "OceanLakeLandSnow", "topo_15lev",
         "vegetation_modis", "NOC_ndvi", "nice_gfdl", "hotres", "NCV_banded", "NCV_manga", "NCV_roullet",
@@ -302,14 +302,14 @@ def sciviz_groups():
     assert special <= set(found), f"SciVisColor tables missing: {special - set(found)}"
     groups = [("sequential", "SciVisColor", [n for n in found if n not in special]),
               ("diverging", "SciVisColor", SVC_DIVERGING),
-              ("others", "Multi-sequential (SciVisColor)", SVC_MULTI),
-              ("others", "Outlier ranges (SciVisColor)", SVC_OUTLIER),
-              ("others", "Qualitative (SciVisColor)", SVC_DISCRETE)]
+              ("others", "SciVisColor (multi-sequential)", SVC_MULTI),
+              ("others", "SciVisColor (outlier ranges)", SVC_OUTLIER),
+              ("others", "SciVisColor (qualitative)", SVC_DISCRETE)]
     for group, sub, names in groups:
         for n in names:
             rgb = read_ncl(folder / f"{n}.rgb")
             full = f"sciviz.{n}"
-            if sub.startswith("Qualitative"):
+            if sub.endswith("(qualitative)"):
                 keep = [c for i, c in enumerate(rgb) if i == 0 or np.abs(c - rgb[i - 1]).max() > 1e-6]
                 EXTRA[full] = ListedColormap(keep, name=full)
             else:
@@ -324,7 +324,7 @@ CARTO_TAGS = {
     "quantitative": ("sequential", "CARTOColors"),
     "aggregation": ("sequential", "CARTOColors"),
     "diverging": ("diverging", "CARTOColors"),
-    "qualitative": ("others", "Qualitative (CARTOColors)"),
+    "qualitative": ("others", "CARTOColors (qualitative)"),
 }
 
 
@@ -339,7 +339,7 @@ def carto_groups():
         group, sub = CARTO_TAGS[tags[0]]
         colors = [c.lower() for c in sizes[max(sizes)]]
         full = f"carto.{name}"
-        if sub.startswith("Qualitative"):
+        if sub.endswith("(qualitative)"):
             EXTRA[full] = ListedColormap(colors, name=full)
         else:
             EXTRA[full] = LinearSegmentedColormap.from_list(full, colors, N=N)
@@ -379,7 +379,7 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
-            qualitative = sub.startswith("Qualitative")
+            qualitative = sub.endswith("(qualitative)")
             assert not qualitative or isinstance(cmap, ListedColormap), name
             if not qualitative:
                 rgb = cmap(X)[:, :3]
