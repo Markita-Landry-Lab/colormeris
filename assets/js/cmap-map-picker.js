@@ -19,7 +19,7 @@
   ];
 
   function createMapPicker(ctx, opts) {
-    const { el, data, mapByName, base, stripSvg } = ctx;
+    const { el, data, mapByName, base, stripCanvas } = ctx;
     const listId = `${opts.id}-maps`;
     const box = el('div', { class: 'cmap-rc-pick' });
     const input = el('input', {
@@ -38,7 +38,7 @@
       const li = el('li', { role: 'option', id: `${listId}-${m.name}`, 'aria-selected': String(m.name === opts.current()) });
       li.dataset.name = m.name;
       const mini = el('span', { class: 'cmap-mini' });
-      mini.innerHTML = stripSvg(base(m), m.kind === 'qualitative');
+      mini.append(stripCanvas(base(m), m.kind === 'qualitative'));
       li.append(mini, el('span', { class: 'cmap-rc-opt-name' }, m.name));
       // mousedown, not click, so the input keeps the focus.
       li.addEventListener('mousedown', (e) => { e.preventDefault(); choose(m.name); });

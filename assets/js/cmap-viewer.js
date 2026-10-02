@@ -156,25 +156,23 @@
 
     // ---- strips ----
 
-    function stripSvg(colors, qualitative) {
-      const n = colors.length;
-      const hex = (c) => CM.rgbToHex(c);
-      let inner;
-      if (qualitative) {
-        inner = colors.map((c, i) => `<rect x="${i}" width="1" height="1" fill="${hex(c)}" shape-rendering="crispEdges"/>`).join('');
-      } else {
-        const id = `cmg${++uid}`;
-        const stops = colors.map((c, i) => `<stop offset="${(i / (n - 1)).toFixed(5)}" stop-color="${hex(c)}"/>`).join('');
-        inner = `<defs><linearGradient id="${id}">${stops}</linearGradient></defs><rect width="${n}" height="1" fill="url(#${id})"/>`;
-      }
-      return `<svg viewBox="0 0 ${n} 1" preserveAspectRatio="none" aria-hidden="true" focusable="false">${inner}</svg>`;
+    // One pixel per color, stretched by CSS (smoothed, or in blocks for
+    // qualitative maps). An SVG gradient needed a <stop> per color: scrolled
+    // through, the list held about 800 000 elements, and every view change or
+    // filter restyled them all.
+    function stripCanvas(colors, qualitative) {
+      const n = Math.max(1, colors.length);
+      const canvas = el('canvas', { class: qualitative ? 'cmap-paint qual' : 'cmap-paint', width: String(n), height: '1', 'aria-hidden': 'true' });
+      const img = new ImageData(n, 1);
+      colors.forEach((c, i) => img.data.set([c[0], c[1], c[2], 255], i * 4));
+      canvas.getContext('2d').putImageData(img, 0, 0);
+      return canvas;
     }
 
     function renderStrip(strip) {
       const { map, view } = strip._cm;
-      const svg = strip.querySelector('svg');
-      if (svg) svg.remove();
-      strip.insertAdjacentHTML('afterbegin', stripSvg(viewData(map, view, strip._cm.rev).colors, map.kind === 'qualitative'));
+      strip.querySelector('.cmap-paint')?.remove();
+      strip.prepend(stripCanvas(viewData(map, view, strip._cm.rev).colors, map.kind === 'qualitative'));
       strip._cm.rendered = true;
     }
 
@@ -1104,7 +1102,7 @@
 
     const ctx = {
       CM, el, svgEl, pct, clamp8, roundRgb, VIEWS, GLYPH, data, state, items, mapByName,
-      base, viewData, metrics, sepOf, rev, stripSvg, makeStrip, renderStrip, showTip, hideTip,
+      base, viewData, metrics, sepOf, rev, stripCanvas, makeStrip, renderStrip, showTip, hideTip,
       niceAxis, drawAxes, drawSeries, linePlot, figure, profile, stepPoints, POS_TICKS, PW, PH, M, HUE_MIN_CHROMA,
       ratingPills, ratingCells, headerRow, applyStripView, refNumber, refItem, updateUrl, showRow, goTab,
       // Late bound: the modules call each other through these.

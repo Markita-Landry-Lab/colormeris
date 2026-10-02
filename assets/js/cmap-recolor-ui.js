@@ -14,7 +14,7 @@
   const OVERLAY_MAX = 1600; // the highlight is drawn at about screen size, not image size
 
   function setupCmapRecolor(ctx) {
-    const { el, pct, data, state, mapByName, base, stripSvg, roundRgb } = ctx;
+    const { el, pct, data, state, mapByName, base, stripCanvas, roundRgb } = ctx;
 
     const d = el('section', { class: 'cmap-recolor', 'aria-labelledby': 'cmap-recolor-title', hidden: '' });
     d.append(el('h2', { id: 'cmap-recolor-title' }, 'Recolor a figure into another colormap'));
@@ -221,11 +221,11 @@
       out.getContext('2d').putImageData(outImage, 0, 0);
       outData = r.data;
       outPanel.hidden = false;
-      oldStrip.innerHTML = stripSvg(samples.map((s) => roundRgb(s.rgb)), false);
+      oldStrip.replaceChildren(stripCanvas(samples.map((s) => roundRgb(s.rgb)), false));
       const m = newMap();
       const opt = { reversed: revBox.checked, flip };
       const colors = Array.from({ length: 128 }, (_, i) => roundRgb(CM.newColorAt(m, i / 127, opt)));
-      newStrip.innerHTML = stripSvg(colors, m.kind === 'qualitative');
+      newStrip.replaceChildren(stripCanvas(colors, m.kind === 'qualitative'));
       for (const s of [oldStrip, newStrip]) s.append(el('span', { class: 'cmap-rc-mark', hidden: '' }));
       readout.textContent = `${pct(r.changed / (img.width * img.height))} of the pixels have a color of the bar and are recolored. Hover a color to see where it is.`;
       if (hoverT != null) highlight(hoverT, true);

@@ -58,44 +58,54 @@
     return Math.sqrt(dL * dL + da * da + db * db);
   }
 
-  // CIEDE2000 (Sharma, Wu & Dalal 2005), kL = kC = kH = 1.
-  function deltaE2000(lab1, lab2) {
-    const [L1, a1, b1] = lab1;
-    const [L2, a2, b2] = lab2;
-    const rad = Math.PI / 180;
+  // CIEDE2000 (Sharma, Wu & Dalal 2005), kL = kC = kH = 1. Written for speed
+  // (sqrt instead of hypot, products instead of pow, no closures): the
+  // colormap ratings call it about 10 000 times per map.
+  const RAD = Math.PI / 180;
+  const POW25_7 = 25 ** 7;
 
-    const C1 = Math.hypot(a1, b1);
-    const C2 = Math.hypot(a2, b2);
+  function hueDeg(b, ap) {
+    if (b === 0 && ap === 0) return 0;
+    const h = Math.atan2(b, ap) / RAD;
+    return h >= 0 ? h : h + 360;
+  }
+
+  function deltaE2000(lab1, lab2) {
+    const L1 = lab1[0];
+    const a1 = lab1[1];
+    const b1 = lab1[2];
+    const L2 = lab2[0];
+    const a2 = lab2[1];
+    const b2 = lab2[2];
+
+    const C1 = Math.sqrt(a1 * a1 + b1 * b1);
+    const C2 = Math.sqrt(a2 * a2 + b2 * b2);
     const Cbar = (C1 + C2) / 2;
-    const Cbar7 = Math.pow(Cbar, 7);
-    const G = 0.5 * (1 - Math.sqrt(Cbar7 / (Cbar7 + Math.pow(25, 7))));
+    const Cbar3 = Cbar * Cbar * Cbar;
+    const Cbar7 = Cbar3 * Cbar3 * Cbar;
+    const G = 0.5 * (1 - Math.sqrt(Cbar7 / (Cbar7 + POW25_7)));
     const a1p = (1 + G) * a1;
     const a2p = (1 + G) * a2;
-    const C1p = Math.hypot(a1p, b1);
-    const C2p = Math.hypot(a2p, b2);
-
-    const hueAngle = (b, ap) => {
-      if (b === 0 && ap === 0) return 0;
-      const h = Math.atan2(b, ap) / rad;
-      return h >= 0 ? h : h + 360;
-    };
-    const h1p = hueAngle(b1, a1p);
-    const h2p = hueAngle(b2, a2p);
+    const C1p = Math.sqrt(a1p * a1p + b1 * b1);
+    const C2p = Math.sqrt(a2p * a2p + b2 * b2);
+    const h1p = hueDeg(b1, a1p);
+    const h2p = hueDeg(b2, a2p);
 
     const dLp = L2 - L1;
     const dCp = C2p - C1p;
+    const chroma = C1p * C2p !== 0;
     let dhp = 0;
-    if (C1p * C2p !== 0) {
+    if (chroma) {
       dhp = h2p - h1p;
       if (dhp > 180) dhp -= 360;
       else if (dhp < -180) dhp += 360;
     }
-    const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin((dhp / 2) * rad);
+    const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin((dhp / 2) * RAD);
 
     const Lbarp = (L1 + L2) / 2;
     const Cbarp = (C1p + C2p) / 2;
     let hbarp = h1p + h2p;
-    if (C1p * C2p !== 0) {
+    if (chroma) {
       if (Math.abs(h1p - h2p) <= 180) hbarp = (h1p + h2p) / 2;
       else if (h1p + h2p < 360) hbarp = (h1p + h2p + 360) / 2;
       else hbarp = (h1p + h2p - 360) / 2;
@@ -103,17 +113,20 @@
 
     const T =
       1 -
-      0.17 * Math.cos((hbarp - 30) * rad) +
-      0.24 * Math.cos(2 * hbarp * rad) +
-      0.32 * Math.cos((3 * hbarp + 6) * rad) -
-      0.2 * Math.cos((4 * hbarp - 63) * rad);
-    const dTheta = 30 * Math.exp(-Math.pow((hbarp - 275) / 25, 2));
-    const Cbarp7 = Math.pow(Cbarp, 7);
-    const Rc = 2 * Math.sqrt(Cbarp7 / (Cbarp7 + Math.pow(25, 7)));
-    const Sl = 1 + (0.015 * Math.pow(Lbarp - 50, 2)) / Math.sqrt(20 + Math.pow(Lbarp - 50, 2));
+      0.17 * Math.cos((hbarp - 30) * RAD) +
+      0.24 * Math.cos(2 * hbarp * RAD) +
+      0.32 * Math.cos((3 * hbarp + 6) * RAD) -
+      0.2 * Math.cos((4 * hbarp - 63) * RAD);
+    const hx = (hbarp - 275) / 25;
+    const dTheta = 30 * Math.exp(-hx * hx);
+    const Cbarp3 = Cbarp * Cbarp * Cbarp;
+    const Cbarp7 = Cbarp3 * Cbarp3 * Cbarp;
+    const Rc = 2 * Math.sqrt(Cbarp7 / (Cbarp7 + POW25_7));
+    const Lm = (Lbarp - 50) * (Lbarp - 50);
+    const Sl = 1 + (0.015 * Lm) / Math.sqrt(20 + Lm);
     const Sc = 1 + 0.045 * Cbarp;
     const Sh = 1 + 0.015 * Cbarp * T;
-    const Rt = -Math.sin(2 * dTheta * rad) * Rc;
+    const Rt = -Math.sin(2 * dTheta * RAD) * Rc;
 
     const tL = dLp / Sl;
     const tC = dCp / Sc;

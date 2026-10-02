@@ -15,7 +15,7 @@
   function setupCmapDetail(ctx) {
     const {
       el, pct, VIEWS, GLYPH, state, items, metrics, viewData, sepOf, profile, stepPoints, niceAxis,
-      linePlot, figure, POS_TICKS, M, HUE_MIN_CHROMA, stripSvg, makeStrip, refNumber, refItem, hideTip,
+      linePlot, figure, POS_TICKS, M, HUE_MIN_CHROMA, stripCanvas, makeStrip, refNumber, refItem, hideTip,
     } = ctx;
     const wide = window.matchMedia(WIDE);
     const drawer = el('aside', { class: 'cmap-drawer', id: 'cmap-drawer', hidden: '', 'aria-label': 'Colormap details' });
@@ -174,7 +174,7 @@
       const r = metrics(map).readability[viewKey];
       const box = el('div', { class: 'cmap-tracks' });
       const strip = el('div', { class: 'cmap-track-strip', role: 'img', 'aria-label': `${map.name} ${VIEWS.find((v) => v.key === viewKey).label}` });
-      strip.innerHTML = stripSvg(viewData(map, viewKey).colors, false);
+      strip.append(stripCanvas(viewData(map, viewKey).colors, false));
       const track = (label, cls, spans, what) => {
         box.append(el('span', { class: 'cmap-track-label' }, label));
         const t = el('div', { class: `cmap-track ${cls}`, role: 'img', 'aria-label': spans.length ? `${label}: ${spans.map(([a, b]) => `${a.toFixed(2)} to ${b.toFixed(2)}`).join(', ')}` : `${label}: none` });

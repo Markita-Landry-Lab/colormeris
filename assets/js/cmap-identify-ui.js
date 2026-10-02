@@ -6,7 +6,7 @@
   // closest known maps. The image input is cmap-figure-input.js.
 
   function setupCmapIdentify(ctx) {
-    const { el, pct, clamp8, roundRgb, data, state, mapByName, base, stripSvg } = ctx;
+    const { el, pct, clamp8, roundRgb, data, state, mapByName, base, stripCanvas } = ctx;
     const MAX_CMP = CM.COMPARE_MAX;
     const selected = state.selected;
 
@@ -33,7 +33,7 @@
     function miniOf(map, flip) {
       const d = el('span', { class: 'cmap-mini' });
       const colors = flip ? base(map).slice().reverse() : base(map);
-      d.innerHTML = stripSvg(colors, map.kind === 'qualitative');
+      d.append(stripCanvas(colors, map.kind === 'qualitative'));
       return d;
     }
 
@@ -146,7 +146,7 @@
         sampled.hidden = false;
         sampled.replaceChildren(el('span', { class: 'muted' }, k ? 'Colors along the line (snapped to the colorbar)' : 'Colors along the line'));
         const strip = el('div', { class: 'cmap-id-strip', role: 'img', 'aria-label': 'Sampled colors' });
-        strip.innerHTML = stripSvg(rgbs.map(roundRgb), false);
+        strip.append(stripCanvas(rgbs.map(roundRgb), false));
         sampled.append(strip);
         status.textContent = '';
         renderResults(CM.identifyColorbar(rgbs, identifyMaps()), { dir: true });

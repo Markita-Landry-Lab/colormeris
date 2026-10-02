@@ -19,7 +19,7 @@
   function setupCmapCompare(ctx) {
     const {
       el, svgEl, pct, VIEWS, state, items, mapByName, viewData, metrics, profile, stepPoints, niceAxis,
-      drawAxes, drawSeries, figure, POS_TICKS, PW, PH, M, HUE_MIN_CHROMA, stripSvg, makeStrip,
+      drawAxes, drawSeries, figure, POS_TICKS, PW, PH, M, HUE_MIN_CHROMA, stripCanvas, makeStrip,
       showTip, hideTip, ratingPills, ratingCells, headerRow, applyStripView,
     } = ctx;
     const MAX_CMP = CM.COMPARE_MAX;
@@ -57,7 +57,7 @@
 
     function miniStrip(map) {
       const d = el('span', { class: 'cmap-mini' });
-      d.innerHTML = stripSvg(viewData(map, 'orig', isRev(map)).colors, map.kind === 'qualitative');
+      d.append(stripCanvas(viewData(map, 'orig', isRev(map)).colors, map.kind === 'qualitative'));
       return d;
     }
 
