@@ -50,7 +50,7 @@ test('lightnessStats: viridis is linear, jet is not', () => {
 
 test('colormap data: valid colors, groups, sources and citations', () => {
   const sources = new Set(cmapData.sources.map((s) => s.key));
-  assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri', 'cmocean', 'colorcet', 'seaborn', 'carbonplan', 'ncl', 'sciviz', 'carto', 'matlab', 'r']);
+  assert.deepEqual([...sources].filter((k) => !k.startsWith('r-')), ['matplotlib', 'cmasher', 'crameri', 'cmocean', 'colorcet', 'seaborn', 'carbonplan', 'ncl', 'sciviz', 'carto', 'matlab']);
   const groups = new Set(['sequential', 'diverging', 'cyclic', 'rainbow', 'multi-sequential', 'qualitative', 'others']);
   const names = new Set();
   for (const m of cmapData.maps) {
@@ -65,7 +65,7 @@ test('colormap data: valid colors, groups, sources and citations', () => {
     assert.equal(m.source === 'ncl', m.name.startsWith('ncl.'), m.name);
     assert.equal(m.source === 'sciviz', m.name.startsWith('sciviz.'), m.name);
     assert.equal(m.source === 'matlab', m.name.startsWith('matlab.'), m.name);
-    assert.equal(m.source === 'r', m.name.includes('::'), m.name);
+    assert.equal(m.source.startsWith('r-'), m.name.includes('::'), m.name);
     assert.ok(!names.has(m.name), `duplicate ${m.name}`);
     names.add(m.name);
     assert.match(m.colors, /^([0-9a-f]{6})+$/, m.name);

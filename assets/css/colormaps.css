@@ -57,6 +57,8 @@ input.cmap-search { width: 260px; max-width: 100%; }
 .cmap-section[open] > summary::before { transform: rotate(90deg); }
 .cmap-section > summary h2 { font-size: 16px; }
 .cmap-section > summary:hover h2 { color: var(--accent); }
+.cmap-pop-title { margin-top: 2px; }
+#cmap-pop-filters { max-height: min(70vh, 560px); overflow-y: auto; }
 .cmap-count { color: var(--muted); font-size: 12px; }
 .cmap-sub > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 5px 0; }
 .cmap-sub[open] { margin-bottom: 6px; }

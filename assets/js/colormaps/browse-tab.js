@@ -217,9 +217,14 @@
       // Sources: none ticked shows every library.
       filtPop.append(el('div', { class: 'cmap-pop-title' }, 'Only maps from'));
       const sources = {};
+      let family = null; // sources of one family (the R packages) sit under their own title
       for (const src of data.sources) {
         const n = data.maps.filter((m) => m.source === src.key).length;
         if (!n) continue;
+        if (src.family !== family) {
+          family = src.family;
+          if (family) filtPop.append(el('div', { class: 'cmap-pop-title' }, `${family} (${data.maps.filter((m) => data.sources.find((s) => s.key === m.source).family === family).length})`));
+        }
         const l = el('label', { class: 'check', title: `Only colormaps from ${src.label}` });
         sources[src.key] = el('input', { type: 'checkbox' });
         l.append(sources[src.key], `${src.label} (${n})`);
@@ -359,6 +364,8 @@
       for (const sub of root.querySelectorAll('.cmap-browse .cmap-sub')) {
         const has = !!sub.querySelector('.cmap-item:not([hidden])');
         sub.hidden = !has;
+        const n = sub.querySelectorAll('.cmap-item:not([hidden])').length;
+        sub._count.textContent = filtering() ? `${n} of ${sub._total}` : String(sub._total);
         // Like sections: open the ones with matches while searching.
         sub.open = filtering() ? has : sub._userOpen;
       }
@@ -434,7 +441,9 @@
       box._userOpen = box.open = group === 'sequential' ? /perceptually uniform/.test(sub) : rows.some((m) => m.source === 'matplotlib');
       box.addEventListener('toggle', () => { if (!filtering()) box._userOpen = box.open; });
       const subSum = el('summary');
-      subSum.append(el('h3', {}, sub));
+      const subCount = el('span', { class: 'cmap-count' }, String(rows.length));
+      subSum.append(el('h3', {}, sub), subCount);
+      Object.assign(box, { _count: subCount, _total: rows.length });
       box.append(subSum);
       for (const m of rows) box.append(makeRow(m));
       sec.append(box);

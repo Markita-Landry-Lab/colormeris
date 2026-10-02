@@ -143,3 +143,32 @@ test('version 2 panels with an unknown tool are refused', () => {
   const json = { schema: 'colormeris-project', version: 2, panels: [{ name: 'a', tool: 'ivis' }] };
   assert.throws(() => parseProject(json), /unknown tool "ivis"/);
 });
+
+test('map panels keep their bin, axes and profiles', () => {
+  const project = createProject('map');
+  const p = project.panels[0];
+  assert.deepEqual([p.grid.rows, p.grid.cols, p.grid.sampleFraction], [1, 1, 1]);
+  p.grid.corners = CM.rectCorners({ x: 10, y: 20 }, { x: 110, y: 70 });
+  p.map.bin = 4;
+  p.map.x.ticks.push(CM.createAxisTick({ x: 10, y: 75 }, 400), CM.createAxisTick({ x: 110, y: 75 }, 700));
+  p.map.y.scale = 'log10';
+  p.map.y.ticks.push(CM.createAxisTick({ x: 5, y: 20 }, 1000), CM.createAxisTick({ x: 5, y: 70 }));
+  p.map.profiles.push(CM.createProfile({ x: 10, y: 40 }, { x: 110, y: 40 }, { name: 'λ slice', halfWidth: 2 }));
+  const json = JSON.parse(JSON.stringify(serializeProject(project)));
+  assert.equal(json.panels[0].tool, 'map');
+  assert.equal(json.panels[0].map.y.ticks[1].value, null); // a tick without a value yet
+  const q = parseProject(json).panels[0];
+  assert.equal(q.tool, 'map');
+  assert.equal(q.map.bin, 4);
+  assert.equal(q.map.y.scale, 'log10');
+  assert.deepEqual(q.map.x.ticks.map((k) => [k.x, k.y, k.value]), [[10, 75, 400], [110, 75, 700]]);
+  assert.ok(Number.isNaN(q.map.y.ticks[1].value));
+  assert.deepEqual([q.map.profiles[0].name, q.map.profiles[0].a, q.map.profiles[0].halfWidth], ['λ slice', { x: 10, y: 40 }, 2]);
+  // Rescaling moves ticks and profiles; the bin stays in rendered pixels.
+  rescalePanel(q, 2);
+  assert.deepEqual([q.map.x.ticks[1].x, q.map.x.ticks[1].y], [220, 150]);
+  assert.deepEqual([q.map.profiles[0].b, q.map.profiles[0].halfWidth], [{ x: 220, y: 80 }, 4]);
+  assert.equal(q.map.bin, 4);
+  // Map data is only stored for map panels.
+  assert.equal(serializeProject(createProject('heatmap')).panels[0].map, undefined);
+});

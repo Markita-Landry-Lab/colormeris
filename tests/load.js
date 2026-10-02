@@ -17,6 +17,7 @@ import '../assets/js/extract/project-files.js';
 import '../assets/js/extract/heatmap/sampling.js';
 import '../assets/js/extract/roi/geometry.js';
 import '../assets/js/extract/roi/quantify.js';
+import '../assets/js/extract/map/field.js';
 import '../assets/js/agent/schema.js';
 import '../assets/js/agent/llm.js';
 

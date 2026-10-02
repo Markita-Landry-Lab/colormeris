@@ -364,6 +364,7 @@
 
   Object.assign(CM, {
     detectGridSize,
+    gridPixelSize,
     edgeProfile,
     autocorrelation,
     scorePeriod,

@@ -523,7 +523,8 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
                 "name": name,
                 "group": group,
                 "sub": sub,
-                "source": source,
+                # Each R package is its own source, so Browse can filter by package.
+                "source": f"r-{name.split('::')[0].split('_')[0]}" if source == "r" else source,
                 "kind": "qualitative" if qualitative else "continuous",
                 "colors": colors_of(cmap, qualitative),
             })
@@ -636,8 +637,8 @@ sources = [
     {"key": "sciviz", "label": "SciVisColor", "version": pkg_version("colormaps")},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
     {"key": "matlab", "label": "MATLAB", "version": "R2014b"},
-    {"key": "r", "label": "R packages", "version": "paletteer"},
-]
+] + [{"key": key, "label": key[2:], "family": "R packages", "version": "paletteer"}
+     for key in dict.fromkeys(m["source"] for m in maps if m["source"].startswith("r-"))]
 
 
 def pack_colors(hexes):
@@ -688,5 +689,6 @@ out.write_text(
     "  CM.cmapData = data;\n"
     "})((globalThis.Colormeris ??= {}));\n"
 )
-counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
+counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources if "family" not in s}
+counts["R packages"] = sum("family" in next(s for s in sources if s["key"] == m["source"]) for m in maps)
 print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan, NCL and SciVisColor (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION}, MATLAB R2014b)")

@@ -15,14 +15,19 @@
   const newId = () => `p${nextId++}`;
   let nextRoiId = 1;
   const newRoiId = () => `r${nextRoiId++}`;
-  const KINDS = ['heatmap', 'roi'];
+  let nextMarkId = 1;
+  const newMarkId = (prefix) => `${prefix}${nextMarkId++}`;
+  const KINDS = ['heatmap', 'roi', 'map'];
+  const AXIS_SCALES = ['linear', 'log10'];
   const SHAPES = ['ellipse', 'rect', 'polygon'];
   const SCALE_UNITS = ['cm', 'mm'];
 
   // `page` is the 1-based PDF page the panel's coordinates refer to (always 1
-  // for images). `tool` is 'heatmap' or 'roi'. `rois` and `scale` are used by
-  // the ROI tool (see roi/geometry.js); `settings.grayChroma` is its background
-  // threshold (CIELAB chroma).
+  // for images). `tool` is 'heatmap', 'roi' or 'map'. `rois` and `scale` are
+  // used by the ROI tool (see roi/geometry.js); `settings.grayChroma` is its
+  // background threshold (CIELAB chroma). `map` is used by the Map tool (see
+  // map/field.js): bin size in rendered pixels, axis ticks in page pixels, and
+  // line profiles.
   function createPanel(name = 'Panel 1', page = 1, tool = 'heatmap') {
     const panel = {
       id: newId(),
@@ -34,6 +39,7 @@
       settings: { distance: 'de2000', maxDeltaE: 10, grayChroma: 10 },
       rois: [],
       scale: null,
+      map: { bin: 1, x: { ticks: [], scale: 'linear' }, y: { ticks: [], scale: 'linear' }, profiles: [] },
       // Review of the extraction: {status: 'accepted' | 'rejected', by,
       // confidence, note, resultHash, time}. It applies while the values
       // still hash to resultHash (see agent/schema.js).
@@ -43,6 +49,8 @@
     // Fig. 1k of the example paper), and blended overlay edges sit further from
     // the colorbar colors than heatmap cells do.
     if (tool === 'roi') Object.assign(panel.settings, { grayChroma: 20, maxDeltaE: 20 });
+    // A map's grid is its plot area: one box, sampled in bins (map.bin).
+    if (tool === 'map') Object.assign(panel.grid, { rows: 1, cols: 1, sampleFraction: 1 });
     return panel;
   }
 
@@ -51,6 +59,14 @@
   function createProject(tool = 'heatmap') {
     const panel = createPanel('Panel 1', 1, tool);
     return { name: 'untitled', source: null, panels: [panel], activePanelId: panel.id };
+  }
+
+  function createAxisTick(p, value = NaN) {
+    return { id: newMarkId('a'), x: p.x, y: p.y, value };
+  }
+
+  function createProfile(a, b, { name = 'Profile', halfWidth = 1 } = {}) {
+    return { id: newMarkId('l'), name, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, halfWidth };
   }
 
   function createRoi(shape, geom, { name = 'ROI', replicate = true } = {}) {
@@ -139,8 +155,46 @@
               scale: p.scale ? { p1: pt(p.scale.p1), p2: pt(p.scale.p2), length: p.scale.length, unit: p.scale.unit } : null,
             }
           : {}),
+        ...(p.tool === 'map'
+          ? {
+              map: {
+                bin: p.map.bin,
+                x: serializeAxis(p.map.x),
+                y: serializeAxis(p.map.y),
+                profiles: p.map.profiles.map((l) => ({ name: l.name, a: pt(l.a), b: pt(l.b), halfWidth: l.halfWidth })),
+              },
+            }
+          : {}),
       })),
     };
+  }
+
+  function serializeAxis(axis) {
+    return { scale: axis.scale, ticks: axis.ticks.map((k) => ({ x: k.x, y: k.y, value: Number.isFinite(k.value) ? k.value : null })) };
+  }
+
+  function readMap(raw, where) {
+    const out = createPanel('', 1, 'map').map;
+    if (!raw || typeof raw !== 'object') return out;
+    if (Number.isFinite(raw.bin)) out.bin = Math.min(256, Math.max(1, Math.round(raw.bin)));
+    for (const key of ['x', 'y']) {
+      const a = raw[key];
+      if (!a || typeof a !== 'object') continue;
+      out[key].scale = AXIS_SCALES.includes(a.scale) ? a.scale : 'linear';
+      out[key].ticks = (Array.isArray(a.ticks) ? a.ticks : []).map((k) => {
+        const q = readPoint(k, `${where} ${key} axis`);
+        if (!q) fail(`bad tick in ${where} ${key} axis`);
+        return createAxisTick(q, k.value === null ? NaN : Number(k.value));
+      });
+    }
+    out.profiles = (Array.isArray(raw.profiles) ? raw.profiles : []).map((l, j) => {
+      const a = readPoint(l?.a, `${where} profile ${j + 1}`);
+      const b = readPoint(l?.b, `${where} profile ${j + 1}`);
+      if (!a || !b) fail(`profile ${j + 1} in ${where} needs two points`);
+      const halfWidth = Number.isFinite(l.halfWidth) ? Math.min(50, Math.max(0, l.halfWidth)) : 1;
+      return createProfile(a, b, { name: typeof l.name === 'string' ? l.name : `Profile ${j + 1}`, halfWidth });
+    });
+    return out;
   }
 
   function serializeGeom(r) {
@@ -247,6 +301,7 @@
           if (p1 && p2 && sc.length > 0) p.scale = { p1, p2, length: Number(sc.length), unit: SCALE_UNITS.includes(sc.unit) ? sc.unit : 'cm' };
         }
       }
+      if (tool === 'map') p.map = readMap(raw.map, `panel ${i + 1}`);
       return p;
     });
     return {
@@ -267,6 +322,9 @@
     panel.colorbar.ticks = panel.colorbar.ticks.map((k) => ({ ...k, ...s(k) }));
     panel.colorbar.halfWidth *= factor;
     if (panel.scale) panel.scale = { ...panel.scale, p1: s(panel.scale.p1), p2: s(panel.scale.p2) };
+    // Map bins stay in rendered pixels, so a native-resolution map stays native.
+    for (const axis of [panel.map.x, panel.map.y]) axis.ticks = axis.ticks.map((k) => ({ ...k, ...s(k) }));
+    panel.map.profiles = panel.map.profiles.map((l) => ({ ...l, a: s(l.a), b: s(l.b), halfWidth: l.halfWidth * factor }));
     // Replicated regions are in box coordinates and follow the grid; the others are in pixels.
     for (const r of panel.rois) {
       if (r.replicate) continue;
@@ -275,5 +333,5 @@
     }
   }
 
-  Object.assign(CM, { SCHEMA, SCHEMA_VERSION, APP_VERSION, KINDS, createPanel, createProject, createRoi, effectiveLabels, boxLabel, parseLabelText, ticksWithT, serializeProject, parseProject, rescalePanel });
+  Object.assign(CM, { SCHEMA, SCHEMA_VERSION, APP_VERSION, KINDS, createPanel, createProject, createRoi, createAxisTick, createProfile, effectiveLabels, boxLabel, parseLabelText, ticksWithT, serializeProject, parseProject, rescalePanel });
 })((globalThis.Colormeris ??= {}));

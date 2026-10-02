@@ -111,6 +111,78 @@ Load this zip back into Colormeris to review or re-run the extraction.
     return lines.join('\n') + '\n';
   }
 
+  // ---------------------------------------------------------------- map CSVs
+  // Results come from extractMap (map/field.js, loaded after this file, so its
+  // flag constants are looked up on CM at call time).
+
+  // Column headers of a map: axis names when calibrated, else pixel offsets.
+  const mapAxisNames = (result) => [result.xAxis ? 'x' : 'x_px', result.yAxis ? 'y' : 'y_px'];
+
+  // Matrix layout: header row of x at bin centres, first column y at bin centres,
+  // rows top to bottom as on the page.
+  function mapMatrixCsv(panel, result) {
+    const [xn, yn] = mapAxisNames(result);
+    const lines = [csvLine([`${yn}\\${xn}`, ...result.xs.map(formatNumber)])];
+    for (let r = 0; r < result.rows; r++) {
+      const row = [formatNumber(result.ys[r])];
+      for (let c = 0; c < result.cols; c++) row.push(formatNumber(result.values[r * result.cols + c]));
+      lines.push(row.join(','));
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  // Tidy layout with diagnostics, one line per bin. `items` is [{panel, result}].
+  function mapLongCsv(items) {
+    const [xn, yn] = items.length && !items[0].result.error ? mapAxisNames(items[0].result) : ['x', 'y'];
+    const lines = [csvLine(['panel', 'page', 'row', 'col', xn, yn, 'value', 'deltaE', 'flagged', 'clipped'])];
+    for (const { panel, result } of items) {
+      if (result.error) continue;
+      const name = csvEscape(panel.name);
+      for (let r = 0; r < result.rows; r++) {
+        for (let c = 0; c < result.cols; c++) {
+          const i = r * result.cols + c;
+          const f = result.flags[i];
+          const clip = f & CM.FLAG_LOW ? 'low' : f & CM.FLAG_HIGH ? 'high' : '';
+          lines.push(
+            [name, panel.page, r + 1, c + 1, formatNumber(result.xs[c]), formatNumber(result.ys[r]), formatNumber(result.values[i]), result.deltaE[i].toFixed(2), f & CM.FLAG_DELTA_E ? 1 : 0, clip].join(','),
+          );
+        }
+      }
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  // One line per profile sample (from sampleProfile).
+  function profileCsv(samples) {
+    const lines = [csvLine(['d_px', 'x', 'y', 'page_x', 'page_y', 'value', 'deltaE', 'flagged', 'clipped'])];
+    for (const s of samples) {
+      lines.push(
+        [s.d.toFixed(2), formatNumber(s.x), formatNumber(s.y), s.px.toFixed(2), s.py.toFixed(2), formatNumber(s.value), s.deltaE.toFixed(2), s.flagged ? 1 : 0, s.clipped ? 1 : 0].join(','),
+      );
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  // Map data files for one panel: the matrix, the long format and each profile.
+  function mapPanelFiles(panel, result, base) {
+    if (!result) return [];
+    const files = [];
+    if (!result.error) {
+      files.push({ path: `data/${base}_map.csv`, content: mapMatrixCsv(panel, result) });
+      files.push({ path: `data/${base}_map_long.csv`, content: mapLongCsv([{ panel, result }]) });
+    }
+    const used = new Set();
+    for (const l of panel.map.profiles) {
+      const samples = result.profiles?.[l.id];
+      if (!Array.isArray(samples)) continue;
+      let name = safeFileName(l.name);
+      while (used.has(name)) name += '_';
+      used.add(name);
+      files.push({ path: `data/${base}_profile_${name}.csv`, content: profileCsv(samples) });
+    }
+    return files;
+  }
+
   // Unique, file-system safe base names for panels, in panel order.
   function panelFileBases(panels) {
     const used = new Set();
@@ -184,5 +256,5 @@ Load this zip back into Colormeris to review or re-run the extraction.
     return { project, pageImages, originalFile };
   }
 
-  Object.assign(CM, { formatNumber, csvEscape, csvLine, toWideCsv, toLongCsv, roiCsv, safeFileName, panelFileBases, heatmapPanelFiles, buildProjectZip, readProjectZip });
+  Object.assign(CM, { formatNumber, csvEscape, csvLine, toWideCsv, toLongCsv, roiCsv, mapMatrixCsv, mapLongCsv, profileCsv, mapPanelFiles, safeFileName, panelFileBases, heatmapPanelFiles, buildProjectZip, readProjectZip });
 })((globalThis.Colormeris ??= {}));
