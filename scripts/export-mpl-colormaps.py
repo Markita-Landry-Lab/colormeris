@@ -4,7 +4,7 @@ Run:  uv run --with matplotlib --with cmasher --with cmcrameri --with cmocean --
 
 The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
 Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685) and
-cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021), CarbonPlan and NCAR's NCL color tables (both
+cmocean (Thyng et al. 2016), colorcet (Kovesi 2015), seaborn (Waskom 2021), CarbonPlan, NCAR's NCL color tables and SciVisColor (all
 from the colormaps package by Pratiman Patel, which ships their color tables) and
 CARTOColors (CARTO's cartocolor npm package, fetched from unpkg at a pinned
 version). CARTOColors are discrete palettes of up to 7 steps; like
@@ -277,6 +277,45 @@ def ncl_groups():
         yield group, sub, [f"ncl.{n}" for n in names]
 
 
+# SciVisColor (sciviscolor.org). Every table not listed below is sequential
+# (they all get steadily lighter or darker). The rest were sorted by eye:
+# diverging maps, maps of several sequential segments joined (high3,
+# hier5), maps with highlighted outlier ranges (other_outl_*), and the
+# discrete palettes, whose files list each color twice.
+SVC_DIVERGING = ["br4div", "bruce2", "d_blgr3", "d_seteq2", "dasy_grbr1", "div1_blue_orange",
+                 "div2_gray_gold", "div3_green_brown", "div5_asym_Ob", "hier2p", "speed_yel",
+                 "w5m4", "w_ymiddle1"]
+SVC_MULTI = ["c_blgr1", "high2ml", "high3", "high4", "high5", "hier4w", "hier5", "wlteqcool", "wmutedset"]
+SVC_OUTLIER = [f"other_outl_{i}" for i in range(1, 9)]
+SVC_DISCRETE = ["discrete_autumn", "discrete_Bg", "discrete_Bo", "discrete_dark", "discrete_light_aut",
+                "discrete_muted", "discrete_vaneyck"]
+# "test" is yg3 under another name, tr4 is div2_gray_gold; colormap66 and
+# yel_peach_br are brown_peachy (the duplicate check would also drop them).
+SVC_SKIP = ["test", "tr4", "colormap66", "yel_peach_br"]
+
+
+def sciviz_groups():
+    folder = Path(distribution("colormaps").locate_file("colormaps/colormaps/sciviz"))
+    found = sorted((f.stem for f in folder.glob("*.rgb") if f.stem not in SVC_SKIP), key=str.lower)
+    special = set(SVC_DIVERGING + SVC_MULTI + SVC_OUTLIER + SVC_DISCRETE)
+    assert special <= set(found), f"SciVisColor tables missing: {special - set(found)}"
+    groups = [("sequential", "SciVisColor", [n for n in found if n not in special]),
+              ("diverging", "SciVisColor", SVC_DIVERGING),
+              ("others", "Multi-sequential (SciVisColor)", SVC_MULTI),
+              ("others", "Outlier ranges (SciVisColor)", SVC_OUTLIER),
+              ("others", "Qualitative (SciVisColor)", SVC_DISCRETE)]
+    for group, sub, names in groups:
+        for n in names:
+            rgb = read_ncl(folder / f"{n}.rgb")
+            full = f"sciviz.{n}"
+            if sub.startswith("Qualitative"):
+                keep = [c for i, c in enumerate(rgb) if i == 0 or np.abs(c - rgb[i - 1]).max() > 1e-6]
+                EXTRA[full] = ListedColormap(keep, name=full)
+            else:
+                EXTRA[full] = LinearSegmentedColormap.from_list(full, rgb, N=N)
+        yield group, sub, [f"sciviz.{n}" for n in names]
+
+
 CARTO_VERSION = "5.0.2"
 CARTO_URL = f"https://unpkg.com/cartocolor@{CARTO_VERSION}/src/carto.js"
 # CARTO's tags -> (group, sub-heading). Aggregation maps are sequential too.
@@ -335,7 +374,7 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
                        ("crameri", list(crameri_groups())), ("cmocean", list(cmocean_groups())),
                        ("colorcet", list(colorcet_groups())),
                        ("seaborn", list(seaborn_groups())), ("carbonplan", list(carbonplan_groups())),
-                       ("ncl", list(ncl_groups())), ("carto", list(carto_groups()))]:
+                       ("ncl", list(ncl_groups())), ("sciviz", list(sciviz_groups())), ("carto", list(carto_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = EXTRA.get(name) or colormaps[name]
@@ -459,6 +498,7 @@ sources = [
     {"key": "seaborn", "label": "seaborn", "version": seaborn.__version__},
     {"key": "carbonplan", "label": "CarbonPlan", "version": pkg_version("colormaps")},
     {"key": "ncl", "label": "NCL", "version": pkg_version("colormaps")},
+    {"key": "sciviz", "label": "SciVisColor", "version": pkg_version("colormaps")},
     {"key": "carto", "label": "CARTOColors", "version": CARTO_VERSION},
 ]
 data = {"sources": sources, "maps": maps}
@@ -472,4 +512,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan and NCL (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__}, cmocean {cmocean.__version__}, colorcet {colorcet.__version__}, seaborn {seaborn.__version__}, CarbonPlan, NCL and SciVisColor (colormaps {pkg_version('colormaps')}), CARTOColors {CARTO_VERSION})")

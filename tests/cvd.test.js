@@ -50,7 +50,7 @@ test('lightnessStats: viridis is linear, jet is not', () => {
 
 test('colormap data: valid colors, groups, sources and citations', () => {
   const sources = new Set(cmapData.sources.map((s) => s.key));
-  assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri', 'cmocean', 'colorcet', 'seaborn', 'carbonplan', 'ncl', 'carto']);
+  assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri', 'cmocean', 'colorcet', 'seaborn', 'carbonplan', 'ncl', 'sciviz', 'carto']);
   const groups = new Set(['sequential', 'diverging', 'cyclic', 'rainbow', 'others']);
   const names = new Set();
   for (const m of cmapData.maps) {
@@ -63,6 +63,7 @@ test('colormap data: valid colors, groups, sources and citations', () => {
     assert.equal(m.source === 'colorcet', m.name.startsWith('cet_'), m.name);
     assert.equal(m.source === 'carbonplan', m.name.startsWith('carbonplan.'), m.name);
     assert.equal(m.source === 'ncl', m.name.startsWith('ncl.'), m.name);
+    assert.equal(m.source === 'sciviz', m.name.startsWith('sciviz.'), m.name);
     assert.ok(!names.has(m.name), `duplicate ${m.name}`);
     names.add(m.name);
     assert.match(m.colors, /^([0-9a-f]{6})+$/, m.name);
@@ -83,6 +84,7 @@ test('colormap data: valid colors, groups, sources and citations', () => {
   assert.deepEqual(citeFor('cet_fire'), ['colorcet']);
   assert.deepEqual(citeFor('carbonplan.fire_light'), ['carbonplan']);
   assert.deepEqual(citeFor('ncl.BlueRed'), ['ncl']);
+  assert.deepEqual(citeFor('sciviz.yg1'), ['sciviz']);
   for (const m of cmapData.maps.filter((x) => x.source === 'seaborn')) assert.deepEqual(citeFor(m.name), ['seaborn'], m.name);
   assert.equal(cmapData.maps.find((m) => m.name === 'cmo.oxy').group, 'others');
 });
@@ -173,7 +175,7 @@ test('achromatopsia: the gray of the same L*, blended by severity', () => {
   assert.ok(half[0] < 255 && half[0] > 127 && half[1] > 0);
 });
 
-test('colormap data: CMasher, Crameri, cmocean, colorcet, seaborn, CarbonPlan, NCL and CARTOColors add only maps that are new', () => {
+test('colormap data: CMasher, Crameri, cmocean, colorcet, seaborn, CarbonPlan, NCL, SciVisColor and CARTOColors add only maps that are new', () => {
   // Same colors as another map, or as its reverse, to within 2/255.
   const same = (a, b) => [b, [...b].reverse()].some((c) => a.every((x, i) => x.every((v, k) => Math.abs(v - c[i][k]) <= 2)));
   const cont = cmapData.maps.filter((m) => m.kind === 'continuous').map((m) => ({ ...m, rgbs: parseHexColors(m.colors) }));
@@ -182,7 +184,11 @@ test('colormap data: CMasher, Crameri, cmocean, colorcet, seaborn, CarbonPlan, N
     for (const o of cont.slice(0, i)) assert.ok(!same(m.rgbs, o.rgbs), `${m.name} = ${o.name}`);
   }
   const by = (src) => cmapData.maps.filter((m) => m.source === src);
-  assert.ok(by('cmasher').length >= 50 && by('crameri').length >= 30 && by('carto').length >= 30 && by('cmocean').length >= 20 && by('colorcet').length >= 70 && by('seaborn').length === 12 && by('carbonplan').length >= 50 && by('ncl').length >= 150);
+  assert.ok(by('cmasher').length >= 50 && by('crameri').length >= 30 && by('carto').length >= 30 && by('cmocean').length >= 20 && by('colorcet').length >= 70 && by('seaborn').length === 12 && by('carbonplan').length >= 50 && by('ncl').length >= 150 && by('sciviz').length >= 100);
+  // SciVisColor's discrete palettes list each color twice; only one is kept.
+  const bg = parseHexColors(cmapData.maps.find((m) => m.name === 'sciviz.discrete_Bg').colors);
+  assert.ok(bg.every((c, i) => i === 0 || c.some((v, k) => v !== bg[i - 1][k])));
+  assert.ok(!cmapData.maps.some((m) => m.name === 'sciviz.test'));
   // NCL copies of matplotlib maps (GMT_gray, matlab_hot, cividis) are left out.
   for (const n of ['ncl.GMT_gray', 'ncl.matlab_hot', 'ncl.matlab_hsv', 'ncl.cividis', 'ncl.hlu_default']) assert.ok(!cmapData.maps.some((m) => m.name === n), n);
   // CarbonPlan's rainbow and sinebow are the same in light and dark.
