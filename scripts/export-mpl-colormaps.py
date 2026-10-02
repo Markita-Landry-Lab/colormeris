@@ -1,18 +1,23 @@
 """Write assets/js/cmap-data.js with the colormaps for colormaps.html.
 
-Run:  uv run --with matplotlib --with cmasher python scripts/export-mpl-colormaps.py
+Run:  uv run --with matplotlib --with cmasher --with cmcrameri python scripts/export-mpl-colormaps.py
 
-The maps come from matplotlib and from CMasher (van der Velden 2020).
+The maps come from matplotlib, CMasher (van der Velden 2020) and Crameri's
+Scientific colour maps (via cmcrameri; Zenodo 10.5281/zenodo.8409685).
 Continuous maps are sampled at 256 evenly spaced points (matplotlib's own
 lookup-table size); qualitative maps keep their listed colors. Groups follow the
 categories of matplotlib's colormap reference, regrouped into sequential,
 diverging, cyclic, rainbow and others. CMasher maps keep matplotlib's
-registered names (cmr.amber), since copper and ocean exist in both.
+registered names (cmr.amber), since copper and ocean exist in both; Crameri's
+maps likewise (cmc.batlow). A map already shown under an earlier source
+(berlin, managua and vanimo ship with matplotlib) is not added again.
 """
 import json
 from pathlib import Path
 
 import cmasher
+import cmcrameri
+import cmcrameri.cm
 import matplotlib
 import numpy as np
 from matplotlib import colormaps
@@ -59,7 +64,29 @@ def cmasher_groups():
         yield group, "CMasher", [f"cmr.{n}" for n in names]
 
 
-# A CMasher map that matches an earlier one (or its reverse) to within 2/255 is not added.
+# Crameri's classes (Crameri et al. 2020, Fig. 2 of the user guide). The
+# categorical *S maps are left out: they are the same colors, reordered.
+CMC_GROUPS = [
+    ("sequential", "Crameri", ["batlow", "batlowW", "batlowK", "glasgow", "lipari", "navia",
+                               "hawaii", "buda", "imola", "oslo", "grayC", "nuuk", "devon",
+                               "lajolla", "bamako", "davos", "bilbao", "lapaz", "acton",
+                               "turku", "tokyo"]),
+    ("diverging", "Crameri", ["broc", "cork", "vik", "lisbon", "tofino", "berlin", "roma",
+                              "bam", "vanimo", "managua"]),
+    ("cyclic", "Crameri", ["romaO", "bamO", "brocO", "corkO", "vikO"]),
+    ("others", "Multi-sequential (Crameri)", ["oleron", "bukavu", "fes"]),
+]
+
+
+def crameri_groups():
+    listed = {n for _, _, names in CMC_GROUPS for n in names}
+    missing = {n for n in cmcrameri.cm.cmaps if not n.endswith(("_r", "S"))} - listed
+    assert not missing, f"new Crameri maps: {missing}"
+    for group, sub, names in CMC_GROUPS:
+        yield group, sub, [f"cmc.{n}" for n in names]
+
+
+# A CMasher or Crameri map that matches an earlier one (or its reverse) to within 2/255 is not added.
 def duplicate_of(rgb, seen):
     for name, other in seen.items():
         if min(np.abs(rgb - other).max(), np.abs(rgb[::-1] - other).max()) < 2 / 255:
@@ -69,7 +96,8 @@ def duplicate_of(rgb, seen):
 
 maps = []
 seen = {}  # name -> sampled rgb, for the duplicate check
-for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()))]:
+for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups())),
+                       ("crameri", list(crameri_groups()))]:
     for group, sub, names in groups:
         for name in names:
             cmap = colormaps[name]
@@ -95,6 +123,7 @@ for source, groups in [("matplotlib", GROUPS), ("cmasher", list(cmasher_groups()
 sources = [
     {"key": "matplotlib", "label": "Matplotlib", "version": matplotlib.__version__},
     {"key": "cmasher", "label": "CMasher", "version": cmasher.__version__},
+    {"key": "crameri", "label": "Crameri", "version": cmcrameri.__scm_version__},
 ]
 data = {"sources": sources, "maps": maps}
 out = Path(__file__).resolve().parent.parent / "assets" / "js" / "cmap-data.js"
@@ -107,4 +136,4 @@ out.write_text(
     "})((globalThis.Colormeris ??= {}));\n"
 )
 counts = {s["key"]: sum(m["source"] == s["key"] for m in maps) for s in sources}
-print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__})")
+print(f"wrote {out} ({len(maps)} maps: {counts}; matplotlib {matplotlib.__version__}, cmasher {cmasher.__version__}, Crameri {cmcrameri.__scm_version__})")

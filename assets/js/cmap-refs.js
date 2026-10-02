@@ -28,8 +28,12 @@
       url: 'https://doi.org/10.1179/000870403235002042',
     },
     crameri: {
-      text: 'Crameri F, Shephard GE, Heron PJ (2020). The misuse of colour in science communication. Nature Communications 11:5444. Scientific colour maps (berlin, managua, vanimo).',
+      text: 'Crameri F, Shephard GE, Heron PJ (2020). The misuse of colour in science communication. Nature Communications 11:5444. Scientific colour maps (berlin, managua, vanimo in Matplotlib; the cmc.* maps).',
       url: 'https://doi.org/10.1038/s41467-020-19160-7',
+    },
+    scm: {
+      text: 'Crameri F (2023). Scientific colour maps, version 8.0.1. Zenodo. Read through the cmcrameri package.',
+      url: 'https://doi.org/10.5281/zenodo.8409685',
     },
     coolwarm: {
       text: 'Moreland K (2009). Diverging color maps for scientific visualization. Advances in Visual Computing (ISVC 2009), LNCS 5876:92–103.',
@@ -123,10 +127,11 @@
   set('gnuplot', ['gnuplot', 'gnuplot2', 'ocean', 'rainbow', 'afmhot']);
   set('idl', ['nipy_spectral', 'prism', 'flag', 'terrain', 'brg', 'bwr', 'seismic', 'binary']);
 
-  // CMasher maps (cmr.*) cite CMasher. The others come from Matplotlib, with
+  // CMasher maps (cmr.*) cite CMasher, Crameri maps (cmc.*) the paper and the release. The others come from Matplotlib, with
   // the original source (if any) first.
   function citeFor(name) {
     if (name.startsWith('cmr.')) return ['cmasher'];
+    if (name.startsWith('cmc.')) return ['crameri', 'scm'];
     const key = BY_NAME[name];
     return key ? [key, 'matplotlib'] : ['matplotlib'];
   }

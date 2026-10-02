@@ -972,7 +972,7 @@
       for (const k of ['machado', 'cielab', 'ciede2000', 'brettel', 'vienot', 'daltonlens']) ol2.append(refItem(k));
       d.append(ol2);
       const versions = data.sources.map((src) => `${src.label} ${src.version}`);
-      d.append(el('p', { class: 'muted small' }, `Colormap data comes from ${versions.join(' and ')}.`));
+      d.append(el('p', { class: 'muted small' }, `Colormap data comes from ${versions.slice(0, -1).join(', ')}${versions.length > 1 ? ' and ' : ''}${versions.at(-1)}.`));
       return d;
     }
 
@@ -1089,7 +1089,7 @@
     root.replaceChildren();
     const inner = el('div', { class: 'cmap-inner' });
     inner.append(el('h1', {}, 'Colormaps'));
-    inner.append(el('p', { class: 'cmap-intro' }, `The ${data.maps.length} colormaps of Matplotlib and CMasher as seen, as simulated for three kinds of color-vision deficiency, and in grayscale, rated for uniformity, CVD and grayscale safety, and how well values can be read back. Hover a strip for its values; click to copy the hex.`));
+    inner.append(el('p', { class: 'cmap-intro' }, `The ${data.maps.length} colormaps of Matplotlib, CMasher and Crameri’s Scientific colour maps as seen, as simulated for three kinds of color-vision deficiency, and in grayscale, rated for uniformity, CVD and grayscale safety, and how well values can be read back. Hover a strip for its values; click to copy the hex.`));
     const ui = buildControls();
     const header = headerRow(true);
     // Tabs, controls and column names share one sticky bar, so they stay

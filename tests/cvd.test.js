@@ -50,13 +50,14 @@ test('lightnessStats: viridis is linear, jet is not', () => {
 
 test('colormap data: valid colors, groups, sources and citations', () => {
   const sources = new Set(cmapData.sources.map((s) => s.key));
-  assert.deepEqual([...sources], ['matplotlib', 'cmasher']);
+  assert.deepEqual([...sources], ['matplotlib', 'cmasher', 'crameri']);
   const groups = new Set(['sequential', 'diverging', 'cyclic', 'rainbow', 'others']);
   const names = new Set();
   for (const m of cmapData.maps) {
     assert.ok(groups.has(m.group), m.name);
     assert.ok(sources.has(m.source), m.name);
     assert.equal(m.source === 'cmasher', m.name.startsWith('cmr.'), m.name);
+    assert.equal(m.source === 'crameri', m.name.startsWith('cmc.'), m.name);
     assert.ok(!names.has(m.name), `duplicate ${m.name}`);
     names.add(m.name);
     assert.match(m.colors, /^([0-9a-f]{6})+$/, m.name);
@@ -71,6 +72,7 @@ test('colormap data: valid colors, groups, sources and citations', () => {
   assert.deepEqual(viridis[255], [0xfd, 0xe7, 0x25]);
   assert.equal(citeFor('viridis')[0], 'viridis');
   assert.deepEqual(citeFor('cmr.amber'), ['cmasher']);
+  assert.deepEqual(citeFor('cmc.batlow'), ['crameri', 'scm']);
 });
 
 test('image simulation: grays stay gray, severity 0 is the identity', () => {
@@ -159,17 +161,19 @@ test('achromatopsia: the gray of the same L*, blended by severity', () => {
   assert.ok(half[0] < 255 && half[0] > 127 && half[1] > 0);
 });
 
-test('colormap data: CMasher adds only maps that are new', () => {
+test('colormap data: CMasher and Crameri add only maps that are new', () => {
   // Same colors as another map, or as its reverse, to within 2/255.
   const same = (a, b) => [b, [...b].reverse()].some((c) => a.every((x, i) => x.every((v, k) => Math.abs(v - c[i][k]) <= 2)));
-  const mpl = cmapData.maps.filter((m) => m.source === 'matplotlib' && m.kind === 'continuous').map((m) => parseHexColors(m.colors));
-  const cmr = cmapData.maps.filter((m) => m.source === 'cmasher');
-  assert.ok(cmr.length >= 50);
-  for (const [i, m] of cmr.entries()) {
-    const c = parseHexColors(m.colors);
-    assert.ok(!mpl.some((x) => same(c, x)), m.name);
-    for (const o of cmr.slice(i + 1)) assert.ok(!same(c, parseHexColors(o.colors)), `${m.name} = ${o.name}`);
+  const cont = cmapData.maps.filter((m) => m.kind === 'continuous').map((m) => ({ ...m, rgbs: parseHexColors(m.colors) }));
+  for (const [i, m] of cont.entries()) {
+    if (m.source === 'matplotlib') continue;
+    for (const o of cont.slice(0, i)) assert.ok(!same(m.rgbs, o.rgbs), `${m.name} = ${o.name}`);
   }
-  // The shifted cyclic maps (cmr.infinity_s) are the base maps rotated.
-  assert.ok(!cmr.some((m) => m.name.endsWith('_s')));
+  const by = (src) => cmapData.maps.filter((m) => m.source === src);
+  assert.ok(by('cmasher').length >= 50 && by('crameri').length >= 30);
+  // Rotated (cmr.infinity_s) or reordered (cmc.batlowS) copies of a base map.
+  assert.ok(!by('cmasher').some((m) => m.name.endsWith('_s')));
+  assert.ok(!by('crameri').some((m) => /S$/.test(m.name)));
+  // berlin, managua and vanimo already come with matplotlib.
+  assert.ok(!cmapData.maps.some((m) => m.name === 'cmc.berlin'));
 });
