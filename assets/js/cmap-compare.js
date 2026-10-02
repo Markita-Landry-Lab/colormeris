@@ -3,7 +3,8 @@
 
   // The Compare tab of the colormap viewer (colormaps.html): up to 10 maps
   // side by side as strips, four plots with every map on the same axes, and a
-  // sortable table of the numbers. While maps are chosen, a tray at the bottom
+  // sortable table of the numbers, and every map applied to a sine-wave test
+  // image. While maps are chosen, a tray at the bottom
   // of the Browse tab lists them. The choice lives in ?compare=.
 
   // Same size and square plot box as the plots of one map, so the four
@@ -27,6 +28,8 @@
     const cmp = {}; // elements of the compare view, set by buildCompare
     let cmpSort = null; // { id, dir } for the numbers table; null = selection order
     let allCols = false; // the numbers table shows only the key columns until asked
+    let sinePat = 'waves'; // test image of the sine section: 'waves' or 'bumps'
+    let sineView = 'orig'; // one of VIEWS
 
     function cmpSeries(map, key) {
       const p = profile(map);
@@ -305,6 +308,68 @@
       return row;
     }
 
+    // ---- sine-wave test images ----
+
+    const SINE_N = 256; // pixels per side
+    const SINE_PATTERNS = [
+      { key: 'waves', label: 'Sine waves', cap: 'Two tilted sine waves and rings around an off-center point, added up and stretched to the whole range: smooth hills (high values), dips (low values) and saddles that never repeat. The data has no edges, so any edge or band you see comes from the colormap.' },
+      { key: 'bumps', label: 'Equal bumps', cap: 'A smooth ramp from low (top left) to high (bottom right) with 36 bumps of exactly the same height, one at every level. A perceptually uniform sequential map shows every bump equally clearly and the ramp without bands. Other maps hide bumps where they are flat and make others stand out, so equal changes look unequal.' },
+    ];
+    const sineValues = new Map(); // pattern key -> values, computed once
+
+    function sineCanvas(map, values) {
+      const qual = map.kind === 'qualitative';
+      const colors = viewData(map, sineView).colors;
+      const cv = el('canvas', {
+        class: 'cmap-sine-img', width: String(SINE_N), height: String(SINE_N), role: 'img',
+        'aria-label': `${map.name} applied to the ${SINE_PATTERNS.find((p) => p.key === sinePat).label.toLowerCase()} test image`,
+      });
+      const g = cv.getContext('2d');
+      const img = g.createImageData(SINE_N, SINE_N);
+      CM.paintValues(values, CM.colorsLut(colors, qual), img.data);
+      g.putImageData(img, 0, 0);
+      cv.addEventListener('pointermove', (e) => {
+        const r = cv.getBoundingClientRect();
+        const i = Math.min(SINE_N - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * SINE_N)));
+        const j = Math.min(SINE_N - 1, Math.max(0, Math.floor(((e.clientY - r.top) / r.height) * SINE_N)));
+        const k = (j * SINE_N + i) * 4;
+        const c = [img.data[k], img.data[k + 1], img.data[k + 2]];
+        const hex = CM.rgbToHex(c);
+        showTip({ hex, title: map.name, text: [`value ${values[j * SINE_N + i].toFixed(3)}`, hex, `rgb(${c[0]}, ${c[1]}, ${c[2]})`] }, e.clientX, e.clientY);
+      });
+      cv.addEventListener('pointerleave', hideTip);
+      return cv;
+    }
+
+    function renderSine(list) {
+      if (!sineValues.has(sinePat)) sineValues.set(sinePat, CM.sinePattern(SINE_N, sinePat));
+      const values = sineValues.get(sinePat);
+      const grid = el('div', { class: 'cmap-sine-grid' });
+      for (const map of list) {
+        const fig = el('figure', { class: 'cmap-sine-fig' });
+        const cap = el('figcaption');
+        cap.append(el('code', {}, map.name));
+        fig.append(sineCanvas(map, values), cap);
+        grid.append(fig);
+      }
+      cmp.sineCap.textContent = SINE_PATTERNS.find((p) => p.key === sinePat).cap;
+      cmp.sine.replaceChildren(grid);
+    }
+
+    // A row of pressed-state buttons; `onPick(key)` after the choice changes.
+    function choiceTabs(label, options, current, onPick) {
+      const tabs = el('div', { class: 'cmap-tabs', role: 'group', 'aria-label': label });
+      for (const o of options) {
+        const b = el('button', { type: 'button', 'aria-pressed': String(o.key === current) }, o.label);
+        b.addEventListener('click', () => {
+          for (const x of tabs.children) x.setAttribute('aria-pressed', String(x === b));
+          onPick(o.key);
+        });
+        tabs.append(b);
+      }
+      return tabs;
+    }
+
     function renderStrips(list) {
       const box = el('div', { class: 'cmap-compare-rows' });
       box.append(headerRow());
@@ -334,12 +399,13 @@
       cmp.picker.title = full ? `Up to ${MAX_CMP} maps can be compared` : '';
       hideTip();
       if (!list.length) {
-        for (const k of ['strips', 'plot', 'table']) cmp[k].replaceChildren();
+        for (const k of ['strips', 'plot', 'table', 'sine']) cmp[k].replaceChildren();
         return;
       }
       renderStrips(list);
       cmp.plot.replaceChildren(comparePlot(list));
       renderTable(list);
+      renderSine(list);
     }
 
     function syncButtons() {
@@ -460,11 +526,22 @@
         renderTable(selected.map((n) => mapByName.get(n)));
       });
       numsHead.append(el('h3', {}, 'Numbers'), allBtn);
+
+      const sine = el('div');
+      const sineCap = el('p', { class: 'cmap-fig-cap muted' });
+      const current = () => selected.map((n) => mapByName.get(n));
+      const sineHead = el('div', { class: 'cmap-sine-head' });
+      sineHead.append(
+        el('h3', {}, 'Sine wave test'),
+        choiceTabs('Test image', SINE_PATTERNS, sinePat, (k) => { sinePat = k; renderSine(current()); }),
+        choiceTabs('View', VIEWS, sineView, (k) => { sineView = k; renderSine(current()); }),
+      );
+
       const body = el('div', { class: 'cmap-compare-body' });
       const h3 = (t) => el('h3', {}, t);
-      body.append(h3('Colormaps'), strips, h3('Profiles'), plot, numsHead, table);
+      body.append(h3('Colormaps'), strips, h3('Profiles'), plot, numsHead, table, sineHead, sineCap, sine);
       sec.append(head, add, empty, body);
-      Object.assign(cmp, { sec, picker: picker.input, count, strips, plot, table, empty, body, clear, copyLink });
+      Object.assign(cmp, { sec, picker: picker.input, count, strips, plot, table, sine, sineCap, empty, body, clear, copyLink });
       return sec;
     }
 
