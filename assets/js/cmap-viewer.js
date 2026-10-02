@@ -12,11 +12,11 @@
   // The tab, the open map and the comparison live in the URL. The data comes
   // from cmap-data.js, so the page needs no fetch and works from file://.
 
-  // [group, title, open at first]. Rainbow and Others are rarely the answer.
+  // [group, title, open at first]. With over 300 maps, all start closed.
   const SECTIONS = [
-    ['sequential', 'Sequential', true],
-    ['diverging', 'Diverging', true],
-    ['cyclic', 'Cyclic', true],
+    ['sequential', 'Sequential', false],
+    ['diverging', 'Diverging', false],
+    ['cyclic', 'Cyclic', false],
     ['rainbow', 'Rainbow', false],
     ['others', 'Others', false],
   ];
