@@ -4,7 +4,8 @@
   // The Recolor tab of the colormap viewer (colormaps.html): load a figure,
   // drag along its colorbar, pick another colormap, and the figure is redrawn
   // in it (recolor.js). Pixels far from the bar's colors (background,
-  // text, axes) keep theirs. Hovering a color in the figure, its recolored copy or the strips
+  // text, axes) keep theirs, and so does everything outside the regions drawn
+  // with Draw regions, when the background shares colors with the bar. Hovering a color in the figure, its recolored copy or the strips
   // flashes every pixel with a similar value to its complementary color. The image never leaves the browser.
 
   const DEFAULT_MAP = 'viridis';
@@ -20,6 +21,7 @@
     d.append(el('h2', { id: 'cmap-recolor-title' }, 'Recolor a figure into another colormap'));
     d.append(el('p', { class: 'muted' }, 'Give an image of a figure, drag along its colorbar, and pick a new colormap. Each pixel with a color of the bar gets the new map’s color at the same place. The image stays in your browser.'));
 
+    const LOADED_HINT = 'Drag along the colorbar from one end to the other. The figure is then redrawn in the new colormap next to the original. Hover a color in either to see where it appears; press and hold one to see the other version in its place.';
     const EMPTY_HINT = 'Drop an image here, paste one (Ctrl/Cmd+V), or click to choose a file (PNG, JPEG, WebP or GIF).';
     const status = el('p', { class: 'cmap-id-status', 'aria-live': 'polite' });
     const oldNote = el('p', { class: 'cmap-rc-old', hidden: '' });
@@ -56,9 +58,17 @@
     flashLabel.append(flashBox, ' Flash');
     const flashField = field('Highlight', 'On: the pixels at the hovered value flash to their complementary color. Off: they stay as they are and the rest is veiled in white.', flashLabel);
 
+    // Regions: rectangles dragged on the original. With none, the whole image.
+    const drawBtn = el('button', { type: 'button', class: 'btn small', 'aria-pressed': 'false' }, 'Draw regions');
+    const wholeBtn = el('button', { type: 'button', class: 'btn small', disabled: '' }, 'Whole image');
+    const regionOut = el('output', { class: 'cmap-rc-region' }, 'Whole image');
+    const regionField = field('Recolor only in', 'Drag rectangles on the original to recolor only inside them, for example the plot and its colorbar, so a background with colors of the bar keeps its own. Whole image removes them.', drawBtn, wholeBtn, regionOut);
+    let drawing = false;
+    let region = null; // per-pixel 0/1 from the boxes, or null for the whole image
+
     const download = el('button', { type: 'button', class: 'btn small primary', hidden: '' }, 'Download PNG');
     const fieldsRow = el('div', { class: 'cmap-rc-fields' });
-    fieldsRow.append(mapField, tolField, bandField, flashField);
+    fieldsRow.append(mapField, tolField, bandField, flashField, regionField);
     controls.append(fieldsRow);
 
     // ---- strips: the sampled bar over the new colors, both hoverable ----
@@ -95,11 +105,16 @@
       label: 'Your figure. Drag along the colorbar from its low end to its high end, then hover a color to see where it is.',
       hints: {
         empty: EMPTY_HINT,
-        loaded: 'Drag along the colorbar from one end to the other. The figure is then redrawn in the new colormap next to the original. Hover a color in either to see where it appears; press and hold one to see the other version in its place.',
+        loaded: LOADED_HINT,
       },
       base: () => (peek?.canvas === fig.canvas ? out : null),
       showLine: () => peek?.canvas !== fig.canvas,
       keepLineOnClick: true,
+      dragMode: () => (drawing ? 'box' : 'line'),
+      onBox: (box) => {
+        fig.boxes.push(box);
+        updateRegion();
+      },
       onReset: (keepImage) => {
         job++;
         samples = null;
@@ -108,6 +123,9 @@
         outData = null;
         mask = null;
         overlayData = null;
+        region = null;
+        setDrawing(false);
+        regionLabel();
         clearHighlight();
         controls.hidden = download.hidden = true;
         strips.hidden = true;
@@ -149,6 +167,41 @@
     const tolerance = () => Number(tol.value);
     const bandWidth = () => Number(band.value) / 100;
     const mapLabel = () => `${chosen}${revBox.checked ? '_r' : ''}`;
+
+    // ---- regions ----
+
+    function setDrawing(on) {
+      drawing = on;
+      drawBtn.classList.toggle('active', on);
+      drawBtn.setAttribute('aria-pressed', String(on));
+      fig.canvas.classList.toggle('drawing', on);
+      fig.hint.textContent = on
+        ? 'Drag rectangles on the original around the parts to recolor. Press Draw regions again (or Esc) when done.'
+        : (fig.img ? LOADED_HINT : '');
+    }
+
+    function regionLabel() {
+      const n = fig.boxes.length;
+      regionOut.textContent = n ? `${n} region${n > 1 ? 's' : ''}` : 'Whole image';
+      wholeBtn.disabled = !n;
+    }
+
+    function updateRegion() {
+      region = fig.img ? CM.regionMask(fig.img.width, fig.img.height, fig.boxes) : null;
+      mask = null;
+      regionLabel();
+      fig.redraw();
+      render();
+    }
+
+    drawBtn.addEventListener('click', () => setDrawing(!drawing));
+    wholeBtn.addEventListener('click', () => {
+      fig.boxes = [];
+      updateRegion();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && drawing && state.tab === 'recolor') setDrawing(false);
+    });
 
     // ---- calibration ----
 
@@ -214,7 +267,7 @@
     function render() {
       if (!index) return;
       const img = fig.img;
-      const r = CM.recolorPixels(img, index, newMap(), { tolerance: tolerance(), reversed: revBox.checked, flip });
+      const r = CM.recolorPixels(img, index, newMap(), { tolerance: tolerance(), reversed: revBox.checked, flip, region });
       out.width = img.width;
       out.height = img.height;
       outImage = new ImageData(r.data, img.width, img.height);
@@ -227,7 +280,8 @@
       const colors = Array.from({ length: 128 }, (_, i) => roundRgb(CM.newColorAt(m, i / 127, opt)));
       newStrip.replaceChildren(stripCanvas(colors, m.kind === 'qualitative'));
       for (const s of [oldStrip, newStrip]) s.append(el('span', { class: 'cmap-rc-mark', hidden: '' }));
-      readout.textContent = `${pct(r.changed / (img.width * img.height))} of the pixels have a color of the bar and are recolored. Hover a color to see where it is.`;
+      const where = region ? 'of the pixels in the regions' : 'of the pixels';
+      readout.textContent = `${pct(r.changed / (r.total || 1))} ${where} have a color of the bar and are recolored. Hover a color to see where it is.`;
       if (hoverT != null) highlight(hoverT, true);
     }
 
@@ -252,7 +306,7 @@
       if (!force && hoverT != null && Math.abs(t - hoverT) < bandWidth() / 8) return;
       hoverT = t;
       const step = Math.ceil(Math.max(index.width, index.height) / OVERLAY_MAX);
-      const res = CM.similarMask(index, t, bandWidth(), tolerance(), { step, mask });
+      const res = CM.similarMask(index, t, bandWidth(), tolerance(), { step, mask, region });
       mask = res.mask;
       const n = mask.length;
       const calm = reduceMotion() || !flashBox.checked;
@@ -289,7 +343,7 @@
       }
       const c = roundRgb(CM.colorAtT(samples, t));
       const sw = el('span', { class: 'cmap-sw', style: `background:${CM.rgbToHex(c)}` });
-      readout.replaceChildren(sw, ` At ${pct(t)} of the bar: ${pct(res.count / res.total)} of the pixels (±${pct(bandWidth())}).`);
+      readout.replaceChildren(sw, ` At ${pct(t)} of the bar: ${pct(res.count / (res.total || 1))} of the pixels${region ? ' in the regions' : ''} (±${pct(bandWidth())}).`);
     }
 
     function clearHighlight() {
@@ -315,7 +369,7 @@
       c.addEventListener('pointermove', (e) => {
         if (!index || fig.dragging) return;
         const p = pointOn(c, e);
-        const hit = CM.tAtPixel(index, p.x, p.y, tolerance());
+        const hit = CM.tAtPixel(index, p.x, p.y, tolerance(), region);
         if (hit) hover(hit.t);
         else if (hoverT != null || pending != null) clearHighlight();
       });
@@ -336,7 +390,7 @@
     for (const c of [fig.canvas, out]) {
       c.addEventListener('pointerdown', (e) => {
         clearHighlight();
-        if (!index || e.button > 0) return;
+        if (!index || e.button > 0 || (drawing && c === fig.canvas)) return;
         peek = { canvas: c, x: e.clientX, y: e.clientY };
         showPeek();
       });

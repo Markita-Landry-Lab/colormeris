@@ -10,7 +10,8 @@
   // buttons for the bar], base(): what to draw under the line (default the
   // image), showLine(): whether to draw it, onLoad(file), onReset(keepImage),
   // onError(msg), onLine(start, end) after a drag, lines: false for no line
-  // at all (the CVD tab) }.
+  // at all (the CVD tab), dragMode(): 'box' to drag rectangles instead of the
+  // line, onBox({ x, y, w, h }) after one (Recolor's regions) }.
 
   const MAX_SIDE = 4000; // larger images are scaled down before sampling
   const EXAMPLE = 'assets/examples/example-jet.png';
@@ -44,6 +45,7 @@
       name: '', // file name without extension
       lastFile: null,
       line: null, // { start, end } in image pixels
+      boxes: [], // [{ x, y, w, h }] in image pixels, drawn as dashed outlines
       dragging: false,
     };
     let drag = null;
@@ -51,14 +53,29 @@
     // Pointer positions are relative to the content box: the border is not part of the image.
     const scale = () => canvas.width / (canvas.clientWidth || canvas.width);
 
+    const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue('--bar-color').trim() || '#f29900';
+
     function redraw() {
       if (!fig.src) return;
       const g = canvas.getContext('2d');
       g.drawImage(opts.base?.() || fig.src, 0, 0);
-      const line = fig.line;
-      if (!line || (opts.showLine && !opts.showLine() && !drag)) return;
+      if (opts.showLine && !opts.showLine() && !drag) return;
       const k = scale();
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--bar-color').trim() || '#f29900';
+      const accent = accentColor();
+      const boxes = drag?.box ? [...fig.boxes, drag.box] : fig.boxes;
+      for (const b of boxes) {
+        // Dark under light, dashed, so the outline shows on any color.
+        g.lineWidth = 1.5 * k;
+        g.setLineDash([]);
+        g.strokeStyle = 'rgba(0,0,0,0.75)';
+        g.strokeRect(b.x, b.y, b.w, b.h);
+        g.setLineDash([5 * k, 4 * k]);
+        g.strokeStyle = accent;
+        g.strokeRect(b.x, b.y, b.w, b.h);
+      }
+      g.setLineDash([]);
+      const line = fig.line;
+      if (!line) return;
       g.lineCap = 'round';
       for (const [w, c] of [[4.5 * k, 'rgba(0,0,0,0.75)'], [2 * k, accent]]) {
         g.strokeStyle = c;
@@ -82,6 +99,7 @@
 
     function reset(keepImage) {
       fig.line = null;
+      fig.boxes = [];
       drag = null;
       fig.dragging = false;
       if (!keepImage) {
@@ -157,19 +175,28 @@
       if (!fig.img || e.button > 0 || opts.lines === false) return;
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
-      drag = { start: pointAt(e), px: e.clientX, py: e.clientY, before: fig.line };
+      drag = { start: pointAt(e), px: e.clientX, py: e.clientY, before: fig.line, boxMode: opts.dragMode?.() === 'box', box: null };
       fig.dragging = true;
     });
+    const boxOf = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) });
     canvas.addEventListener('pointermove', (e) => {
       if (!drag) return;
-      fig.line = { start: drag.start, end: pointAt(e) };
+      if (drag.boxMode) drag.box = boxOf(drag.start, pointAt(e));
+      else fig.line = { start: drag.start, end: pointAt(e) };
       redraw();
     });
     const finish = (e) => {
       if (!drag) return;
-      const { start, px, py, before } = drag;
+      const { start, px, py, before, boxMode } = drag;
       drag = null;
       fig.dragging = false;
+      if (boxMode) {
+        // A click or a cancelled drag adds no box.
+        const box = boxOf(start, pointAt(e));
+        if (e.type !== 'pointercancel' && Math.hypot(e.clientX - px, e.clientY - py) >= 8 && box.w >= 1 && box.h >= 1) opts.onBox?.(box);
+        redraw();
+        return;
+      }
       // A click or a cancelled drag keeps the line there was.
       if (e.type === 'pointercancel' || Math.hypot(e.clientX - px, e.clientY - py) < 8) { fig.line = opts.keepLineOnClick ? before : null; redraw(); return; }
       opts.onLine?.(start, pointAt(e));

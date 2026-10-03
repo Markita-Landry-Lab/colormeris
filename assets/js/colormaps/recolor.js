@@ -9,6 +9,9 @@
   //                   the rest (background, text, axes) keep theirs
   //   similarMask     the pixels whose t is near a given one, for the hover
   //                   highlight
+  //   regionMask      the pixels inside the user's rectangles; with one, only
+  //                   those are recolored, so a background that shares the
+  //                   bar's colors keeps its own
   // Images are ImageData-shaped { width, height, data: RGBA bytes }. Samples
   // are sampleColorbar's [{ t, lab }] from the bar's start to its end.
 
@@ -81,15 +84,31 @@
     return CM.cmapColorAt(map, reversed ? 1 - u : u);
   }
 
-  // Returns { width, height, data, changed } with a new RGBA byte array.
-  function recolorPixels(img, index, map, { tolerance = 12, reversed = false, flip = false } = {}) {
+  // Boxes { x, y, w, h } in image pixels → Uint8Array of 0/1 per pixel, or
+  // null for no boxes (the whole image). Boxes are clipped to the image.
+  function regionMask(width, height, boxes) {
+    if (!boxes?.length) return null;
+    const m = new Uint8Array(width * height);
+    for (const b of boxes) {
+      const x0 = Math.max(0, Math.floor(b.x));
+      const y0 = Math.max(0, Math.floor(b.y));
+      const x1 = Math.min(width, Math.ceil(b.x + b.w));
+      const y1 = Math.min(height, Math.ceil(b.y + b.h));
+      for (let y = y0; y < y1; y++) m.fill(1, y * width + x0, Math.max(y * width + x0, y * width + x1));
+    }
+    return m;
+  }
+
+  // Returns { width, height, data, changed, total } with a new RGBA byte
+  // array; total is the number of pixels in the region (all without one).
+  function recolorPixels(img, index, map, { tolerance = 12, reversed = false, flip = false, region = null } = {}) {
     const lut = mapLut(map, reversed);
     const src = img.data;
     const out = new Uint8ClampedArray(src);
     const { t, de } = index;
     let changed = 0;
     for (let i = 0; i < t.length; i++) {
-      if (!(de[i] <= tolerance)) continue;
+      if (!(de[i] <= tolerance) || (region && !region[i])) continue;
       let u = Math.min(1, Math.max(0, t[i]));
       if (flip) u = 1 - u;
       const k = Math.round(u * (LUT_N - 1)) * 3;
@@ -100,40 +119,44 @@
       out[o + 3] = 255;
       changed++;
     }
-    return { width: img.width, height: img.height, data: out, changed };
+    const total = region ? region.reduce((a, v) => a + v, 0) : t.length;
+    return { width: img.width, height: img.height, data: out, changed, total };
   }
 
   // Pixels within `band` of position t0 (both in bar order) and within the
-  // tolerance of the bar. With step > 1 only every step-th pixel in each
+  // tolerance of the bar, and inside the region when there is one. With step > 1 only every step-th pixel in each
   // direction is looked at, for a highlight drawn at screen size on big images.
   // Returns { mask: Uint8Array of 0/1, width, height, count, total }.
-  function similarMask(index, t0, band, tolerance = 12, { step = 1, mask = null } = {}) {
+  function similarMask(index, t0, band, tolerance = 12, { step = 1, mask = null, region = null } = {}) {
     const { t, de } = index;
     const s = Math.max(1, Math.floor(step));
     const w = Math.ceil(index.width / s);
     const h = Math.ceil(index.height / s);
     const m = mask && mask.length === w * h ? mask : new Uint8Array(w * h);
     let count = 0;
+    let total = 0;
     for (let y = 0, j = 0; y < h; y++) {
       const row = y * s * index.width;
       for (let x = 0; x < w; x++, j++) {
         const i = row + x * s;
+        if (region && !region[i]) { m[j] = 0; continue; }
         const on = de[i] <= tolerance && Math.abs(t[i] - t0) <= band ? 1 : 0;
         m[j] = on;
         count += on;
+        total++;
       }
     }
-    return { mask: m, width: w, height: h, count, total: w * h };
+    return { mask: m, width: w, height: h, count, total };
   }
 
   // Bar position and distance of the pixel at (x, y), or null when it is not
-  // close to the bar.
-  function tAtPixel(index, x, y, tolerance = 12) {
+  // close to the bar or outside the region.
+  function tAtPixel(index, x, y, tolerance = 12, region = null) {
     const xi = Math.round(x);
     const yi = Math.round(y);
     if (xi < 0 || yi < 0 || xi >= index.width || yi >= index.height) return null;
     const i = yi * index.width + xi;
-    if (!(index.de[i] <= tolerance)) return null;
+    if (!(index.de[i] <= tolerance) || (region && !region[i])) return null;
     return { t: index.t[i], deltaE: index.de[i] };
   }
 
@@ -225,5 +248,5 @@
     return out;
   }
 
-  Object.assign(CM, { createIndexer, indexColors, recolorPixels, similarMask, tAtPixel, newColorAt, sinePattern, colorsLut, paintValues });
+  Object.assign(CM, { createIndexer, indexColors, regionMask, recolorPixels, similarMask, tAtPixel, newColorAt, sinePattern, colorsLut, paintValues });
 })((globalThis.Colormeris ??= {}));

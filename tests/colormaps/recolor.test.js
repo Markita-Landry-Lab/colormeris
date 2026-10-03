@@ -102,6 +102,26 @@ test('tAtPixel reads back positions, null off the bar', () => {
   assert.equal(tAtPixel(index, -1, 0), null);
 });
 
+test('a region limits recoloring, the highlight and the hover lookup', () => {
+  const img = figure();
+  const index = indexColors(img, barOf(img));
+  // The cells in row 10 only, not the bar in column 0 nor the row-11 cell.
+  const region = CM.regionMask(img.width, img.height, [{ x: 1.5, y: 10, w: 20, h: 1 }]);
+  assert.equal(region.reduce((a, v) => a + v, 0), 11); // x 1–11, clipped at the right edge
+  const out = recolorPixels(img, index, viridis, { region });
+  assert.equal(out.changed, 8);
+  assert.equal(out.total, 11);
+  assert.ok(dE(pixel(out, ...cellXY(2)), at(viridis, 0.25)) < 3);
+  assert.deepEqual(pixel(out, 0, 0), pixel(img, 0, 0)); // the bar keeps its colors
+  assert.deepEqual(pixel(out, ...cellXY(8)), pixel(img, ...cellXY(8)));
+  const sim = similarMask(index, 0.5, 0.02, 12, { region });
+  assert.equal(sim.count, 1); // the cell, not the bar rows
+  assert.equal(sim.total, 11);
+  assert.equal(tAtPixel(index, 0, 50, 12, region), null);
+  assert.ok(tAtPixel(index, ...cellXY(4), 12, region));
+  assert.equal(CM.regionMask(4, 4, []), null);
+});
+
 test('indexing in chunks gives the same result', () => {
   const img = figure();
   const ix = createIndexer(img, barOf(img));
