@@ -7,6 +7,7 @@
     mapAt,
     axisCoords,
     axisT,
+    onAxisEdge,
     mapPanelFiles,
     createAxisTick,
     createProfile,
@@ -35,6 +36,7 @@
   const { $, app, viewer } = ws;
   const state = {
     selectedId: null, // selected profile
+    trace: null, // {id, i}: traced sample of a profile (see map-sidebar.js)
     showRecon: false,
     showFlags: false,
     field: new Map(), // panel id → {key, image, result}
@@ -42,7 +44,7 @@
   };
   const selectedProfile = () => ws.activePanel().map.profiles.find((l) => l.id === state.selectedId) || null;
   const mctx = { ws, state, selectedProfile, AXIS_COLORS, PROFILE_COLOR };
-  const { renderSidebar, focusAxisTick } = setupMapSidebar(mctx);
+  const { renderSidebar, focusAxisTick, setTrace } = setupMapSidebar(mctx);
 
   // The field is the slow part (every pixel goes through the colorbar), so it
   // is cached apart from the profiles: drawing or dragging a profile must not
@@ -154,8 +156,9 @@
     ctx.textBaseline = 'bottom';
     for (const key of ['x', 'y']) {
       for (const k of panel.map[key].ticks) {
-        ws.drawHandle(ctx, v, k, AXIS_COLORS[key], 'circle');
-        if (Number.isFinite(k.value)) label(ctx, v.toScreen(k), formatNumber(k.value), AXIS_COLORS[key], key === 'x' ? 'below' : 'left');
+        const q = onAxisEdge(panel, key, k);
+        ws.drawHandle(ctx, v, q, AXIS_COLORS[key], 'circle');
+        if (Number.isFinite(k.value)) label(ctx, v.toScreen(q), formatNumber(k.value), AXIS_COLORS[key], key === 'x' ? 'below' : 'left');
       }
     }
     for (const l of panel.map.profiles) {
@@ -170,6 +173,34 @@
       ws.drawHandle(ctx, v, l.b, PROFILE_COLOR, 'circle');
       label(ctx, a, l.name, PROFILE_COLOR, 'above');
     }
+    drawTrace(ctx, v, panel);
+  }
+
+  // The traced sample of the selected profile: a ring on the line and its value.
+  function drawTrace(ctx, v, panel) {
+    const samples = state.trace && panel.map.profiles.some((l) => l.id === state.trace.id) ? ws.resultFor(panel).profiles?.[state.trace.id] : null;
+    const s = Array.isArray(samples) ? samples[state.trace.i] : null;
+    if (!s) return;
+    const q = v.toScreen({ x: s.px, y: s.py });
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, 6, 0, 2 * Math.PI);
+    ws.strokeDual(ctx, '#ffd400', 2);
+    // Four significant digits, as in the profile plot's readout.
+    label(ctx, { x: q.x + 10, y: q.y + 4 }, String(Number(s.value.toPrecision(4))), '#ffd400', 'above');
+  }
+
+  // Pointer over the image near the selected profile → trace its nearest sample.
+  function traceFromImage(panel, p) {
+    const l = selectedProfile();
+    const samples = l && ws.resultFor(panel).profiles?.[l.id];
+    if (!Array.isArray(samples) || samples.length < 2 || app.mode) return setTrace(null);
+    const dx = l.b.x - l.a.x;
+    const dy = l.b.y - l.a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = ((p.x - l.a.x) * dx + (p.y - l.a.y) * dy) / len2;
+    const dist = Math.abs((p.x - l.a.x) * dy - (p.y - l.a.y) * dx) / Math.sqrt(len2);
+    if (t < 0 || t > 1 || dist > Math.max(l.halfWidth, 0) + 8 / viewer.scale) return setTrace(null);
+    setTrace({ id: l.id, i: Math.round(t * (samples.length - 1)) });
   }
 
   function label(ctx, s, text, color, where) {
@@ -187,11 +218,15 @@
     if (!hover) return;
     const panel = ws.activePanel();
     if ((m.type === 'xtick' || m.type === 'ytick') && panel.grid.corners) {
-      // The line through the plot at the pointer's axis position.
-      const t = axisT(panel, m.type === 'xtick' ? 'x' : 'y', hover);
+      // The line through the plot at the pointer's axis position, and where
+      // the tick will go on the edge.
+      const key = m.type[0];
+      const q = onAxisEdge(panel, key, hover);
+      const t = axisT(panel, key, q);
       const c = panel.grid.corners;
-      const [p, q] = m.type === 'xtick' ? [bilinear(c, t, 0), bilinear(c, t, 1)] : [bilinear(c, 0, t), bilinear(c, 1, t)];
-      line(ctx, v, p, q, AXIS_COLORS[m.type[0]]);
+      const [a, b] = key === 'x' ? [bilinear(c, t, 0), q] : [q, bilinear(c, 1, t)];
+      line(ctx, v, a, b, AXIS_COLORS[key]);
+      ws.drawHandle(ctx, v, q, AXIS_COLORS[key], 'circle');
     } else if (m.type === 'profile' && m.points.length === 1) {
       line(ctx, v, m.points[0], ws.snapAxis(m.points[0], hover), PROFILE_COLOR);
     }
@@ -207,6 +242,7 @@
   }
 
   function hoverText(panel, cell, p) {
+    traceFromImage(panel, p);
     if (!panel.grid.corners) return '';
     const at = axisCoords(panel, p);
     if (at.u < 0 || at.u >= 1 || at.v < 0 || at.v >= 1) return '';
@@ -236,7 +272,7 @@
   function onClick(mode, p, e) {
     if (mode?.type === 'xtick' || mode?.type === 'ytick') {
       const key = mode.type[0];
-      const tick = createAxisTick(p);
+      const tick = createAxisTick(onAxisEdge(ws.activePanel(), key, p));
       ws.commit((pn) => pn.map[key].ticks.push(tick));
       focusAxisTick(key, tick.id);
       return true;
@@ -288,7 +324,7 @@
       if (near(l.a)) return { kind: 'profileEnd', id: l.id, end: 'a' };
       if (near(l.b)) return { kind: 'profileEnd', id: l.id, end: 'b' };
     }
-    for (const key of ['x', 'y']) for (const k of panel.map[key].ticks) if (near(k)) return { kind: 'axisTick', key, id: k.id };
+    for (const key of ['x', 'y']) for (const k of panel.map[key].ticks) if (near(onAxisEdge(panel, key, k))) return { kind: 'axisTick', key, id: k.id };
     const l = profileAt(p, tol);
     return l ? { kind: 'profileMove', id: l.id, last: p } : null;
   }
@@ -297,7 +333,7 @@
     const panel = ws.activePanel();
     if (handle.kind === 'axisTick') {
       const k = panel.map[handle.key].ticks.find((x) => x.id === handle.id);
-      if (k) Object.assign(k, { x: p.x, y: p.y });
+      if (k) Object.assign(k, onAxisEdge(panel, handle.key, p));
     } else {
       const l = panel.map.profiles.find((x) => x.id === handle.id);
       if (!l) return;
@@ -336,6 +372,8 @@
     }
     return false;
   }
+
+  $('viewer').addEventListener('pointerleave', () => ws.tool().kind === 'map' && setTrace(null));
 
   // Axis ticks need the plot area: their position is measured along it.
   function toggleMode(type) {

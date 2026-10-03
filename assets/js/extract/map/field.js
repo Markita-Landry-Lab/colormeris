@@ -53,6 +53,25 @@
     return key === 'x' ? u : v;
   }
 
+  // Axis ticks sit on the plot area's edges: x ticks on the bottom edge, y
+  // ticks on the left edge, where only their position along the axis matters.
+  // They may lie a little beyond the corners, as axes often run past the image.
+  const AXIS_T_MIN = -0.5;
+  const AXIS_T_MAX = 1.5;
+
+  // Page point of axis position t on the edge of `key`'s axis.
+  function axisEdgePoint(panel, key, t) {
+    const c = panel.grid.corners;
+    const s = Math.min(AXIS_T_MAX, Math.max(AXIS_T_MIN, t));
+    return key === 'x' ? bilinear(c, s, 1) : bilinear(c, 0, s);
+  }
+
+  // A page point moved onto the edge of `key`'s axis, keeping its position
+  // along the axis. Without a plot area the point stays as it is.
+  function onAxisEdge(panel, key, p) {
+    return panel.grid.corners ? axisEdgePoint(panel, key, axisT(panel, key, p)) : p;
+  }
+
   // {fn: axis position → axis value, or null, problem: why there is none}.
   // An axis is optional, so a problem is a hint rather than an error.
   function axisFn(panel, key) {
@@ -283,6 +302,8 @@
     mapSize,
     mapProblem,
     axisT,
+    axisEdgePoint,
+    onAxisEdge,
     axisFn,
     makeColorReader,
     colorbarLevels,

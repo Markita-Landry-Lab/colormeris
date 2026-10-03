@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { mapSize, axisFn, axisT, mapMatrixCsv, mapLongCsv, profileCsv, formatNumber, safeFileName } = CM;
+  const { mapSize, axisFn, axisT, axisEdgePoint, mapMatrixCsv, mapLongCsv, profileCsv, formatNumber, safeFileName } = CM;
 
   // Map tool, DOM: the sidebar cards (Axes, Profiles, Results), the profile
   // plot and the CSV downloads. Set up by map-tool.js.
@@ -51,7 +51,7 @@
         ws.setValue(tr.querySelector('input'), Number.isFinite(k.value) ? k.value : '');
         tr.classList.toggle('invalid', !Number.isFinite(k.value));
         const t = panel.grid.corners ? axisT(panel, key, k) : NaN;
-        tr.querySelector('.pos').textContent = Number.isFinite(t) ? `${(t * 100).toFixed(1)}%` : '';
+        ws.setValue(tr.querySelector('.pos input'), Number.isFinite(t) ? Math.round(t * 1000) / 10 : '');
       }
     }
 
@@ -67,10 +67,41 @@
         ws.changed({ light: true });
       });
       input.addEventListener('change', () => ws.changed());
+      // Escape after typing a value ends tick mode too; otherwise the next
+      // click on the image (meant to leave the mode) adds another tick.
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          input.blur();
+          ws.setMode(null);
+        }
       });
-      const pos = Object.assign(document.createElement('td'), { className: 'pos', title: `Position across the plot area: 0% at the ${key === 'x' ? 'left' : 'top'}, 100% at the ${key === 'x' ? 'right' : 'bottom'}` });
+      // Position as % across the plot area, editable as on the colorbar, for
+      // ticks whose mark is hard to click (e.g. on the plot's own edge).
+      const pos = Object.assign(document.createElement('td'), { className: 'pos' });
+      const at = Object.assign(document.createElement('input'), {
+        type: 'number',
+        step: 'any',
+        min: -50,
+        max: 150,
+        className: 'num',
+        title: `Position across the plot area: 0% at the ${key === 'x' ? 'left' : 'top'}, 100% at the ${key === 'x' ? 'right' : 'bottom'}`,
+      });
+      at.setAttribute('aria-label', `Position in % across the plot area (${key} axis)`);
+      at.addEventListener('focus', () => ws.pushHistory());
+      at.addEventListener('change', () => {
+        const panel = ws.activePanel();
+        const tick = panel.map[key].ticks.find((x) => x.id === k.id);
+        const v = Number(at.value);
+        if (!tick || !panel.grid.corners || at.value === '' || !Number.isFinite(v)) return ws.changed();
+        Object.assign(tick, axisEdgePoint(panel, key, v / 100));
+        ws.changed();
+      });
+      at.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') at.blur();
+      });
+      pos.append(at, '%');
       const del = Object.assign(document.createElement('button'), { className: 'btn subtle icon', textContent: '×', title: 'Remove tick' });
       del.setAttribute('aria-label', 'Remove tick');
       del.addEventListener('click', () => ws.commit((p) => (p.map[key].ticks = p.map[key].ticks.filter((x) => x.id !== k.id))));
@@ -129,6 +160,24 @@
       drawProfile(error ? null : samples, sel);
     }
 
+    // ---------------------------------------------------------------- tracing
+    // state.trace = {id, i}: sample i of profile id, under the pointer on the
+    // image (map-tool.js) or on the plot. Both draw it, so the two stay in step.
+
+    let plot = null; // what the plot shows, for mapping the pointer to a sample
+
+    function setTrace(trace) {
+      const same = trace && state.trace && trace.id === state.trace.id && trace.i === state.trace.i;
+      if (same || (!trace && !state.trace)) return;
+      state.trace = trace;
+      redrawProfile();
+      viewer.requestDraw();
+    }
+
+    function redrawProfile() {
+      if (plot) drawProfile(plot.samples, plot.profile);
+    }
+
     // Plot against the calibrated axis the line mostly runs along, else
     // against the distance along the line in pixels.
     function profileAxis(samples, profile) {
@@ -148,6 +197,7 @@
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
+      plot = null;
       if (!samples?.length) return;
       const css = getComputedStyle(canvas);
       const text = css.getPropertyValue('--text').trim() || '#222';
@@ -193,7 +243,53 @@
       ctx.textAlign = 'center';
       ctx.fillStyle = text;
       ctx.fillText(axis.name, pad.l + W / 2, pad.t + H + 4);
+      plot = { samples, profile, xs, sx, pad, W };
+      if (state.trace?.id === profile.id && samples[state.trace.i]) {
+        drawTraceMark(ctx, { i: state.trace.i, samples, xs, sx, sy, pad, W, H, axis, text, accent, css });
+      }
     }
+
+    // Guide line, dot and readout for the traced sample.
+    function drawTraceMark(ctx, { i, samples, xs, sx, sy, pad, W, H, axis, text, accent, css }) {
+      const s = samples[i];
+      const x = sx(xs[i]);
+      const y = sy(s.value);
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = text;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, pad.t);
+      ctx.lineTo(Math.round(x) + 0.5, pad.t + H);
+      ctx.stroke();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = accent;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = css.getPropertyValue('--surface').trim() || '#fff';
+      ctx.stroke();
+      const label = `${axis.name === 'distance (px)' ? 'd' : axis.name} ${shortLabel(xs[i])}: ${shortLabel(s.value)}`;
+      ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+      ctx.textBaseline = 'top';
+      // Readout on the side of the guide with more room.
+      const right = x < pad.l + W / 2;
+      ctx.textAlign = right ? 'left' : 'right';
+      ctx.fillStyle = text;
+      ctx.fillText(label, x + (right ? 6 : -6), pad.t + 3);
+    }
+
+    // Pointer on the plot → nearest sample along the horizontal axis.
+    $('profile-plot').addEventListener('pointermove', (e) => {
+      if (!plot) return;
+      const mx = e.clientX - $('profile-plot').getBoundingClientRect().left;
+      let best = 0;
+      for (let i = 1; i < plot.xs.length; i++) if (Math.abs(plot.sx(plot.xs[i]) - mx) < Math.abs(plot.sx(plot.xs[best]) - mx)) best = i;
+      setTrace({ id: plot.profile.id, i: best });
+    });
+    $('profile-plot').addEventListener('pointerleave', () => setTrace(null));
 
     const shortLabel = (v) => {
       if (!Number.isFinite(v)) return '';
@@ -282,7 +378,7 @@
       new ResizeObserver(() => app.sourceCanvas && ws.tool().kind === 'map' && renderProfiles(ws.activePanel())).observe($('profile-plot'));
     }
 
-    return { renderSidebar, focusAxisTick };
+    return { renderSidebar, focusAxisTick, setTrace };
   }
 
   Object.assign(CM, { setupMapSidebar });

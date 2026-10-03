@@ -156,3 +156,18 @@ test('map CSVs carry axis headers', () => {
   panel.grid.corners = null;
   assert.deepEqual(mapPanelFiles(panel, extractMap(img, panel), 'fig').map((f) => f.path), ['data/fig_profile_mid_row.csv']);
 });
+
+test('axis ticks sit on the plot edges', () => {
+  const { panel } = scene();
+  const { onAxisEdge, axisEdgePoint } = CM;
+  // x ticks go to the bottom edge, keeping their position along x.
+  assert.deepEqual(onAxisEdge(panel, 'x', { x: X0 + 50, y: Y0 + 30 }), { x: X0 + 50, y: Y0 + H });
+  // y ticks go to the left edge, keeping their position along y.
+  assert.deepEqual(onAxisEdge(panel, 'y', { x: X0 + 120, y: Y0 + 25 }), { x: X0, y: Y0 + 25 });
+  // A typed position (25% across) and the clamp to half a plot beyond either side.
+  assert.deepEqual(axisEdgePoint(panel, 'x', 0.25), { x: X0 + W / 4, y: Y0 + H });
+  assert.deepEqual(axisEdgePoint(panel, 'y', 9), { x: X0, y: Y0 + 1.5 * H });
+  // Without a plot area the point stays where it was clicked.
+  panel.grid.corners = null;
+  assert.deepEqual(onAxisEdge(panel, 'x', { x: 1, y: 2 }), { x: 1, y: 2 });
+});
