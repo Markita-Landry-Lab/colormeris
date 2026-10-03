@@ -292,15 +292,17 @@
       if (picker && document.activeElement !== picker.input) picker.input.value = cb.colormap.name;
     }
 
-    // Pick a known colormap. A panel without ticks gets one at each end, so the
-    // range is set by typing two values.
+    // Pick a known colormap. A panel without ticks gets one at each end, valued
+    // 0 and 1 (1 and 10 on a log scale, which has no 0), so the panel reads
+    // values at once; typing the figure's range replaces them.
     function chooseColormap(name, reversed) {
       const cb = w.activePanel().colorbar;
       const addEnds = !cb.ticks.length;
       const ids = addEnds ? [w.newTickId(), w.newTickId()] : [];
+      const [lo, hi] = cb.scale === 'log10' ? [1, 10] : [0, 1];
       w.commit((p) => {
         p.colorbar.colormap = { name, reversed: !!reversed };
-        if (addEnds) p.colorbar.ticks = [{ id: ids[0], t: 0, value: NaN }, { id: ids[1], t: 1, value: NaN }];
+        if (addEnds) p.colorbar.ticks = [{ id: ids[0], t: 0, value: lo }, { id: ids[1], t: 1, value: hi }];
       });
       if (addEnds) focusTick(ids[0]);
     }
