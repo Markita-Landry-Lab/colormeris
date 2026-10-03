@@ -157,14 +157,15 @@
         else cb.end = q;
         const L = len() || 1e-9;
         const tAt = (t0) => (handle.kind === 'barEnd' ? (t0 * handle.len) / L : 1 - ((1 - t0) * handle.len) / L);
-        cb.ticks.forEach((k, i) => Object.assign(k, pointAtT(cb.start, cb.end, fixed ? tAt(handle.ts[i]) : handle.ts[i])));
+        // Ticks typed along a known colormap have no page point to move.
+        cb.ticks.forEach((k, i) => Number.isFinite(k.x) && Object.assign(k, pointAtT(cb.start, cb.end, fixed ? tAt(handle.ts[i]) : handle.ts[i])));
       } else if (handle.kind === 'bar') {
         // Move the line and its ticks together, by the pointer's step since the last event.
         const cb = panel.colorbar;
         const dx = p.x - handle.last.x;
         const dy = p.y - handle.last.y;
         handle.last = p;
-        for (const q of [cb.start, cb.end, ...cb.ticks]) {
+        for (const q of [cb.start, cb.end, ...cb.ticks.filter((k) => Number.isFinite(k.x))]) {
           q.x += dx;
           q.y += dy;
         }

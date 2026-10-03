@@ -1,17 +1,10 @@
 (function (CM) {
   'use strict';
-  const { rgbToLab, sampleColorbar, makeValueFn, labToT, tickProblem, ticksWithT, readPixel, roiInstances, forEachPixelInPolygon, cellAt, centroid, boxLabel } = CM;
+  const { rgbToLab, colorbarSamples, makeValueFn, labToT, ticksWithT, colorbarProblem, readPixel, roiInstances, forEachPixelInPolygon, cellAt, centroid, boxLabel } = CM;
 
   // Quantify signal inside ROIs of images such as IVIS luminescence overlays:
   // colored pixels are read through the calibrated colorbar, grayscale pixels
   // (the photograph underneath) are background with value 0.
-
-  function colorbarProblem(panel) {
-    const cb = panel.colorbar;
-    if (!cb.start || !cb.end) return 'Set the colorbar start and end.';
-    if (Math.hypot(cb.end.x - cb.start.x, cb.end.y - cb.start.y) < 2) return 'Colorbar is too short.';
-    return tickProblem(ticksWithT(cb), cb.scale);
-  }
 
   function roiPanelProblem(panel) {
     const bar = colorbarProblem(panel);
@@ -34,7 +27,7 @@
   // per color since overlays repeat colors heavily.
   function makeClassifier(img, panel) {
     const cb = panel.colorbar;
-    const samples = sampleColorbar(img, cb.start, cb.end, cb.halfWidth, cb.nSamples);
+    const samples = colorbarSamples(img, cb);
     const valueAt = makeValueFn(ticksWithT(cb), cb.scale);
     const { grayChroma, distance, maxDeltaE } = panel.settings;
     const cache = new Map();
@@ -149,5 +142,5 @@
     return { rows: order.map((k) => rowsByKey.get(k)), rois: panel.rois };
   }
 
-  Object.assign(CM, { colorbarProblem, roiPanelProblem, pixelArea, makeClassifier, quantifyOutline, quantifyPanel, metricValue, shortNumber, roiTableModel });
+  Object.assign(CM, { roiPanelProblem, pixelArea, makeClassifier, quantifyOutline, quantifyPanel, metricValue, shortNumber, roiTableModel });
 })((globalThis.Colormeris ??= {}));

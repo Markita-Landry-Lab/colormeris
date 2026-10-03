@@ -66,3 +66,16 @@ test('suggested reference colormap names the direction by value', () => {
   const g = CM.suggestColormap(bar('gray'));
   assert.ok(g.same.length >= 2, g.same.join());
 });
+
+test('colormapSamples reads a known map as colorbar samples', () => {
+  const v = byName('viridis').rgbs;
+  const s = CM.colormapSamples({ name: 'viridis', reversed: false }, 256);
+  assert.equal(s.length, 256);
+  assert.deepEqual([s[0].t, s[255].t], [0, 1]);
+  assert.deepEqual(s[0].rgb.map(Math.round), v[0]);
+  assert.deepEqual(s[255].rgb.map(Math.round), v.at(-1));
+  // Reversed runs from the map's end to its start.
+  const r = CM.colormapSamples({ name: 'viridis', reversed: true }, 256);
+  assert.deepEqual(r[0].rgb.map(Math.round), v.at(-1));
+  assert.equal(CM.colormapSamples({ name: 'no-such-map' }), null);
+});

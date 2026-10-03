@@ -5,6 +5,7 @@
     deltaE76,
     colorDistance,
     sampleColorbar,
+    colorbarSamples,
     makeValueFn,
     labToT,
     tickProblem,
@@ -124,7 +125,7 @@
 
   function prepare(img, panel) {
     const cb = panel.colorbar;
-    const samples = sampleColorbar(img, cb.start, cb.end, cb.halfWidth, cb.nSamples);
+    const samples = colorbarSamples(img, cb);
     const valueAt = makeValueFn(ticksWithT(cb), cb.scale);
     return { samples, read: makeColorReader(samples, valueAt, panel.settings) };
   }

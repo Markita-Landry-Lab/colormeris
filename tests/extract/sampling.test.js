@@ -65,3 +65,28 @@ test('round trip on a skewed heatmap with log ticks', () => {
     }
   }
 });
+
+test('a known colormap calibrates without a colorbar in the figure', () => {
+  // Cells painted from the library's viridis; no bar on the page at all.
+  const viridis = CM.parseHexColors(CM.cmapData.maps.find((m) => m.name === 'viridis').colors);
+  const truth = [[0, 0.25], [0.5, 1]];
+  const corners = rectCorners({ x: 10, y: 10 }, { x: 110, y: 110 });
+  const img = makeImage(130, 130);
+  paintHeatmap(img, corners, truth, viridis, { lines: false });
+  const p = createPanel();
+  p.grid.corners = corners;
+  p.grid.rows = 2;
+  p.grid.cols = 2;
+  p.colorbar.colormap = { name: 'viridis', reversed: false };
+  assert.match(panelProblem(p), /two ticks/);
+  // The ends typed as positions along the colormap: 0% = 10, 100% = 20.
+  p.colorbar.ticks = [{ id: 'a', t: 0, value: 10 }, { id: 'b', t: 1, value: 20 }];
+  assert.equal(panelProblem(p), null);
+  const res = extractPanel(img, p);
+  res.cells.flat().forEach((c, i) => assert.ok(Math.abs(c.value - (10 + 10 * truth.flat()[i])) < 0.1, `${c.value}`));
+  // Reversed: the same colors read from the other end.
+  p.colorbar.colormap.reversed = true;
+  assert.ok(Math.abs(extractPanel(img, p).cells[1][1].value - 10) < 0.1);
+  p.colorbar.colormap = { name: 'no-such-map' };
+  assert.match(panelProblem(p), /Unknown colormap/);
+});

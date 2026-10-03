@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { projectT } = CM;
+  const { projectT, tickProblem } = CM;
 
   // Project model and its JSON (de)serialization. All coordinates are in the
   // pixel space of the rendered source image (source.width × source.height).
@@ -35,7 +35,9 @@
       page,
       tool,
       grid: { corners: null, rows: 4, cols: 4, sampleFraction: 0.5, rowLabels: [], colLabels: [], boxLabels: [] },
-      colorbar: { start: null, end: null, halfWidth: 2, nSamples: 256, ticks: [], scale: 'linear' },
+      // colormap: {name, reversed} reads colors from a known colormap instead
+      // of the bar in the figure; the bar line is then optional.
+      colorbar: { start: null, end: null, halfWidth: 2, nSamples: 256, ticks: [], scale: 'linear', colormap: null },
       settings: { distance: 'de2000', maxDeltaE: 10, grayChroma: 10 },
       rois: [],
       scale: null,
@@ -98,9 +100,28 @@
     return parts.map((s) => s.trim());
   }
 
+  // Ticks with their position t along the colorbar. A tick is either a point
+  // on the page ({x, y}, projected on the bar line) or, with a known colormap,
+  // a typed position ({t}) along the colormap.
   function ticksWithT(colorbar) {
     const { start, end } = colorbar;
-    return colorbar.ticks.map((k) => ({ ...k, t: start && end ? projectT(start, end, k) : NaN }));
+    return colorbar.ticks.map((k) => ({
+      ...k,
+      t: Number.isFinite(k.x) ? (start && end ? projectT(start, end, k) : NaN) : Number.isFinite(k.t) ? k.t : NaN,
+    }));
+  }
+
+  // What is missing in a panel's colorbar calibration, or null. With a known
+  // colormap the bar line in the figure is optional.
+  function colorbarProblem(panel) {
+    const cb = panel.colorbar;
+    if (cb.colormap) {
+      if (CM.cmapData && !CM.cmapData.maps.some((m) => m.name === cb.colormap.name)) return `Unknown colormap "${cb.colormap.name}".`;
+    } else {
+      if (!cb.start || !cb.end) return 'Set the colorbar start and end.';
+      if (Math.hypot(cb.end.x - cb.start.x, cb.end.y - cb.start.y) < 2) return 'Colorbar is too short.';
+    }
+    return tickProblem(ticksWithT(cb), cb.scale);
   }
 
   // Coordinates are stored at full precision: rounding them would move sample
@@ -134,9 +155,10 @@
           halfWidth: p.colorbar.halfWidth,
           nSamples: p.colorbar.nSamples,
           scale: p.colorbar.scale,
+          ...(p.colorbar.colormap ? { colormap: { name: p.colorbar.colormap.name, reversed: !!p.colorbar.colormap.reversed } } : {}),
           ticks: ticksWithT(p.colorbar).map((k) => ({
-            x: k.x,
-            y: k.y,
+            x: Number.isFinite(k.x) ? k.x : null,
+            y: Number.isFinite(k.y) ? k.y : null,
             t: Number.isFinite(k.t) ? Math.round(k.t * 1e6) / 1e6 : null,
             value: k.value,
           })),
@@ -273,9 +295,17 @@
       if (Number.isFinite(cb.halfWidth)) p.colorbar.halfWidth = Math.max(0, cb.halfWidth);
       if (Number.isInteger(cb.nSamples)) p.colorbar.nSamples = Math.min(4096, Math.max(2, cb.nSamples));
       p.colorbar.scale = cb.scale === 'log10' ? 'log10' : 'linear';
+      if (cb.colormap && typeof cb.colormap === 'object' && typeof cb.colormap.name === 'string') {
+        p.colorbar.colormap = { name: cb.colormap.name, reversed: !!cb.colormap.reversed };
+      }
+      // Page ticks have x and y; typed ticks on a known colormap only t. A
+      // tick saved before its value was typed has value null.
+      const tickValue = (k) => (k.value === null || k.value === undefined ? NaN : Number(k.value));
       p.colorbar.ticks = (Array.isArray(cb.ticks) ? cb.ticks : []).map((k) => {
-        const q = readPoint(k, `panel ${i + 1} tick`);
-        return { x: q.x, y: q.y, value: Number(k.value) };
+        const q = readPoint(k?.x === null && k?.y === null ? null : k, `panel ${i + 1} tick`);
+        if (q) return { x: q.x, y: q.y, value: tickValue(k) };
+        if (!Number.isFinite(k?.t)) fail(`tick in panel ${i + 1} needs a position`);
+        return { t: k.t, value: tickValue(k) };
       });
       const s = raw.settings || {};
       p.settings.distance = s.distance === 'de76' ? 'de76' : 'de2000';
@@ -319,7 +349,7 @@
     if (panel.grid.corners) panel.grid.corners = panel.grid.corners.map(s);
     panel.colorbar.start = s(panel.colorbar.start);
     panel.colorbar.end = s(panel.colorbar.end);
-    panel.colorbar.ticks = panel.colorbar.ticks.map((k) => ({ ...k, ...s(k) }));
+    panel.colorbar.ticks = panel.colorbar.ticks.map((k) => (Number.isFinite(k.x) ? { ...k, ...s(k) } : k));
     panel.colorbar.halfWidth *= factor;
     if (panel.scale) panel.scale = { ...panel.scale, p1: s(panel.scale.p1), p2: s(panel.scale.p2) };
     // Map bins stay in rendered pixels, so a native-resolution map stays native.
@@ -333,5 +363,5 @@
     }
   }
 
-  Object.assign(CM, { SCHEMA, SCHEMA_VERSION, APP_VERSION, KINDS, createPanel, createProject, createRoi, createAxisTick, createProfile, effectiveLabels, boxLabel, parseLabelText, ticksWithT, serializeProject, parseProject, rescalePanel });
+  Object.assign(CM, { SCHEMA, SCHEMA_VERSION, APP_VERSION, KINDS, createPanel, createProject, createRoi, createAxisTick, createProfile, effectiveLabels, boxLabel, parseLabelText, ticksWithT, colorbarProblem, serializeProject, parseProject, rescalePanel });
 })((globalThis.Colormeris ??= {}));

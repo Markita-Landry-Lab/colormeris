@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { rgbToLab, sampleColorbar, makeValueFn, labToT, tickProblem, sampleCell, ticksWithT } = CM;
+  const { rgbToLab, colorbarSamples, makeValueFn, labToT, sampleCell, ticksWithT, colorbarProblem } = CM;
 
   // Combine grid sampling and colorbar calibration into a value matrix.
 
@@ -8,10 +8,7 @@
   // Returns a description of what is still missing before extraction, or null.
   function panelProblem(panel) {
     if (!panel.grid.corners) return 'Set the heatmap grid corners.';
-    const cb = panel.colorbar;
-    if (!cb.start || !cb.end) return 'Set the colorbar start and end.';
-    if (Math.hypot(cb.end.x - cb.start.x, cb.end.y - cb.start.y) < 2) return 'Colorbar is too short.';
-    return tickProblem(ticksWithT(cb), cb.scale);
+    return colorbarProblem(panel);
   }
 
   // Result: {rows, cols, cells[r][c] = {rgb, t, value, deltaE, flagged}, samples}
@@ -20,7 +17,7 @@
     const error = panelProblem(panel);
     if (error) return { error };
     const cb = panel.colorbar;
-    const samples = sampleColorbar(img, cb.start, cb.end, cb.halfWidth, cb.nSamples);
+    const samples = colorbarSamples(img, cb);
     const valueAt = makeValueFn(ticksWithT(cb), cb.scale);
     const { rows, cols } = panel.grid;
     const cells = [];

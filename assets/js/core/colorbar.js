@@ -89,6 +89,14 @@
     };
   }
 
+  // The colorbar's samples: from its known colormap when it has one (see
+  // colormapSamples in core/colormap-match.js, loaded after this file), else
+  // read from the image along the bar line.
+  function colorbarSamples(img, cb) {
+    if (cb.colormap) return CM.colormapSamples(cb.colormap, cb.nSamples) || [];
+    return sampleColorbar(img, cb.start, cb.end, cb.halfWidth, cb.nSamples);
+  }
+
   // Nearest position along the sampled bar for a Lab color. Refines between the
   // best sample and its closer neighbour by projecting in Lab space.
   // Returns {t, deltaE}.
@@ -316,5 +324,5 @@
     return { t: best / len, moved: Math.round((best - s0) * 10) / 10, point: pt(best) };
   }
 
-  Object.assign(CM, { DEFAULT_SAMPLES, sampleColorbar, projectT, pointAtT, tickProblem, makeValueFn, labToT, colorAtT, refineColorbar, snapTick });
+  Object.assign(CM, { DEFAULT_SAMPLES, sampleColorbar, colorbarSamples, projectT, pointAtT, tickProblem, makeValueFn, labToT, colorAtT, refineColorbar, snapTick });
 })((globalThis.Colormeris ??= {}));

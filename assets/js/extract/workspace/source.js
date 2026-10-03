@@ -60,7 +60,7 @@
     }
 
     function hasCalibration() {
-      return app.project.panels.some((p) => p.grid.corners || p.colorbar.start || w.toolFor(p)?.hasCalibration?.(p));
+      return app.project.panels.some((p) => p.grid.corners || p.colorbar.start || p.colorbar.colormap || w.toolFor(p)?.hasCalibration?.(p));
     }
 
     // Display a page that is already in app.pages.

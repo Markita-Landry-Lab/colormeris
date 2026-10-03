@@ -119,6 +119,8 @@
       ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
       ctx.textBaseline = 'middle';
       for (const k of cb.ticks) {
+        // Ticks typed as a position along a known colormap have no page point.
+        if (!Number.isFinite(k.x)) continue;
         const s = v.toScreen(k);
         ctx.beginPath();
         ctx.moveTo(s.x - nx * 12, s.y - ny * 12);

@@ -189,5 +189,22 @@
     };
   }
 
-  Object.assign(CM, { identifyColorbar, identifyColors, matchLevel, MATCH_LEVELS, suggestColormap, cmapColorAt: colorAt });
+  // A known colormap as colorbar samples, for calibrating against the map
+  // itself instead of a bar sampled from the figure. colormap: {name,
+  // reversed}. Returns [{t, rgb, lab}] from t = 0 (the map's start, or its end
+  // when reversed) to 1, like sampleColorbar, or null for an unknown name.
+  function colormapSamples(colormap, n = 256) {
+    const map = colormap && knownMaps().find((m) => m.name === colormap.name);
+    if (!map) return null;
+    return Array.from({ length: n }, (_, i) => {
+      const t = i / (n - 1);
+      const rgb = colorAt(map, colormap.reversed ? 1 - t : t);
+      return { t, rgb, lab: rgbToLab(rgb) };
+    });
+  }
+
+  // [[r, g, b], …] of a known map, or null.
+  const cmapRgbs = (name) => knownMaps().find((m) => m.name === name)?.rgbs || null;
+
+  Object.assign(CM, { identifyColorbar, identifyColors, matchLevel, MATCH_LEVELS, suggestColormap, cmapColorAt: colorAt, colormapSamples, cmapRgbs });
 })((globalThis.Colormeris ??= {}));

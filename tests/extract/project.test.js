@@ -172,3 +172,24 @@ test('map panels keep their bin, axes and profiles', () => {
   // Map data is only stored for map panels.
   assert.equal(serializeProject(createProject('heatmap')).panels[0].map, undefined);
 });
+
+test('a known colormap and typed tick positions survive a round trip', () => {
+  const project = createProject();
+  const cb = project.panels[0].colorbar;
+  cb.colormap = { name: 'magma', reversed: true };
+  cb.ticks = [{ id: 'a', t: 0, value: 1 }, { id: 'b', t: 0.75, value: NaN }];
+  const json = JSON.parse(JSON.stringify(serializeProject(project)));
+  assert.deepEqual(json.panels[0].colorbar.colormap, { name: 'magma', reversed: true });
+  assert.deepEqual(json.panels[0].colorbar.ticks[1], { x: null, y: null, t: 0.75, value: null });
+  const back = parseProject(json).panels[0].colorbar;
+  assert.deepEqual(back.colormap, { name: 'magma', reversed: true });
+  assert.deepEqual(back.ticks[0], { t: 0, value: 1 });
+  // A tick saved before its value was typed stays empty, not 0.
+  assert.ok(Number.isNaN(back.ticks[1].value));
+  assert.deepEqual(CM.ticksWithT(back).map((k) => k.t), [0, 0.75]);
+  // Typed ticks have no page position, so rescaling leaves them alone.
+  const q = parseProject(json).panels[0];
+  rescalePanel(q, 2);
+  assert.deepEqual(q.colorbar.ticks[0], { t: 0, value: 1 });
+  assert.equal(serializeProject(createProject()).panels[0].colorbar.colormap, undefined);
+});

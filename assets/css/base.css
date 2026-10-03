@@ -291,6 +291,23 @@ details.options[open] > summary::before, .help[open] > summary::before { transfo
 }
 .notice:empty { display: none; }
 
+/* Colormap picker (colormaps/map-picker.js): a search field with a list of
+   maps and their strips. Used by Recolor and Compare and by the colorbar card. */
+.cmap-paint { display: block; width: 100%; height: 100%; }
+.cmap-paint.qual { image-rendering: pixelated; }
+.cmap-mini { display: inline-block; width: 64px; height: 12px; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; vertical-align: middle; flex: none; }
+.cmap-rc-pick { position: relative; }
+.cmap-rc-pick input { height: 28px; width: 180px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.cmap-rc-pick input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cmap-rc-maps { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: max(100%, 260px); max-height: 280px; overflow-y: auto; margin: 0; padding: 4px 0; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+.cmap-rc-maps [role="option"] { display: flex; align-items: center; gap: 8px; padding: 4px 10px; cursor: pointer; }
+.cmap-rc-maps [role="option"]:hover, .cmap-rc-maps [role="option"].active { background: var(--accent-soft); }
+.cmap-rc-maps [aria-selected="true"] .cmap-rc-opt-name { font-weight: 650; }
+.cmap-rc-opt-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; }
+.cmap-rc-opt-group { font-size: 11px; color: var(--muted); }
+.cmap-rc-group { padding: 6px 10px 2px; font-size: 11px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.cmap-rc-none { padding: 6px 10px; color: var(--muted); }
+
 .btn.link, button.link {
   border: 0; padding: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline;
 }

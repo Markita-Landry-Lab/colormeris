@@ -318,6 +318,7 @@
         end: pt(cb.end),
         halfWidth: cb.halfWidth,
         scale: cb.scale,
+        colormap: cb.colormap ? { ...cb.colormap } : null,
         ticks: ticksWithT(cb).map((k) => ({ id: k.id, t: Number.isFinite(k.t) ? Math.round(k.t * 1e4) / 1e4 : null, value: Number.isFinite(k.value) ? k.value : null })),
       },
       settings: { ...p.settings },
