@@ -65,8 +65,9 @@
       if (typing) return;
       const h = hotkeys[findHotkey(w.ws.settings.hotkeys, comboFromEvent(e))];
       if (!h || (!h.always && !app.sourceCanvas) || (h.tool && h.tool !== w.tool().kind)) return;
-      e.preventDefault();
-      h.run();
+      // A hotkey that returns false did nothing, so the browser keeps the key
+      // (Mod+C with no profile selected still copies selected text).
+      if (h.run() !== false) e.preventDefault();
     });
 
     return { addHotkey };

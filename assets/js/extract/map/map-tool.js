@@ -11,6 +11,7 @@
     mapPanelFiles,
     createAxisTick,
     createProfile,
+    pastedProfiles,
     bilinear,
     colorAtT,
     formatNumber,
@@ -438,6 +439,33 @@
   }
   mctx.toggleMode = toggleMode;
   for (const type of ['xtick', 'ytick', 'profile']) ws.addHotkey(type, () => toggleMode(type), { tool: 'map' });
+
+  // Copy and paste profiles, also between panels and pages. The clipboard is
+  // this tab's, not the system's: profiles mean nothing outside a figure.
+  let clipboard = null; // {panelId, corners, profiles, pastes}
+  function copyProfiles() {
+    const profiles = selectedProfiles();
+    if (!profiles.length || app.mode) return false;
+    const panel = ws.activePanel();
+    clipboard = { panelId: panel.id, corners: structuredClone(panel.grid.corners), profiles: structuredClone(profiles), pastes: 0 };
+    ws.toast(`Copied ${profiles.length} profile${profiles.length === 1 ? '' : 's'}.`);
+  }
+  function pasteProfiles() {
+    if (!clipboard || app.mode) return false;
+    const panel = ws.activePanel();
+    // In the panel they came from, each paste lands a bit lower and to the
+    // right (12 screen px), so copies do not hide the original.
+    const step = panel.id === clipboard.panelId ? (12 * ++clipboard.pastes) / viewer.scale : 0;
+    const copies = pastedProfiles(panel, clipboard.profiles, panel.id === clipboard.panelId ? null : clipboard.corners, { x: step, y: step });
+    ws.commit((p) => p.map.profiles.push(...copies));
+    state.selectedId = copies.at(-1).id;
+    state.overlay.clear();
+    for (const l of copies.slice(0, -1)) state.overlay.add(l.id);
+    ws.changed();
+    ws.toast(`Pasted ${copies.length} profile${copies.length === 1 ? '' : 's'}.`);
+  }
+  ws.addHotkey('copyProfiles', copyProfiles, { tool: 'map' });
+  ws.addHotkey('pasteProfiles', pasteProfiles, { tool: 'map' });
   }
 
   Object.assign(CM, { setupMapTool });

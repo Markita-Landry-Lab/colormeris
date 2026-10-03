@@ -31,6 +31,8 @@
     { id: 'xtick', label: 'Add x-axis ticks (Map)', keys: ['X'], tool: 'map' },
     { id: 'ytick', label: 'Add y-axis ticks (Map)', keys: ['Y'], tool: 'map' },
     { id: 'profile', label: 'Draw a line profile (Map)', keys: ['L'], tool: 'map' },
+    { id: 'copyProfiles', label: 'Copy selected profiles (Map)', keys: ['Mod+C'], tool: 'map' },
+    { id: 'pasteProfiles', label: 'Paste profiles (Map)', keys: ['Mod+V'], tool: 'map' },
   ];
   // Keys with a fixed meaning: cancel, pan, and finishing or editing a polygon.
   const RESERVED_KEYS = ['Escape', 'Space', 'Enter', 'Backspace', 'Delete', 'Tab'];

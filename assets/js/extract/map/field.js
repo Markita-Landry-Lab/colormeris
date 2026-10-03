@@ -15,6 +15,7 @@
     bilinear,
     invertBilinear,
     readPixel,
+    createProfile,
   } = CM;
 
   // Map tool: read a near-continuous field (spectroscopy maps, fluorescence
@@ -309,6 +310,30 @@
     return d > 0 ? { divisor: d } : { error: `The ${mode} is not positive, so the profile cannot be divided by it.` };
   }
 
+  // Copies of copied profiles for pasting into panel. Between panels with plot
+  // areas a copy keeps its place within the plot (fromCorners → the panel's
+  // corners); otherwise it keeps its page position, shifted by offset {x, y}.
+  // Names already in the panel get a number: "Profile 1 (2)".
+  function pastedProfiles(panel, profiles, fromCorners, offset = { x: 0, y: 0 }) {
+    const to = panel.grid.corners;
+    const move =
+      fromCorners && to && !samePoints(fromCorners, to)
+        ? (p) => {
+            const { u, v } = invertBilinear(fromCorners, p);
+            return bilinear(to, u, v);
+          }
+        : (p) => ({ x: p.x + offset.x, y: p.y + offset.y });
+    const used = new Set(panel.map.profiles.map((l) => l.name));
+    return profiles.map((l) => {
+      let name = l.name;
+      for (let n = 2; used.has(name); n++) name = `${l.name} (${n})`;
+      used.add(name);
+      return createProfile(move(l.a), move(l.b), { name, halfWidth: l.halfWidth });
+    });
+  }
+
+  const samePoints = (a, b) => a.length === b.length && a.every((p, i) => Math.abs(p.x - b[i].x) < 1e-9 && Math.abs(p.y - b[i].y) < 1e-9);
+
   // Values along a profile line, one sample per pixel of length, each averaged
   // over ±halfWidth pixels across the line. Returns
   // [{d, x, y, px, py, value, deltaE, flagged, clipped}] or {error}.
@@ -371,6 +396,7 @@
     profileLength,
     profileEndForLength,
     profileDivisor,
+    pastedProfiles,
     sampleProfile,
   });
 })((globalThis.Colormeris ??= {}));

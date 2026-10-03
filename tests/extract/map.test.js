@@ -225,3 +225,27 @@ test('profiles can be divided by their max or mean', () => {
   assert.equal(lines[3].split(',')[7], '2');
   assert.equal(lines[4].split(',')[7], ''); // b cannot be normalized
 });
+
+test('pasted profiles keep their place in the plot', () => {
+  const { pastedProfiles } = CM;
+  const from = createPanel('a', 1, 'map');
+  from.grid.corners = rectCorners({ x: 0, y: 0 }, { x: 100, y: 100 });
+  const src = createProfile({ x: 10, y: 50 }, { x: 90, y: 50 }, { name: 'scan', halfWidth: 3 });
+  from.map.profiles.push(src);
+  // Into another panel twice the size: same place within its plot.
+  const to = createPanel('b', 1, 'map');
+  to.grid.corners = rectCorners({ x: 200, y: 0 }, { x: 400, y: 200 });
+  const [c] = pastedProfiles(to, [src], from.grid.corners);
+  close(c.a.x, 220, 1e-9);
+  close(c.a.y, 100, 1e-9);
+  close(c.b.x, 380, 1e-9);
+  assert.equal(c.halfWidth, 3);
+  assert.equal(c.name, 'scan');
+  assert.notEqual(c.id, src.id);
+  // Into the same panel: shifted, with a new name.
+  const [d] = pastedProfiles(from, [src], null, { x: 5, y: 5 });
+  assert.deepEqual([d.a, d.b, d.name], [{ x: 15, y: 55 }, { x: 95, y: 55 }, 'scan (2)']);
+  // Without a plot area: the page position.
+  const bare = createPanel('c', 1, 'map');
+  assert.deepEqual(pastedProfiles(bare, [src], from.grid.corners)[0].a, { x: 10, y: 50 });
+});
