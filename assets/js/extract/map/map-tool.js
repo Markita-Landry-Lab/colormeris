@@ -362,7 +362,7 @@
     }
     for (const key of ['x', 'y']) for (const k of panel.map[key].ticks) if (near(onAxisEdge(panel, key, k))) return { kind: 'axisTick', key, id: k.id };
     const l = profileAt(p, tol);
-    return l ? { kind: 'profileMove', id: l.id, last: p } : null;
+    return l ? { kind: 'profileMove', id: l.id, start: p, a: l.a, b: l.b } : null;
   }
 
   function onHandleDrag(handle, p, e) {
@@ -384,11 +384,16 @@
         const other = handle.end === 'a' ? l.b : l.a;
         l[handle.end] = e.altKey ? p : ws.snapAxis(other, p);
       } else {
-        const dx = p.x - handle.last.x;
-        const dy = p.y - handle.last.y;
-        handle.last = p;
-        l.a = { x: l.a.x + dx, y: l.a.y + dy };
-        l.b = { x: l.b.x + dx, y: l.b.y + dy };
+        // Moved by the offset from where the drag started; with Shift only
+        // along its larger component, so the line moves straight across or down.
+        let dx = p.x - handle.start.x;
+        let dy = p.y - handle.start.y;
+        if (e.shiftKey) {
+          if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+          else dx = 0;
+        }
+        l.a = { x: handle.a.x + dx, y: handle.a.y + dy };
+        l.b = { x: handle.b.x + dx, y: handle.b.y + dy };
       }
     }
     ws.changed({ light: true });
