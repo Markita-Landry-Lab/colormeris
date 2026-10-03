@@ -40,6 +40,7 @@
   const state = {
     selectedId: null, // selected profile, edited in the card
     overlay: new Set(), // more selected profiles, plotted with it
+    profileNorm: 'raw', // profile plot and CSV: 'raw', or divided by each 'max' or 'mean'
     trace: null, // {id, i}: traced sample of a profile (see map-sidebar.js)
     showRecon: false,
     showFlags: false,

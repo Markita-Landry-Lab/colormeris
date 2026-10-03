@@ -299,6 +299,16 @@
     return at(hi);
   }
 
+  // What a profile's values are divided by to compare profiles by shape:
+  // their maximum or mean (mode 'max' | 'mean'), 1 for 'raw'. {divisor} or
+  // {error} when it is not positive (dividing would flip or blow up the line).
+  function profileDivisor(samples, mode) {
+    if (mode !== 'max' && mode !== 'mean') return { divisor: 1 };
+    const values = samples.map((s) => s.value).filter(Number.isFinite);
+    const d = mode === 'max' ? Math.max(...values) : values.reduce((a, v) => a + v, 0) / values.length;
+    return d > 0 ? { divisor: d } : { error: `The ${mode} is not positive, so the profile cannot be divided by it.` };
+  }
+
   // Values along a profile line, one sample per pixel of length, each averaged
   // over ±halfWidth pixels across the line. Returns
   // [{d, x, y, px, py, value, deltaE, flagged, clipped}] or {error}.
@@ -360,6 +370,7 @@
     profileAxisKey,
     profileLength,
     profileEndForLength,
+    profileDivisor,
     sampleProfile,
   });
 })((globalThis.Colormeris ??= {}));

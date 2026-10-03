@@ -206,3 +206,22 @@ test('several profiles go into one long CSV', () => {
   assert.match(lines[1], /^"a, b",0\.00,/);
   assert.match(lines[3], /^c,/);
 });
+
+test('profiles can be divided by their max or mean', () => {
+  const { profileDivisor, profilesCsv } = CM;
+  const at = (value) => ({ d: 0, x: null, y: null, px: 0, py: 0, value, deltaE: 0, flagged: false, clipped: false });
+  const samples = [at(1), at(2), at(6)];
+  assert.deepEqual(profileDivisor(samples, 'raw'), { divisor: 1 });
+  assert.deepEqual(profileDivisor(samples, 'max'), { divisor: 6 });
+  assert.deepEqual(profileDivisor(samples, 'mean'), { divisor: 3 });
+  // Not positive: dividing would flip or blow up the line.
+  assert.ok(profileDivisor([at(-1), at(1)], 'mean').error);
+  assert.ok(profileDivisor([at(-2), at(-1)], 'max').error);
+  const lines = profilesCsv([
+    { name: 'a', samples, norm: { mode: 'mean', divisor: 3 } },
+    { name: 'b', samples: [at(0)], norm: { mode: 'mean', divisor: NaN } },
+  ]).trim().split('\n');
+  assert.equal(lines[0], 'profile,d_px,x,y,page_x,page_y,value,value_per_mean,deltaE,flagged,clipped');
+  assert.equal(lines[3].split(',')[7], '2');
+  assert.equal(lines[4].split(',')[7], ''); // b cannot be normalized
+});

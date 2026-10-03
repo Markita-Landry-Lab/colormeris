@@ -17,12 +17,12 @@
   <script src="assets/js/core/colormap-match.js?v=2" defer></script>
   <script src="assets/js/extract/project.js?v=3" defer></script>
   <script src="assets/js/extract/heatmap/sampling.js?v=2" defer></script>
-  <script src="assets/js/extract/project-files.js?v=3" defer></script>
+  <script src="assets/js/extract/project-files.js?v=4" defer></script>
   <script src="assets/js/extract/pdf-loader.js?v=1" defer></script>
   <script src="assets/js/extract/viewer.js?v=1" defer></script>
   <script src="assets/js/extract/roi/geometry.js?v=1" defer></script>
   <script src="assets/js/extract/roi/quantify.js?v=2" defer></script>
-  <script src="assets/js/extract/map/field.js?v=4" defer></script>
+  <script src="assets/js/extract/map/field.js?v=5" defer></script>
   <script src="assets/js/extract/settings.js?v=2" defer></script>
   <script src="assets/js/extract/workspace/history.js?v=1" defer></script>
   <script src="assets/js/extract/workspace/overlay.js?v=3" defer></script>
@@ -39,8 +39,8 @@
   <script src="assets/js/extract/roi/roi-overlay.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-sidebar.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-tool.js?v=1" defer></script>
-  <script src="assets/js/extract/map/map-sidebar.js?v=5" defer></script>
-  <script src="assets/js/extract/map/map-tool.js?v=6" defer></script>
+  <script src="assets/js/extract/map/map-sidebar.js?v=6" defer></script>
+  <script src="assets/js/extract/map/map-tool.js?v=7" defer></script>
   <script src="assets/js/agent/schema.js?v=3" defer></script>
   <script src="assets/js/agent/api.js?v=2" defer></script>
   <script src="assets/js/agent/llm.js?v=1" defer></script>
@@ -351,6 +351,13 @@
         </div>
         <div id="profile-view" hidden>
           <p id="profile-problem" class="notice"></p>
+          <div class="fields">
+            <label class="field" title="Divide each profile by its own maximum or mean to compare shapes rather than signal levels">Scale <select id="profile-norm">
+              <option value="raw">Values</option>
+              <option value="max">÷ each max</option>
+              <option value="mean">÷ each mean</option>
+            </select></label>
+          </div>
           <canvas id="profile-plot" class="profile-plot" aria-label="Values along the selected profiles"></canvas>
           <div class="card-actions">
             <button class="btn" id="profile-csv">Download profile CSV</button>

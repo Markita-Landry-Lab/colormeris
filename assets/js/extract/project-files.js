@@ -152,22 +152,27 @@ Load this zip back into Colormeris to review or re-run the extraction.
     return lines.join('\n') + '\n';
   }
 
-  // One line per profile sample (from sampleProfile).
-  function profileCsv(samples) {
-    const lines = [csvLine(['d_px', 'x', 'y', 'page_x', 'page_y', 'value', 'deltaE', 'flagged', 'clipped'])];
+  // One line per profile sample (from sampleProfile). With norm = {mode,
+  // divisor} ('max' | 'mean', see profileDivisor), a value_per_<mode> column
+  // follows the value.
+  function profileCsv(samples, norm = null) {
+    const head = ['d_px', 'x', 'y', 'page_x', 'page_y', 'value', ...(norm ? [`value_per_${norm.mode}`] : []), 'deltaE', 'flagged', 'clipped'];
+    const lines = [csvLine(head)];
     for (const s of samples) {
+      const scaled = norm ? [formatNumber(s.value / norm.divisor)] : [];
       lines.push(
-        [s.d.toFixed(2), formatNumber(s.x), formatNumber(s.y), s.px.toFixed(2), s.py.toFixed(2), formatNumber(s.value), s.deltaE.toFixed(2), s.flagged ? 1 : 0, s.clipped ? 1 : 0].join(','),
+        [s.d.toFixed(2), formatNumber(s.x), formatNumber(s.y), s.px.toFixed(2), s.py.toFixed(2), formatNumber(s.value), ...scaled, s.deltaE.toFixed(2), s.flagged ? 1 : 0, s.clipped ? 1 : 0].join(','),
       );
     }
     return lines.join('\n') + '\n';
   }
 
-  // Several profiles in one long table with a profile column: [{name, samples}].
+  // Several profiles in one long table with a profile column: [{name,
+  // samples, norm}] (norm as in profileCsv, the same mode for all).
   function profilesCsv(entries) {
-    const lines = [`profile,${profileCsv([]).trim()}`];
-    for (const { name, samples } of entries) {
-      for (const line of profileCsv(samples).trim().split('\n').slice(1)) lines.push(`${csvEscape(name)},${line}`);
+    const lines = [`profile,${profileCsv([], entries[0]?.norm).trim()}`];
+    for (const { name, samples, norm } of entries) {
+      for (const line of profileCsv(samples, norm).trim().split('\n').slice(1)) lines.push(`${csvEscape(name)},${line}`);
     }
     return lines.join('\n') + '\n';
   }

@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { mapSize, axisFn, axisT, axisEdgePoint, profileAxisKey, profileLength, profileEndForLength, mapMatrixCsv, mapLongCsv, profileCsv, profilesCsv, formatNumber, safeFileName } = CM;
+  const { mapSize, axisFn, axisT, axisEdgePoint, profileAxisKey, profileLength, profileEndForLength, profileDivisor, mapMatrixCsv, mapLongCsv, profileCsv, profilesCsv, formatNumber, safeFileName } = CM;
 
   // Map tool, DOM: the sidebar cards (Axes, Profiles, Results), the profile
   // plot and the CSV downloads. Set up by map-tool.js.
@@ -179,11 +179,13 @@
       const results = ws.resultFor(panel).profiles || {};
       const series = [];
       const errors = [];
+      ws.setValue($('profile-norm'), state.profileNorm);
       for (const l of shown) {
         const samples = results[l.id];
-        const error = samples?.error || (!samples ? 'Calibrate the colorbar to read the profile.' : '');
+        const norm = Array.isArray(samples) ? profileDivisor(samples, state.profileNorm) : null;
+        const error = samples?.error || (!samples ? 'Calibrate the colorbar to read the profile.' : norm.error);
         if (error) errors.push({ name: l.name, error });
-        else series.push({ profile: l, samples, color: mctx.profileColor(panel, l) });
+        else series.push({ profile: l, samples, divisor: norm.divisor, color: mctx.profileColor(panel, l) });
       }
       // The same problem for every profile (no colorbar yet) is said once.
       const once = errors.length === shown.length && new Set(errors.map((e) => e.error)).size === 1;
@@ -220,7 +222,8 @@
       return { get: (s) => s.d, name: 'distance (px)' };
     }
 
-    // series: [{profile, samples, color}].
+    // series: [{profile, samples, divisor, color}]; values are plotted
+    // divided by divisor (1 unless normalized).
     function drawProfiles(panel, series) {
       const canvas = $('profile-plot');
       const dpr = window.devicePixelRatio || 1;
@@ -242,9 +245,9 @@
       const danger = css.getPropertyValue('--danger').trim() || '#c62a2a';
       const axis = plotAxis(panel, series);
       // A single profile keeps the accent color; overlaid ones match their lines.
-      const lines = series.map((s) => ({ ...s, xs: s.samples.map(axis.get), color: series.length > 1 ? s.color : accent }));
+      const lines = series.map((s) => ({ ...s, xs: s.samples.map(axis.get), ys: s.samples.map((q) => q.value / s.divisor), color: series.length > 1 ? s.color : accent }));
       const allX = lines.flatMap((s) => s.xs);
-      const allY = lines.flatMap((s) => s.samples.map((q) => q.value));
+      const allY = lines.flatMap((s) => s.ys);
       const [x0, x1] = [Math.min(...allX), Math.max(...allX)];
       let [y0, y1] = [Math.min(...allY), Math.max(...allY)];
       if (y1 - y0 < 1e-12) [y0, y1] = [y0 - 0.5, y1 + 0.5];
@@ -258,7 +261,7 @@
       ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, W, H);
       for (const s of lines) {
         ctx.beginPath();
-        s.samples.forEach((q, i) => (i ? ctx.lineTo(sx(s.xs[i]), sy(q.value)) : ctx.moveTo(sx(s.xs[i]), sy(q.value))));
+        s.ys.forEach((y, i) => (i ? ctx.lineTo(sx(s.xs[i]), sy(y)) : ctx.moveTo(sx(s.xs[i]), sy(y))));
         ctx.strokeStyle = s.color;
         ctx.lineWidth = series.length > 1 ? 2 : 1.5;
         ctx.stroke();
@@ -267,7 +270,7 @@
       ctx.fillStyle = danger;
       for (const s of lines) {
         s.samples.forEach((q, i) => {
-          if (q.flagged || q.clipped) ctx.fillRect(sx(s.xs[i]) - 1.5, sy(q.value) - 1.5, 3, 3);
+          if (q.flagged || q.clipped) ctx.fillRect(sx(s.xs[i]) - 1.5, sy(s.ys[i]) - 1.5, 3, 3);
         });
       }
       ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
@@ -285,7 +288,8 @@
       ctx.fillText(shortLabel(xr), pad.l + W, pad.t + H + 4);
       ctx.textAlign = 'center';
       ctx.fillStyle = text;
-      ctx.fillText(axis.name, pad.l + W / 2, pad.t + H + 4);
+      const scaled = { max: ' · values ÷ each max', mean: ' · values ÷ each mean' }[state.profileNorm] || '';
+      ctx.fillText(axis.name + scaled, pad.l + W / 2, pad.t + H + 4);
       plot = { panel, series, lines, sx, sy };
       const traced = state.trace && lines.find((s) => s.profile.id === state.trace.id);
       if (traced?.samples[state.trace.i]) {
@@ -297,7 +301,7 @@
     function drawTraceMark(ctx, { i, line, sx, sy, pad, W, H, axis, text, css, many }) {
       const s = line.samples[i];
       const x = sx(line.xs[i]);
-      const y = sy(s.value);
+      const y = sy(line.ys[i]);
       ctx.save();
       ctx.setLineDash([3, 3]);
       ctx.strokeStyle = text;
@@ -316,7 +320,9 @@
       ctx.strokeStyle = css.getPropertyValue('--surface').trim() || '#fff';
       ctx.stroke();
       const name = many ? `${line.profile.name} · ` : '';
-      const label = `${name}${axis.name === 'distance (px)' ? 'd' : axis.name} ${shortLabel(line.xs[i])}: ${shortLabel(s.value)}`;
+      // Normalized values are followed by the value they come from.
+      const value = line.divisor === 1 ? shortLabel(s.value) : `${shortLabel(line.ys[i])} (${shortLabel(s.value)})`;
+      const label = `${name}${axis.name === 'distance (px)' ? 'd' : axis.name} ${shortLabel(line.xs[i])}: ${value}`;
       ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
       ctx.textBaseline = 'top';
       // Readout on the side of the guide with more room.
@@ -338,7 +344,7 @@
         let i = 0;
         for (let k = 1; k < s.xs.length; k++) if (Math.abs(plot.sx(s.xs[k]) - mx) < Math.abs(plot.sx(s.xs[i]) - mx)) i = k;
         const dx = Math.abs(plot.sx(s.xs[i]) - mx);
-        const dy = Math.abs(plot.sy(s.samples[i].value) - my);
+        const dy = Math.abs(plot.sy(s.ys[i]) - my);
         // Lines that do not reach the pointer lose to those that do.
         const score = dy + (dx > 4 ? 1e6 + dx : 0);
         if (!best || score < best.score) best = { score, trace: { id: s.profile.id, i } };
@@ -415,12 +421,23 @@
       const l = mctx.selectedProfile();
       if (l) ws.zoomToPoints([l.a, l.b]);
     });
+    $('profile-norm').addEventListener('change', (e) => {
+      state.profileNorm = e.target.value;
+      ws.changed({ light: true });
+    });
     $('profile-csv').addEventListener('click', () => {
       const panel = ws.activePanel();
       const results = ws.resultFor(panel).profiles || {};
-      const entries = mctx.selectedProfiles().filter((l) => Array.isArray(results[l.id])).map((l) => ({ name: l.name, samples: results[l.id] }));
+      const mode = state.profileNorm;
+      // The normalized column follows the plot; a profile that cannot be
+      // normalized leaves it empty.
+      const normOf = (samples) => (mode === 'raw' ? null : { mode, divisor: profileDivisor(samples, mode).divisor ?? NaN });
+      const entries = mctx
+        .selectedProfiles()
+        .filter((l) => Array.isArray(results[l.id]))
+        .map((l) => ({ name: l.name, samples: results[l.id], norm: normOf(results[l.id]) }));
       if (!entries.length) return;
-      const [csv, suffix] = entries.length === 1 ? [profileCsv(entries[0].samples), `_profile_${safeFileName(entries[0].name)}`] : [profilesCsv(entries), '_profiles'];
+      const [csv, suffix] = entries.length === 1 ? [profileCsv(entries[0].samples, entries[0].norm), `_profile_${safeFileName(entries[0].name)}`] : [profilesCsv(entries), '_profiles'];
       ws.download(new Blob([csv], { type: 'text/csv' }), ws.csvName(panel, suffix));
     });
     ws.bindNumber('map-bin', (p, v) => (p.map.bin = Math.min(256, Math.max(1, Math.round(v)))));
