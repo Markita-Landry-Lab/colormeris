@@ -1,13 +1,14 @@
 (function (CM) {
   'use strict';
-  const { mapSize, axisFn, axisT, axisEdgePoint, mapMatrixCsv, mapLongCsv, profileCsv, formatNumber, safeFileName } = CM;
+  const { mapSize, axisFn, axisT, axisEdgePoint, profileAxisKey, profileLength, profileEndForLength, mapMatrixCsv, mapLongCsv, profileCsv, profilesCsv, formatNumber, safeFileName } = CM;
 
   // Map tool, DOM: the sidebar cards (Axes, Profiles, Results), the profile
   // plot and the CSV downloads. Set up by map-tool.js.
   //
-  // mctx: { ws, state, selectedProfile, toggleMode, deleteSelected, AXIS_COLORS,
-  // PROFILE_COLOR } (see map-tool.js; toggleMode and deleteSelected are added
-  // after this setup and looked up at call time).
+  // mctx: { ws, state, selectedProfile, selectedProfiles, isSelected,
+  // selectProfile, profileColor, toggleMode, deleteSelected, AXIS_COLORS } (see
+  // map-tool.js; toggleMode and deleteSelected are added after this setup and
+  // looked up at call time).
 
   function setupMapSidebar(mctx) {
     const { ws, state } = mctx;
@@ -118,14 +119,23 @@
     }
 
     // ---------------------------------------------------------------- profiles
+    // state.selectedId is the profile edited in the card; state.overlay holds
+    // more selected profiles. The plot overlays all of them, each in its color.
 
     let profileListKey = '';
     function renderProfiles(panel) {
       const profiles = panel.map.profiles;
-      if (state.selectedId && !profiles.some((l) => l.id === state.selectedId)) state.selectedId = null;
+      const ids = new Set(profiles.map((l) => l.id));
+      if (state.selectedId && !ids.has(state.selectedId)) state.selectedId = null;
+      for (const id of state.overlay) if (!ids.has(id) || id === state.selectedId) state.overlay.delete(id);
+      if (!state.selectedId && state.overlay.size) {
+        state.selectedId = [...state.overlay].pop();
+        state.overlay.delete(state.selectedId);
+      }
       // A single profile is the one shown, without clicking it first.
       if (!state.selectedId && profiles.length === 1) state.selectedId = profiles[0].id;
-      const key = JSON.stringify([panel.id, state.selectedId, profiles.map((l) => [l.id, l.name])]);
+      const shown = mctx.selectedProfiles();
+      const key = JSON.stringify([panel.id, state.selectedId, [...state.overlay], profiles.map((l) => [l.id, l.name])]);
       if (key !== profileListKey) {
         profileListKey = key;
         $('profile-list').replaceChildren(
@@ -133,12 +143,13 @@
             const li = document.createElement('li');
             const btn = document.createElement('button');
             btn.className = 'chip';
-            btn.setAttribute('aria-pressed', String(l.id === state.selectedId));
-            btn.append(Object.assign(document.createElement('span'), { className: 'chip-label', textContent: l.name }));
-            btn.addEventListener('click', () => {
-              state.selectedId = l.id;
-              ws.changed();
-            });
+            btn.setAttribute('aria-pressed', String(mctx.isSelected(l.id)));
+            btn.title = 'Shift- or Cmd-click to overlay several profiles in the plot';
+            const sw = document.createElement('span');
+            sw.className = 'swatch';
+            sw.style.background = mctx.profileColor(panel, l);
+            btn.append(sw, Object.assign(document.createElement('span'), { className: 'chip-label', textContent: l.name }));
+            btn.addEventListener('click', (e) => mctx.selectProfile(l.id, { add: e.shiftKey || e.metaKey || e.ctrlKey }));
             li.append(btn);
             return li;
           }),
@@ -146,18 +157,40 @@
       }
       const n = profiles.length;
       ws.setBadge($('profile-state'), n ? `${n} profile${n === 1 ? '' : 's'}` : 'none', n > 0);
-      $('profile-empty').hidden = n > 0;
+      $('profile-all').hidden = n < 2 || shown.length === n;
+      $('profile-hint').textContent = !n
+        ? 'No profiles yet. Draw a line to read values along it, e.g. a spectrum at one time or a line scan across a cell.'
+        : n > 1 && shown.length === 1
+          ? 'Shift-click profiles (chips or lines) to overlay them in the plot.'
+          : '';
       const sel = mctx.selectedProfile();
       $('profile-edit').hidden = !sel;
       $('profile-view').hidden = !sel;
       if (!sel) return;
       ws.setValue($('profile-name'), sel.name);
       ws.setValue($('profile-width'), sel.halfWidth);
-      const samples = ws.resultFor(panel).profiles?.[sel.id];
-      const error = samples?.error || (!samples ? 'Calibrate the colorbar to read the profile.' : '');
-      $('profile-problem').textContent = error;
-      $('profile-csv').disabled = !!error;
-      drawProfile(error ? null : samples, sel);
+      const { length, key: lengthKey } = profileLength(panel, sel);
+      ws.setValue($('profile-length'), Number(length.toPrecision(6)));
+      $('profile-length-label').textContent = `Length (${lengthKey || 'px'})`;
+      $('profile-length-field').title = lengthKey
+        ? `Span of ${lengthKey} values along the profile. Typing a length moves its end; the start and direction stay.`
+        : 'Length of the profile in pixels. Typing a length moves its end; the start and direction stay.';
+      $('profile-delete').title = shown.length > 1 ? `Delete the ${shown.length} selected profiles (Del)` : 'Delete (Del)';
+      const results = ws.resultFor(panel).profiles || {};
+      const series = [];
+      const errors = [];
+      for (const l of shown) {
+        const samples = results[l.id];
+        const error = samples?.error || (!samples ? 'Calibrate the colorbar to read the profile.' : '');
+        if (error) errors.push({ name: l.name, error });
+        else series.push({ profile: l, samples, color: mctx.profileColor(panel, l) });
+      }
+      // The same problem for every profile (no colorbar yet) is said once.
+      const once = errors.length === shown.length && new Set(errors.map((e) => e.error)).size === 1;
+      $('profile-problem').textContent = once ? errors[0].error : errors.map((e) => `${e.name}: ${e.error}`).join(' ');
+      $('profile-csv').disabled = !series.length;
+      $('profile-csv').textContent = series.length > 1 ? `Download ${series.length} profiles CSV` : 'Download profile CSV';
+      drawProfiles(panel, series);
     }
 
     // ---------------------------------------------------------------- tracing
@@ -175,19 +208,20 @@
     }
 
     function redrawProfile() {
-      if (plot) drawProfile(plot.samples, plot.profile);
+      if (plot) drawProfiles(plot.panel, plot.series);
     }
 
-    // Plot against the calibrated axis the line mostly runs along, else
-    // against the distance along the line in pixels.
-    function profileAxis(samples, profile) {
-      const horizontal = Math.abs(profile.b.x - profile.a.x) >= Math.abs(profile.b.y - profile.a.y);
-      if (horizontal && samples[0].x !== null) return { get: (s) => s.x, name: 'x' };
-      if (!horizontal && samples[0].y !== null) return { get: (s) => s.y, name: 'y' };
+    // Plot against the calibrated axis the lines mostly run along, else against
+    // the distance along the lines in pixels. Overlaid profiles share it.
+    function plotAxis(panel, series) {
+      const keys = new Set(series.map((s) => profileAxisKey(panel, s.profile)));
+      const key = keys.size === 1 ? [...keys][0] : null;
+      if (key) return { get: (s) => s[key], name: key };
       return { get: (s) => s.d, name: 'distance (px)' };
     }
 
-    function drawProfile(samples, profile) {
+    // series: [{profile, samples, color}].
+    function drawProfiles(panel, series) {
       const canvas = $('profile-plot');
       const dpr = window.devicePixelRatio || 1;
       const cssW = canvas.clientWidth || 300;
@@ -198,18 +232,21 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
       plot = null;
-      if (!samples?.length) return;
+      series = series.filter((s) => s.samples.length);
+      if (!series.length) return;
       const css = getComputedStyle(canvas);
       const text = css.getPropertyValue('--text').trim() || '#222';
       const muted = css.getPropertyValue('--muted').trim() || '#777';
       const border = css.getPropertyValue('--border').trim() || '#ddd';
       const accent = css.getPropertyValue('--accent').trim() || '#3b47e0';
       const danger = css.getPropertyValue('--danger').trim() || '#c62a2a';
-      const axis = profileAxis(samples, profile);
-      const xs = samples.map(axis.get);
-      const ys = samples.map((s) => s.value);
-      const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
-      let [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+      const axis = plotAxis(panel, series);
+      // A single profile keeps the accent color; overlaid ones match their lines.
+      const lines = series.map((s) => ({ ...s, xs: s.samples.map(axis.get), color: series.length > 1 ? s.color : accent }));
+      const allX = lines.flatMap((s) => s.xs);
+      const allY = lines.flatMap((s) => s.samples.map((q) => q.value));
+      const [x0, x1] = [Math.min(...allX), Math.max(...allX)];
+      let [y0, y1] = [Math.min(...allY), Math.max(...allY)];
       if (y1 - y0 < 1e-12) [y0, y1] = [y0 - 0.5, y1 + 0.5];
       const pad = { l: 44, r: 8, t: 8, b: 30 };
       const W = cssW - pad.l - pad.r;
@@ -219,16 +256,20 @@
       ctx.strokeStyle = border;
       ctx.lineWidth = 1;
       ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, W, H);
-      ctx.beginPath();
-      samples.forEach((s, i) => (i ? ctx.lineTo(sx(xs[i]), sy(s.value)) : ctx.moveTo(sx(xs[i]), sy(s.value))));
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      // Flagged or possibly clipped samples as red dots on the line.
+      for (const s of lines) {
+        ctx.beginPath();
+        s.samples.forEach((q, i) => (i ? ctx.lineTo(sx(s.xs[i]), sy(q.value)) : ctx.moveTo(sx(s.xs[i]), sy(q.value))));
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = series.length > 1 ? 2 : 1.5;
+        ctx.stroke();
+      }
+      // Flagged or possibly clipped samples as red dots on the lines.
       ctx.fillStyle = danger;
-      samples.forEach((s, i) => {
-        if (s.flagged || s.clipped) ctx.fillRect(sx(xs[i]) - 1.5, sy(s.value) - 1.5, 3, 3);
-      });
+      for (const s of lines) {
+        s.samples.forEach((q, i) => {
+          if (q.flagged || q.clipped) ctx.fillRect(sx(s.xs[i]) - 1.5, sy(q.value) - 1.5, 3, 3);
+        });
+      }
       ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
       ctx.fillStyle = muted;
       ctx.textBaseline = 'middle';
@@ -237,22 +278,25 @@
       ctx.fillText(shortLabel(y0), pad.l - 4, pad.t + H - 4);
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
-      ctx.fillText(shortLabel(axis.get(samples[0])), pad.l, pad.t + H + 4);
+      // With one profile its start is on the left even when x decreases along it.
+      const [xl, xr] = lines.length === 1 ? [lines[0].xs[0], lines[0].xs.at(-1)] : [x0, x1];
+      ctx.fillText(shortLabel(xl), pad.l, pad.t + H + 4);
       ctx.textAlign = 'right';
-      ctx.fillText(shortLabel(axis.get(samples.at(-1))), pad.l + W, pad.t + H + 4);
+      ctx.fillText(shortLabel(xr), pad.l + W, pad.t + H + 4);
       ctx.textAlign = 'center';
       ctx.fillStyle = text;
       ctx.fillText(axis.name, pad.l + W / 2, pad.t + H + 4);
-      plot = { samples, profile, xs, sx, pad, W };
-      if (state.trace?.id === profile.id && samples[state.trace.i]) {
-        drawTraceMark(ctx, { i: state.trace.i, samples, xs, sx, sy, pad, W, H, axis, text, accent, css });
+      plot = { panel, series, lines, sx, sy };
+      const traced = state.trace && lines.find((s) => s.profile.id === state.trace.id);
+      if (traced?.samples[state.trace.i]) {
+        drawTraceMark(ctx, { i: state.trace.i, line: traced, sx, sy, pad, W, H, axis, text, css, many: lines.length > 1 });
       }
     }
 
     // Guide line, dot and readout for the traced sample.
-    function drawTraceMark(ctx, { i, samples, xs, sx, sy, pad, W, H, axis, text, accent, css }) {
-      const s = samples[i];
-      const x = sx(xs[i]);
+    function drawTraceMark(ctx, { i, line, sx, sy, pad, W, H, axis, text, css, many }) {
+      const s = line.samples[i];
+      const x = sx(line.xs[i]);
       const y = sy(s.value);
       ctx.save();
       ctx.setLineDash([3, 3]);
@@ -266,12 +310,13 @@
       ctx.restore();
       ctx.beginPath();
       ctx.arc(x, y, 4, 0, 2 * Math.PI);
-      ctx.fillStyle = accent;
+      ctx.fillStyle = line.color;
       ctx.fill();
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = css.getPropertyValue('--surface').trim() || '#fff';
       ctx.stroke();
-      const label = `${axis.name === 'distance (px)' ? 'd' : axis.name} ${shortLabel(xs[i])}: ${shortLabel(s.value)}`;
+      const name = many ? `${line.profile.name} · ` : '';
+      const label = `${name}${axis.name === 'distance (px)' ? 'd' : axis.name} ${shortLabel(line.xs[i])}: ${shortLabel(s.value)}`;
       ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
       ctx.textBaseline = 'top';
       // Readout on the side of the guide with more room.
@@ -281,13 +326,24 @@
       ctx.fillText(label, x + (right ? 6 : -6), pad.t + 3);
     }
 
-    // Pointer on the plot → nearest sample along the horizontal axis.
+    // Pointer on the plot → for each line the nearest sample along the
+    // horizontal axis; of those, the one closest to the pointer vertically.
     $('profile-plot').addEventListener('pointermove', (e) => {
       if (!plot) return;
-      const mx = e.clientX - $('profile-plot').getBoundingClientRect().left;
-      let best = 0;
-      for (let i = 1; i < plot.xs.length; i++) if (Math.abs(plot.sx(plot.xs[i]) - mx) < Math.abs(plot.sx(plot.xs[best]) - mx)) best = i;
-      setTrace({ id: plot.profile.id, i: best });
+      const r = $('profile-plot').getBoundingClientRect();
+      const mx = e.clientX - r.left;
+      const my = e.clientY - r.top;
+      let best = null;
+      for (const s of plot.lines) {
+        let i = 0;
+        for (let k = 1; k < s.xs.length; k++) if (Math.abs(plot.sx(s.xs[k]) - mx) < Math.abs(plot.sx(s.xs[i]) - mx)) i = k;
+        const dx = Math.abs(plot.sx(s.xs[i]) - mx);
+        const dy = Math.abs(plot.sy(s.samples[i].value) - my);
+        // Lines that do not reach the pointer lose to those that do.
+        const score = dy + (dx > 4 ? 1e6 + dx : 0);
+        if (!best || score < best.score) best = { score, trace: { id: s.profile.id, i } };
+      }
+      setTrace(best.trace);
     });
     $('profile-plot').addEventListener('pointerleave', () => setTrace(null));
 
@@ -343,6 +399,17 @@
       const l = p.map.profiles.find((x) => x.id === state.selectedId);
       if (l) l.halfWidth = Math.min(50, Math.max(0, Math.round(v)));
     });
+    ws.bindNumber('profile-length', (p, v) => {
+      const l = p.map.profiles.find((x) => x.id === state.selectedId);
+      const b = l && profileEndForLength(p, l, v);
+      if (b) l.b = b;
+    });
+    $('profile-all').addEventListener('click', () => {
+      const profiles = ws.activePanel().map.profiles;
+      state.selectedId ??= profiles[0]?.id ?? null;
+      for (const l of profiles) if (l.id !== state.selectedId) state.overlay.add(l.id);
+      ws.changed();
+    });
     $('profile-delete').addEventListener('click', () => mctx.deleteSelected());
     $('profile-zoom').addEventListener('click', () => {
       const l = mctx.selectedProfile();
@@ -350,9 +417,11 @@
     });
     $('profile-csv').addEventListener('click', () => {
       const panel = ws.activePanel();
-      const l = mctx.selectedProfile();
-      const samples = l && ws.resultFor(panel).profiles?.[l.id];
-      if (Array.isArray(samples)) ws.download(new Blob([profileCsv(samples)], { type: 'text/csv' }), ws.csvName(panel, `_profile_${safeFileName(l.name)}`));
+      const results = ws.resultFor(panel).profiles || {};
+      const entries = mctx.selectedProfiles().filter((l) => Array.isArray(results[l.id])).map((l) => ({ name: l.name, samples: results[l.id] }));
+      if (!entries.length) return;
+      const [csv, suffix] = entries.length === 1 ? [profileCsv(entries[0].samples), `_profile_${safeFileName(entries[0].name)}`] : [profilesCsv(entries), '_profiles'];
+      ws.download(new Blob([csv], { type: 'text/csv' }), ws.csvName(panel, suffix));
     });
     ws.bindNumber('map-bin', (p, v) => (p.map.bin = Math.min(256, Math.max(1, Math.round(v)))));
     $('map-recon').addEventListener('change', (e) => {

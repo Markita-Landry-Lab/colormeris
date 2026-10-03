@@ -7,7 +7,7 @@
   <meta name="description" content="Turn colors in scientific figures back into numbers: heatmap grids and signal inside regions of interest (ROI).">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%23dfe3ff'/%3E%3Crect x='8' width='8' height='8' fill='%235560f0'/%3E%3Crect y='8' width='8' height='8' fill='%232530e0'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23a3a9ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/base.css?v=2">
-  <link rel="stylesheet" href="assets/css/extract.css?v=3">
+  <link rel="stylesheet" href="assets/css/extract.css?v=4">
   <script src="assets/vendor/jszip/jszip.min.js" defer></script>
   <!-- Classic (non-module) scripts so the page also works when opened from disk. Order matters. -->
   <script src="assets/js/core/color.js?v=1" defer></script>
@@ -17,12 +17,12 @@
   <script src="assets/js/core/colormap-match.js?v=2" defer></script>
   <script src="assets/js/extract/project.js?v=3" defer></script>
   <script src="assets/js/extract/heatmap/sampling.js?v=2" defer></script>
-  <script src="assets/js/extract/project-files.js?v=2" defer></script>
+  <script src="assets/js/extract/project-files.js?v=3" defer></script>
   <script src="assets/js/extract/pdf-loader.js?v=1" defer></script>
   <script src="assets/js/extract/viewer.js?v=1" defer></script>
   <script src="assets/js/extract/roi/geometry.js?v=1" defer></script>
   <script src="assets/js/extract/roi/quantify.js?v=2" defer></script>
-  <script src="assets/js/extract/map/field.js?v=3" defer></script>
+  <script src="assets/js/extract/map/field.js?v=4" defer></script>
   <script src="assets/js/extract/settings.js?v=2" defer></script>
   <script src="assets/js/extract/workspace/history.js?v=1" defer></script>
   <script src="assets/js/extract/workspace/overlay.js?v=3" defer></script>
@@ -39,8 +39,8 @@
   <script src="assets/js/extract/roi/roi-overlay.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-sidebar.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-tool.js?v=1" defer></script>
-  <script src="assets/js/extract/map/map-sidebar.js?v=4" defer></script>
-  <script src="assets/js/extract/map/map-tool.js?v=5" defer></script>
+  <script src="assets/js/extract/map/map-sidebar.js?v=5" defer></script>
+  <script src="assets/js/extract/map/map-tool.js?v=6" defer></script>
   <script src="assets/js/agent/schema.js?v=3" defer></script>
   <script src="assets/js/agent/api.js?v=2" defer></script>
   <script src="assets/js/agent/llm.js?v=1" defer></script>
@@ -335,22 +335,28 @@
         </div>
         <div class="card-actions">
           <button class="btn" id="profile-add" aria-pressed="false" title="Shortcut: L" data-hotkey="profile" data-title="Shortcut: {key}">Draw profile</button>
+          <button class="btn subtle" id="profile-all" title="Overlay all profiles in the plot" hidden>Select all</button>
         </div>
         <ul id="profile-list" class="chip-list"></ul>
-        <p id="profile-empty" class="hint">No profiles yet. Draw a line to read values along it, e.g. a spectrum at one time or a line scan across a cell.</p>
-        <div id="profile-edit" class="row" hidden>
-          <label class="field grow">Name <input id="profile-name" type="text" spellcheck="false"></label>
-          <label class="field" title="Values are averaged over this many pixels on each side of the line">Width (± px) <input id="profile-width" type="number" min="0" max="50" step="1" class="num"></label>
-          <button class="btn subtle" id="profile-zoom" title="Zoom to the profile">Zoom to</button>
-          <button class="btn danger" id="profile-delete" title="Delete (Del)">Delete</button>
+        <div id="profile-edit" hidden>
+          <div class="row">
+            <label class="field grow">Name <input id="profile-name" type="text" spellcheck="false"></label>
+            <button class="btn subtle" id="profile-zoom" title="Zoom to the profile">Zoom to</button>
+            <button class="btn danger" id="profile-delete" title="Delete (Del)">Delete</button>
+          </div>
+          <div class="fields">
+            <label class="field" id="profile-length-field"><span id="profile-length-label">Length (px)</span> <input id="profile-length" type="number" min="0" step="any" class="num"></label>
+            <label class="field" title="Values are averaged over this many pixels on each side of the line">Width (± px) <input id="profile-width" type="number" min="0" max="50" step="1" class="num"></label>
+          </div>
         </div>
         <div id="profile-view" hidden>
           <p id="profile-problem" class="notice"></p>
-          <canvas id="profile-plot" class="profile-plot" aria-label="Values along the selected profile"></canvas>
+          <canvas id="profile-plot" class="profile-plot" aria-label="Values along the selected profiles"></canvas>
           <div class="card-actions">
             <button class="btn" id="profile-csv">Download profile CSV</button>
           </div>
         </div>
+        <p id="profile-hint" class="hint"></p>
       </section>
 
       <section class="card" id="sec-map-results" hidden>

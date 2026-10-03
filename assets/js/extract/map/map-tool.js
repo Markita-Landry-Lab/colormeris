@@ -29,13 +29,17 @@
   // drags; map-sidebar.js renders the cards. They share `mctx`.
 
   const AXIS_COLORS = { x: '#7cff4f', y: '#ffd400' };
-  const PROFILE_COLOR = '#00e5ff';
+  // One color per profile, by its place in the list: on the image, on its
+  // chip and in the plot. Mid-tones that read on images and on the light or
+  // dark plot; no red (flagged samples) or yellow (the trace).
+  const PROFILE_COLORS = ['#00c2e0', '#e040a0', '#f59f00', '#40c057', '#845ef7'];
 
   // setupMapTool(ws) registers the tool with a workspace (workspace/workspace.js).
   function setupMapTool(ws) {
   const { $, app, viewer } = ws;
   const state = {
-    selectedId: null, // selected profile
+    selectedId: null, // selected profile, edited in the card
+    overlay: new Set(), // more selected profiles, plotted with it
     trace: null, // {id, i}: traced sample of a profile (see map-sidebar.js)
     showRecon: false,
     showFlags: false,
@@ -43,7 +47,31 @@
     layers: new WeakMap(), // field values array → {recon, flags} canvases
   };
   const selectedProfile = () => ws.activePanel().map.profiles.find((l) => l.id === state.selectedId) || null;
-  const mctx = { ws, state, selectedProfile, AXIS_COLORS, PROFILE_COLOR };
+  const isSelected = (id) => id === state.selectedId || state.overlay.has(id);
+  // All selected profiles, in list order.
+  const selectedProfiles = () => ws.activePanel().map.profiles.filter((l) => isSelected(l.id));
+  const profileColor = (panel, l) => PROFILE_COLORS[Math.max(0, panel.map.profiles.indexOf(l)) % PROFILE_COLORS.length];
+
+  // Select profile id (null: none). With add, toggle it in the selection
+  // instead; a profile added becomes the one edited.
+  function selectProfile(id, { add = false } = {}) {
+    if (!add || !id) {
+      state.selectedId = id;
+      state.overlay.clear();
+    } else if (isSelected(id)) {
+      state.overlay.delete(id);
+      if (state.selectedId === id) {
+        state.selectedId = [...state.overlay].pop() ?? null;
+        state.overlay.delete(state.selectedId);
+      }
+    } else {
+      if (state.selectedId) state.overlay.add(state.selectedId);
+      state.selectedId = id;
+    }
+    ws.changed();
+  }
+
+  const mctx = { ws, state, selectedProfile, selectedProfiles, isSelected, selectProfile, profileColor, AXIS_COLORS };
   const { renderSidebar, focusAxisTick, setTrace } = setupMapSidebar(mctx);
 
   // The field is the slow part (every pixel goes through the colorbar), so it
@@ -164,14 +192,14 @@
     for (const l of panel.map.profiles) {
       const a = v.toScreen(l.a);
       const b = v.toScreen(l.b);
-      const selected = l.id === state.selectedId;
+      const color = profileColor(panel, l);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
-      ws.strokeDual(ctx, PROFILE_COLOR, selected ? 2.5 : 1.5);
-      ws.drawHandle(ctx, v, l.a, PROFILE_COLOR, 'square');
-      ws.drawHandle(ctx, v, l.b, PROFILE_COLOR, 'circle');
-      label(ctx, a, l.name, PROFILE_COLOR, 'above');
+      ws.strokeDual(ctx, color, isSelected(l.id) ? 2.5 : 1.5);
+      ws.drawHandle(ctx, v, l.a, color, 'square');
+      ws.drawHandle(ctx, v, l.b, color, 'circle');
+      label(ctx, a, l.name, color, 'above');
     }
     drawTrace(ctx, v, panel);
   }
@@ -189,18 +217,23 @@
     label(ctx, { x: q.x + 10, y: q.y + 4 }, String(Number(s.value.toPrecision(4))), '#ffd400', 'above');
   }
 
-  // Pointer over the image near the selected profile → trace its nearest sample.
+  // Pointer over the image near a selected profile → trace the nearest
+  // sample of the closest one.
   function traceFromImage(panel, p) {
-    const l = selectedProfile();
-    const samples = l && ws.resultFor(panel).profiles?.[l.id];
-    if (!Array.isArray(samples) || samples.length < 2 || app.mode) return setTrace(null);
-    const dx = l.b.x - l.a.x;
-    const dy = l.b.y - l.a.y;
-    const len2 = dx * dx + dy * dy;
-    const t = ((p.x - l.a.x) * dx + (p.y - l.a.y) * dy) / len2;
-    const dist = Math.abs((p.x - l.a.x) * dy - (p.y - l.a.y) * dx) / Math.sqrt(len2);
-    if (t < 0 || t > 1 || dist > Math.max(l.halfWidth, 0) + 8 / viewer.scale) return setTrace(null);
-    setTrace({ id: l.id, i: Math.round(t * (samples.length - 1)) });
+    if (app.mode) return setTrace(null);
+    let best = null;
+    for (const l of selectedProfiles()) {
+      const samples = ws.resultFor(panel).profiles?.[l.id];
+      if (!Array.isArray(samples) || samples.length < 2) continue;
+      const dx = l.b.x - l.a.x;
+      const dy = l.b.y - l.a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = ((p.x - l.a.x) * dx + (p.y - l.a.y) * dy) / len2;
+      const dist = Math.abs((p.x - l.a.x) * dy - (p.y - l.a.y) * dx) / Math.sqrt(len2);
+      if (t < 0 || t > 1 || dist > Math.max(l.halfWidth, 0) + 8 / viewer.scale) continue;
+      if (!best || dist < best.dist) best = { dist, trace: { id: l.id, i: Math.round(t * (samples.length - 1)) } };
+    }
+    setTrace(best ? best.trace : null);
   }
 
   function label(ctx, s, text, color, where) {
@@ -228,7 +261,8 @@
       line(ctx, v, a, b, AXIS_COLORS[key]);
       ws.drawHandle(ctx, v, q, AXIS_COLORS[key], 'circle');
     } else if (m.type === 'profile' && m.points.length === 1) {
-      line(ctx, v, m.points[0], ws.snapAxis(m.points[0], hover), PROFILE_COLOR);
+      // In the color the new profile will get.
+      line(ctx, v, m.points[0], ws.snapAxis(m.points[0], hover), PROFILE_COLORS[panel.map.profiles.length % PROFILE_COLORS.length]);
     }
   }
 
@@ -293,15 +327,16 @@
       ws.setMode(null);
       const profile = createProfile(a, b, { name: nextProfileName(ws.activePanel()) });
       ws.commit((pn) => pn.map.profiles.push(profile));
-      state.selectedId = profile.id;
-      ws.changed();
+      selectProfile(profile.id);
       return true;
     }
     if (mode) return false;
-    // No mode: clicking a profile selects it.
+    // No mode: clicking a profile selects it; Shift- or Cmd-click adds it to
+    // the selection (or takes it out), to overlay several in the plot.
     const hit = profileAt(p, 6 / viewer.scale);
-    state.selectedId = hit ? hit.id : null;
-    ws.changed();
+    const add = e.shiftKey || e.metaKey || e.ctrlKey;
+    if (add && !hit) return true;
+    selectProfile(hit ? hit.id : null, { add });
     return true;
   }
 
@@ -337,6 +372,12 @@
     } else {
       const l = panel.map.profiles.find((x) => x.id === handle.id);
       if (!l) return;
+      // Dragging a selected profile keeps the selection; it becomes the one edited.
+      if (!isSelected(l.id)) state.overlay.clear();
+      else if (state.selectedId !== l.id) {
+        state.overlay.delete(l.id);
+        state.overlay.add(state.selectedId);
+      }
       state.selectedId = l.id;
       if (handle.kind === 'profileEnd') {
         const other = handle.end === 'a' ? l.b : l.a;
@@ -352,12 +393,12 @@
     ws.changed({ light: true });
   }
 
+  // Deletes every selected profile.
   function deleteSelected() {
-    const l = selectedProfile();
-    if (!l) return;
-    ws.commit((p) => (p.map.profiles = p.map.profiles.filter((x) => x.id !== l.id)));
-    state.selectedId = null;
-    ws.changed();
+    const ids = new Set(selectedProfiles().map((l) => l.id));
+    if (!ids.size) return;
+    ws.commit((p) => (p.map.profiles = p.map.profiles.filter((x) => !ids.has(x.id))));
+    selectProfile(null);
   }
   mctx.deleteSelected = deleteSelected;
 

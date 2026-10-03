@@ -171,3 +171,38 @@ test('axis ticks sit on the plot edges', () => {
   panel.grid.corners = null;
   assert.deepEqual(onAxisEdge(panel, 'x', { x: 1, y: 2 }), { x: 1, y: 2 });
 });
+
+test('a profile length is set in axis units or pixels', () => {
+  const { panel } = scene();
+  const { profileAxisKey, profileLength, profileEndForLength } = CM;
+  // Diagonal-ish, mostly horizontal: measured in pixels until x is calibrated.
+  const prof = createProfile({ x: X0 + 10, y: Y0 + 20 }, { x: X0 + 50, y: Y0 + 50 });
+  assert.equal(profileAxisKey(panel, prof), null);
+  close(profileLength(panel, prof).length, 50, 1e-9);
+  let b = profileEndForLength(panel, prof, 100);
+  close(b.x, X0 + 90, 1e-9);
+  close(b.y, Y0 + 80, 1e-9);
+  // x from 0 to 4 across the plot: 50 px per unit.
+  panel.map.x.ticks = [createAxisTick({ x: X0, y: 0 }, 0), createAxisTick({ x: X0 + W, y: 0 }, 4)];
+  assert.equal(profileAxisKey(panel, prof), 'x');
+  close(profileLength(panel, prof).length, 0.8, 1e-9);
+  b = profileEndForLength(panel, { ...prof, b }, 2);
+  close(b.x, X0 + 110, 1e-6);
+  close(b.y, Y0 + 95, 1e-6); // same direction
+  // On a log axis the span is in axis values, too.
+  panel.map.x.scale = 'log10';
+  panel.map.x.ticks = [createAxisTick({ x: X0, y: 0 }, 1), createAxisTick({ x: X0 + W, y: 0 }, 100)];
+  b = profileEndForLength(panel, prof, 9);
+  close(profileLength(panel, { ...prof, b }).length, 9, 1e-6);
+  assert.equal(profileEndForLength(panel, prof, 0), null);
+});
+
+test('several profiles go into one long CSV', () => {
+  const { profilesCsv } = CM;
+  const s = { d: 0, x: null, y: null, px: 1, py: 2, value: 0.5, deltaE: 1, flagged: false, clipped: false };
+  const lines = profilesCsv([{ name: 'a, b', samples: [s, s] }, { name: 'c', samples: [s] }]).trim().split('\n');
+  assert.equal(lines[0], 'profile,d_px,x,y,page_x,page_y,value,deltaE,flagged,clipped');
+  assert.equal(lines.length, 4);
+  assert.match(lines[1], /^"a, b",0\.00,/);
+  assert.match(lines[3], /^c,/);
+});

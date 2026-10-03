@@ -330,3 +330,4 @@ kbd {
 .axis-block .card-actions select { width: auto; }
 .profile-plot { display: block; width: 100%; height: 140px; margin-top: var(--space-2); cursor: crosshair; touch-action: none; }
 #profile-view .card-actions { margin-top: var(--space-3); }
+#profile-edit .fields { margin-top: var(--space-2); }

@@ -163,6 +163,15 @@ Load this zip back into Colormeris to review or re-run the extraction.
     return lines.join('\n') + '\n';
   }
 
+  // Several profiles in one long table with a profile column: [{name, samples}].
+  function profilesCsv(entries) {
+    const lines = [`profile,${profileCsv([]).trim()}`];
+    for (const { name, samples } of entries) {
+      for (const line of profileCsv(samples).trim().split('\n').slice(1)) lines.push(`${csvEscape(name)},${line}`);
+    }
+    return lines.join('\n') + '\n';
+  }
+
   // Map data files for one panel: the matrix, the long format and each profile.
   function mapPanelFiles(panel, result, base) {
     if (!result) return [];
@@ -256,5 +265,5 @@ Load this zip back into Colormeris to review or re-run the extraction.
     return { project, pageImages, originalFile };
   }
 
-  Object.assign(CM, { formatNumber, csvEscape, csvLine, toWideCsv, toLongCsv, roiCsv, mapMatrixCsv, mapLongCsv, profileCsv, mapPanelFiles, safeFileName, panelFileBases, heatmapPanelFiles, buildProjectZip, readProjectZip });
+  Object.assign(CM, { formatNumber, csvEscape, csvLine, toWideCsv, toLongCsv, roiCsv, mapMatrixCsv, mapLongCsv, profileCsv, profilesCsv, mapPanelFiles, safeFileName, panelFileBases, heatmapPanelFiles, buildProjectZip, readProjectZip });
 })((globalThis.Colormeris ??= {}));

@@ -255,6 +255,50 @@
     return { row, col, value: result.values[i], deltaE: result.deltaE[i], flags: result.flags[i] };
   }
 
+  // The axis a profile is plotted and measured against: 'x' or 'y' when the
+  // line runs mostly along that axis and it is calibrated, else null (distance
+  // along the line in pixels).
+  function profileAxisKey(panel, profile) {
+    if (!panel.grid.corners) return null;
+    const horizontal = Math.abs(profile.b.x - profile.a.x) >= Math.abs(profile.b.y - profile.a.y);
+    const key = horizontal ? 'x' : 'y';
+    return axisFn(panel, key).fn ? key : null;
+  }
+
+  // Length of a profile in the units of profileAxisKey(): the span of axis
+  // values between its ends, or pixels. {length, key}.
+  function profileLength(panel, profile) {
+    const key = profileAxisKey(panel, profile);
+    if (!key) return { length: Math.hypot(profile.b.x - profile.a.x, profile.b.y - profile.a.y), key };
+    return { length: Math.abs(axisCoords(panel, profile.b)[key] - axisCoords(panel, profile.a)[key]), key };
+  }
+
+  // The end point that gives a profile `length` (in profileLength() units),
+  // keeping its start and direction; null when no point along it does.
+  function profileEndForLength(panel, profile, length) {
+    const { a, b } = profile;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!(length > 0) || len < 1e-9) return null;
+    const dir = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+    const at = (s) => ({ x: a.x + s * dir.x, y: a.y + s * dir.y });
+    const key = profileAxisKey(panel, profile);
+    if (!key) return at(length);
+    // Axis values are monotonic along the line (also on a log axis), so
+    // bisect on the distance in pixels.
+    const v0 = axisCoords(panel, a)[key];
+    const span = (s) => Math.abs(axisCoords(panel, at(s))[key] - v0);
+    let hi = len;
+    for (let k = 0; k < 40 && span(hi) < length; k++) hi *= 2;
+    if (!(span(hi) >= length)) return null;
+    let lo = 0;
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo + hi) / 2;
+      if (span(mid) < length) lo = mid;
+      else hi = mid;
+    }
+    return at(hi);
+  }
+
   // Values along a profile line, one sample per pixel of length, each averaged
   // over ±halfWidth pixels across the line. Returns
   // [{d, x, y, px, py, value, deltaE, flagged, clipped}] or {error}.
@@ -313,6 +357,9 @@
     extractMap,
     axisCoords,
     mapAt,
+    profileAxisKey,
+    profileLength,
+    profileEndForLength,
     sampleProfile,
   });
 })((globalThis.Colormeris ??= {}));
