@@ -372,6 +372,17 @@
       const k = panel.map[handle.key].ticks.find((x) => x.id === handle.id);
       if (k) Object.assign(k, onAxisEdge(panel, handle.key, p));
     } else {
+      // Ctrl- or Cmd-dragging a line moves a copy of it and leaves the original.
+      if (handle.kind === 'profileMove' && !handle.started) {
+        handle.started = true;
+        const src = panel.map.profiles.find((x) => x.id === handle.id);
+        if (src && (e.ctrlKey || e.metaKey)) {
+          const [copy] = pastedProfiles(panel, [src], null);
+          panel.map.profiles.push(copy);
+          handle.id = copy.id;
+          state.overlay.clear();
+        }
+      }
       const l = panel.map.profiles.find((x) => x.id === handle.id);
       if (!l) return;
       // Dragging a selected profile keeps the selection; it becomes the one edited.
