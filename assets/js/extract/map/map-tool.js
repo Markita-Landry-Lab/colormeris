@@ -211,7 +211,7 @@
   function drawTrace(ctx, v, panel) {
     const samples = state.trace && panel.map.profiles.some((l) => l.id === state.trace.id) ? ws.resultFor(panel).profiles?.[state.trace.id] : null;
     const s = Array.isArray(samples) ? samples[state.trace.i] : null;
-    if (!s) return;
+    if (!s || s.outside) return;
     const q = v.toScreen({ x: s.px, y: s.py });
     ctx.beginPath();
     ctx.arc(q.x, q.y, 6, 0, 2 * Math.PI);
@@ -234,7 +234,9 @@
       const t = ((p.x - l.a.x) * dx + (p.y - l.a.y) * dy) / len2;
       const dist = Math.abs((p.x - l.a.x) * dy - (p.y - l.a.y) * dx) / Math.sqrt(len2);
       if (t < 0 || t > 1 || dist > Math.max(l.halfWidth, 0) + 8 / viewer.scale) continue;
-      if (!best || dist < best.dist) best = { dist, trace: { id: l.id, i: Math.round(t * (samples.length - 1)) } };
+      const i = Math.round(t * (samples.length - 1));
+      if (samples[i].outside) continue;
+      if (!best || dist < best.dist) best = { dist, trace: { id: l.id, i } };
     }
     setTrace(best ? best.trace : null);
   }

@@ -183,7 +183,9 @@
       for (const l of shown) {
         const samples = results[l.id];
         const norm = Array.isArray(samples) ? profileDivisor(samples, state.profileNorm) : null;
-        const error = samples?.error || (!samples ? 'Calibrate the colorbar to read the profile.' : norm.error);
+        // A sweep running off the edge plots nothing for a moment; that is no error.
+        const gone = Array.isArray(samples) && samples.every((q) => q.outside) && !state.sweep;
+        const error = samples?.error || (!samples ? 'Calibrate the colorbar to read the profile.' : gone ? 'The profile lies outside the plot area.' : norm.error);
         if (error) errors.push({ name: l.name, error });
         else series.push({ profile: l, samples, divisor: norm.divisor, color: mctx.profileColor(panel, l) });
       }
@@ -247,10 +249,11 @@
       const axis = plotAxis(panel, series);
       // A single profile keeps the accent color; overlaid ones match their lines.
       const lines = series.map((s) => ({ ...s, xs: s.samples.map(axis.get), ys: s.samples.map((q) => q.value / s.divisor), color: series.length > 1 ? s.color : accent }));
+      // The x span covers whole lines; values only the parts inside the plot area.
       const allX = lines.flatMap((s) => s.xs);
-      const allY = lines.flatMap((s) => s.ys);
+      const allY = lines.flatMap((s) => s.ys.filter((y, i) => !s.samples[i].outside));
       const [x0, x1] = [Math.min(...allX), Math.max(...allX)];
-      let [y0, y1] = [Math.min(...allY), Math.max(...allY)];
+      let [y0, y1] = allY.length ? [Math.min(...allY), Math.max(...allY)] : [Infinity, -Infinity];
       // While sweeping, the value axis holds still (widened if a frame
       // goes past it), so heights compare between frames.
       const fixed = state.sweep?.yRange;
@@ -259,6 +262,7 @@
         fixed[1] = Math.max(fixed[1], y1);
         [y0, y1] = fixed;
       }
+      if (!Number.isFinite(y0)) return;
       if (y1 - y0 < 1e-12) [y0, y1] = [y0 - 0.5, y1 + 0.5];
       const pad = { l: 44, r: 8, t: 8, b: 30 };
       const W = cssW - pad.l - pad.r;
@@ -270,7 +274,12 @@
       ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, W, H);
       for (const s of lines) {
         ctx.beginPath();
-        s.ys.forEach((y, i) => (i ? ctx.lineTo(sx(s.xs[i]), sy(y)) : ctx.moveTo(sx(s.xs[i]), sy(y))));
+        // A gap where the line is outside the plot area.
+        s.ys.forEach((y, i) => {
+          if (s.samples[i].outside) return;
+          if (i && !s.samples[i - 1].outside) ctx.lineTo(sx(s.xs[i]), sy(y));
+          else ctx.moveTo(sx(s.xs[i]), sy(y));
+        });
         ctx.strokeStyle = s.color;
         ctx.lineWidth = series.length > 1 ? 2 : 1.5;
         ctx.stroke();
@@ -279,7 +288,7 @@
       ctx.fillStyle = danger;
       for (const s of lines) {
         s.samples.forEach((q, i) => {
-          if (q.flagged || q.clipped) ctx.fillRect(sx(s.xs[i]) - 1.5, sy(s.ys[i]) - 1.5, 3, 3);
+          if (!q.outside && (q.flagged || q.clipped)) ctx.fillRect(sx(s.xs[i]) - 1.5, sy(s.ys[i]) - 1.5, 3, 3);
         });
       }
       ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
@@ -301,7 +310,8 @@
       ctx.fillText(axis.name + scaled, pad.l + W / 2, pad.t + H + 4);
       plot = { panel, series, lines, sx, sy };
       const traced = state.trace && lines.find((s) => s.profile.id === state.trace.id);
-      if (traced?.samples[state.trace.i]) {
+      const tracedSample = traced?.samples[state.trace.i];
+      if (tracedSample && !tracedSample.outside) {
         drawTraceMark(ctx, { i: state.trace.i, line: traced, sx, sy, pad, W, H, axis, text, css, many: lines.length > 1 });
       }
     }
@@ -350,15 +360,18 @@
       const my = e.clientY - r.top;
       let best = null;
       for (const s of plot.lines) {
-        let i = 0;
-        for (let k = 1; k < s.xs.length; k++) if (Math.abs(plot.sx(s.xs[k]) - mx) < Math.abs(plot.sx(s.xs[i]) - mx)) i = k;
+        let i = -1;
+        for (let k = 0; k < s.xs.length; k++) {
+          if (!s.samples[k].outside && (i < 0 || Math.abs(plot.sx(s.xs[k]) - mx) < Math.abs(plot.sx(s.xs[i]) - mx))) i = k;
+        }
+        if (i < 0) continue;
         const dx = Math.abs(plot.sx(s.xs[i]) - mx);
         const dy = Math.abs(plot.sy(s.ys[i]) - my);
         // Lines that do not reach the pointer lose to those that do.
         const score = dy + (dx > 4 ? 1e6 + dx : 0);
         if (!best || score < best.score) best = { score, trace: { id: s.profile.id, i } };
       }
-      setTrace(best.trace);
+      setTrace(best ? best.trace : null);
     });
     $('profile-plot').addEventListener('pointerleave', () => setTrace(null));
 
@@ -384,7 +397,7 @@
       const l = mctx.selectedProfile();
       const image = app.pages.get(panel.page)?.imageData;
       if (!l || !image || app.mode) return;
-      const range = sweepRange(panel.grid.corners, l.a, l.b);
+      const range = sweepRange(panel.grid.corners, l.a, l.b, { runOff: $('profile-sweep-runoff').checked });
       if (range.error) return ws.toast(range.error, true);
       if (range.max - range.min < 1) return ws.toast('The profile has no room to move inside the plot area.', true);
       ws.pushHistory();
@@ -415,6 +428,7 @@
         const { divisor } = profileDivisor(samples, state.profileNorm);
         if (!divisor) continue;
         for (const q of samples) {
+          if (q.outside) continue;
           const v = q.value / divisor;
           if (!Number.isFinite(v)) continue;
           lo = Math.min(lo, v);
@@ -548,6 +562,18 @@
       if (l) ws.zoomToPoints([l.a, l.b]);
     });
     $('profile-sweep').addEventListener('click', toggleSweep);
+    // Switching edges mid-sweep: the new range around where it started.
+    $('profile-sweep-runoff').addEventListener('change', (e) => {
+      const sw = state.sweep;
+      if (!sw) return;
+      const panel = ws.activePanel();
+      const range = sweepRange(panel.grid.corners, sw.a0, sw.b0, { runOff: e.target.checked });
+      if (range.error) return;
+      Object.assign(sw, { min: range.min, max: range.max, s: Math.min(range.max, Math.max(range.min, sw.s)) });
+      const l = mctx.selectedProfile();
+      const image = app.pages.get(panel.page)?.imageData;
+      if (l && image) sw.yRange = sweepValueRange(image, panel, { ...l, a: sw.a0, b: sw.b0 }, sw);
+    });
     $('profile-norm').addEventListener('change', (e) => {
       state.profileNorm = e.target.value;
       // The fixed value axis was measured in the old scale.

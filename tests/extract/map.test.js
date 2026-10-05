@@ -268,3 +268,29 @@ test('sweepRange bounds a profile moving across the plot area', () => {
   assert.ok(sweepRange(corners, { x: 110, y: 20 }, { x: 150, y: 20 }).error);
   assert.ok(sweepRange(null, { x: 10, y: 20 }, { x: 90, y: 20 }).error);
 });
+
+test('sweepRange with runOff goes on until no part of the line is left', () => {
+  const corners = rectCorners({ x: 0, y: 0 }, { x: 100, y: 50 });
+  // A slanted line: its ends no longer stop it; it leaves at the far corners.
+  const diag = sweepRange(corners, { x: 40, y: 10 }, { x: 60, y: 30 }, { runOff: true });
+  close(diag.min, -30 * Math.SQRT2, 1e-6);
+  close(diag.max, 40 * Math.SQRT2, 1e-6);
+  // A level line leaves at the same edges either way.
+  const flat = sweepRange(corners, { x: 10, y: 20 }, { x: 90, y: 20 }, { runOff: true });
+  close(flat.min, -20, 1e-6);
+  close(flat.max, 30, 1e-6);
+  // Partly outside is fine; wholly outside is not.
+  assert.ok(!sweepRange(corners, { x: 90, y: 20 }, { x: 150, y: 20 }, { runOff: true }).error);
+  assert.ok(sweepRange(corners, { x: 110, y: 20 }, { x: 150, y: 20 }, { runOff: true }).error);
+  assert.ok(sweepRange(corners, { x: 10, y: 60 }, { x: 90, y: 60 }, { runOff: true }).error);
+});
+
+test('profile samples outside the plot area are marked and left out of the CSV', () => {
+  const { img, panel } = scene();
+  // From 10 px left of the plot area into it.
+  const prof = createProfile({ x: X0 - 10, y: Y0 + 50 }, { x: X0 + 30, y: Y0 + 50 });
+  const samples = sampleProfile(img, panel, prof);
+  assert.equal(samples.length, 41);
+  assert.equal(samples.filter((q) => q.outside).length, 10);
+  assert.equal(profileCsv(samples).trim().split('\n').length, 1 + 31);
+});

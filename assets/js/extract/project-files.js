@@ -154,11 +154,12 @@ Load this zip back into Colormeris to review or re-run the extraction.
 
   // One line per profile sample (from sampleProfile). With norm = {mode,
   // divisor} ('max' | 'mean', see profileDivisor), a value_per_<mode> column
-  // follows the value.
+  // follows the value. Samples outside the plot area are left out.
   function profileCsv(samples, norm = null) {
     const head = ['d_px', 'x', 'y', 'page_x', 'page_y', 'value', ...(norm ? [`value_per_${norm.mode}`] : []), 'deltaE', 'flagged', 'clipped'];
     const lines = [csvLine(head)];
     for (const s of samples) {
+      if (s.outside) continue;
       const scaled = norm ? [formatNumber(s.value / norm.divisor)] : [];
       lines.push(
         [s.d.toFixed(2), formatNumber(s.x), formatNumber(s.y), s.px.toFixed(2), s.py.toFixed(2), formatNumber(s.value), ...scaled, s.deltaE.toFixed(2), s.flagged ? 1 : 0, s.clipped ? 1 : 0].join(','),

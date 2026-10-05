@@ -301,11 +301,11 @@
   }
 
   // What a profile's values are divided by to compare profiles by shape:
-  // their maximum or mean (mode 'max' | 'mean'), 1 for 'raw'. {divisor} or
+  // their maximum or mean (mode 'max' | 'mean') inside the plot area, 1 for 'raw'. {divisor} or
   // {error} when it is not positive (dividing would flip or blow up the line).
   function profileDivisor(samples, mode) {
     if (mode !== 'max' && mode !== 'mean') return { divisor: 1 };
-    const values = samples.map((s) => s.value).filter(Number.isFinite);
+    const values = samples.filter((s) => !s.outside).map((s) => s.value).filter(Number.isFinite);
     const d = mode === 'max' ? Math.max(...values) : values.reduce((a, v) => a + v, 0) / values.length;
     return d > 0 ? { divisor: d } : { error: `The ${mode} is not positive, so the profile cannot be divided by it.` };
   }
@@ -337,13 +337,16 @@
   // {n, min, max} in page px, min ≤ 0 ≤ max, or {error}. The midpoint must
   // stay inside, and so must each end that starts inside; an end drawn a
   // little past the edge (a line from edge to edge) does not block the sweep.
-  function sweepRange(corners, a, b) {
+  // With runOff the line may leave the area until no part of it is left:
+  // a wider sweep for slanted lines, whose ends leave first.
+  function sweepRange(corners, a, b, { runOff = false } = {}) {
     if (!corners) return { error: 'Place the plot area first.' };
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
     if (len < 1) return { error: 'Profile is too short.' };
     const n = { x: -dy / len, y: dx / len };
+    if (runOff) return runOffRange(corners, a, { x: dx / len, y: dy / len }, n, len);
     const inside = (p) => {
       const { u, v } = invertBilinear(corners, p);
       return u >= -1e-9 && u <= 1 + 1e-9 && v >= -1e-9 && v <= 1 + 1e-9;
@@ -367,11 +370,44 @@
     return { n, min: -Math.min(...points.map((p) => reach(p, -1))), max: Math.min(...points.map((p) => reach(p, 1))) };
   }
 
+  // The offsets along n at which the line (from a along d, len long) still
+  // touches the area: the area clipped to the strip the line sweeps, measured
+  // across. The plot area's edges are straight, so it is a polygon.
+  function runOffRange(corners, a, d, n, len) {
+    let poly = corners.map((p) => ({ along: (p.x - a.x) * d.x + (p.y - a.y) * d.y, across: (p.x - a.x) * n.x + (p.y - a.y) * n.y }));
+    poly = clipPolygon(poly, (q) => q.along);
+    poly = clipPolygon(poly, (q) => len - q.along);
+    if (!poly.length) return { error: 'Move the profile onto the plot area to sweep it.' };
+    const across = poly.map((q) => q.across);
+    const min = Math.min(...across);
+    const max = Math.max(...across);
+    if (min > 1e-9 || max < -1e-9) return { error: 'Move the profile onto the plot area to sweep it.' };
+    return { n, min: Math.min(0, min), max: Math.max(0, max) };
+  }
+
+  // The part of a convex polygon [{along, across}] where f ≥ 0 (Sutherland–Hodgman).
+  function clipPolygon(poly, f) {
+    const out = [];
+    poly.forEach((p, i) => {
+      const q = poly[(i + 1) % poly.length];
+      const fp = f(p);
+      const fq = f(q);
+      if (fp >= 0) out.push(p);
+      if ((fp >= 0) !== (fq >= 0)) {
+        const t = fp / (fp - fq);
+        out.push({ along: p.along + t * (q.along - p.along), across: p.across + t * (q.across - p.across) });
+      }
+    });
+    return out;
+  }
+
   const samePoints = (a, b) => a.length === b.length && a.every((p, i) => Math.abs(p.x - b[i].x) < 1e-9 && Math.abs(p.y - b[i].y) < 1e-9);
 
   // Values along a profile line, one sample per pixel of length, each averaged
   // over ±halfWidth pixels across the line. Returns
-  // [{d, x, y, px, py, value, deltaE, flagged, clipped}] or {error}.
+  // [{d, x, y, px, py, value, deltaE, flagged, clipped, outside}] or {error}.
+  // Samples outside the plot area (axes, labels, the page) are kept, so the
+  // line keeps its length, but marked outside: plots and CSVs leave them out.
   function sampleProfile(img, panel, profile) {
     const bar = colorbarProblem(panel);
     if (bar) return { error: bar };
@@ -390,10 +426,12 @@
       const p = { x: a.x + s.t * (b.x - a.x), y: a.y + s.t * (b.y - a.y) };
       let ax = null;
       let ay = null;
-      if (x || y) {
+      let outside = false;
+      if (panel.grid.corners) {
         const { u, v } = invertBilinear(panel.grid.corners, p);
         if (x) ax = x(u);
         if (y) ay = y(v);
+        outside = !(u >= -1e-9 && u <= 1 + 1e-9 && v >= -1e-9 && v <= 1 + 1e-9);
       }
       return {
         d: s.t * length,
@@ -405,6 +443,7 @@
         deltaE: hit.deltaE,
         flagged: hit.deltaE > panel.settings.maxDeltaE,
         clipped: hit.clip !== 0,
+        outside,
       };
     });
   }
