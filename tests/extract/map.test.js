@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { makeImage, setPixel, paintColorbar, cmap, VIRIDISH } from '../helpers.js';
 import CM from '../load.js';
 
-const { extractMap, mapProblem, mapSize, axisFn, sampleProfile, colorbarLevels, mapAt, axisCoords, mapMatrixCsv, mapLongCsv, profileCsv, mapPanelFiles, createPanel, createAxisTick, createProfile, rectCorners, sampleColorbar, MAX_MAP_CELLS, FLAG_HIGH } = CM;
+const { sweepRange, extractMap, mapProblem, mapSize, axisFn, sampleProfile, colorbarLevels, mapAt, axisCoords, mapMatrixCsv, mapLongCsv, profileCsv, mapPanelFiles, createPanel, createAxisTick, createProfile, rectCorners, sampleColorbar, MAX_MAP_CELLS, FLAG_HIGH } = CM;
 
 const close = (a, b, eps) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
 
@@ -248,4 +248,23 @@ test('pasted profiles keep their place in the plot', () => {
   // Without a plot area: the page position.
   const bare = createPanel('c', 1, 'map');
   assert.deepEqual(pastedProfiles(bare, [src], from.grid.corners)[0].a, { x: 10, y: 50 });
+});
+
+test('sweepRange bounds a profile moving across the plot area', () => {
+  const corners = rectCorners({ x: 0, y: 0 }, { x: 100, y: 50 });
+  // Left to right: the normal points down.
+  const flat = sweepRange(corners, { x: 10, y: 20 }, { x: 90, y: 20 });
+  assert.deepEqual(flat.n, { x: -0, y: 1 });
+  close(flat.min, -20, 1e-6);
+  close(flat.max, 30, 1e-6);
+  // A diagonal line is stopped by whichever end reaches an edge first.
+  const diag = sweepRange(corners, { x: 40, y: 10 }, { x: 60, y: 30 });
+  close(diag.min, -10 * Math.SQRT2, 1e-6);
+  close(diag.max, 20 * Math.SQRT2, 1e-6);
+  // Ends drawn past the left and right edges do not block the sweep.
+  const wide = sweepRange(corners, { x: -5, y: 20 }, { x: 105, y: 20 });
+  close(wide.min, -20, 1e-6);
+  close(wide.max, 30, 1e-6);
+  assert.ok(sweepRange(corners, { x: 110, y: 20 }, { x: 150, y: 20 }).error);
+  assert.ok(sweepRange(null, { x: 10, y: 20 }, { x: 90, y: 20 }).error);
 });

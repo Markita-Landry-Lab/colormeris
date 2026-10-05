@@ -332,6 +332,41 @@
     });
   }
 
+  // How far the line a–b can move along its normal n (unit, to the right of
+  // a → b in page coordinates) and stay inside the plot area (corners):
+  // {n, min, max} in page px, min ≤ 0 ≤ max, or {error}. The midpoint must
+  // stay inside, and so must each end that starts inside; an end drawn a
+  // little past the edge (a line from edge to edge) does not block the sweep.
+  function sweepRange(corners, a, b) {
+    if (!corners) return { error: 'Place the plot area first.' };
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) return { error: 'Profile is too short.' };
+    const n = { x: -dy / len, y: dx / len };
+    const inside = (p) => {
+      const { u, v } = invertBilinear(corners, p);
+      return u >= -1e-9 && u <= 1 + 1e-9 && v >= -1e-9 && v <= 1 + 1e-9;
+    };
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    if (!inside(mid)) return { error: 'Move the profile inside the plot area to sweep it.' };
+    // The area is convex, so each point stays inside over one interval of
+    // offsets; the farthest it can go is the area's diagonal.
+    const far = Math.hypot(corners[2].x - corners[0].x, corners[2].y - corners[0].y) + Math.hypot(corners[3].x - corners[1].x, corners[3].y - corners[1].y);
+    const reach = (p, sign) => {
+      let lo = 0;
+      let hi = far;
+      for (let i = 0; i < 50; i++) {
+        const s = (lo + hi) / 2;
+        if (inside({ x: p.x + sign * s * n.x, y: p.y + sign * s * n.y })) lo = s;
+        else hi = s;
+      }
+      return lo;
+    };
+    const points = [mid, a, b].filter(inside);
+    return { n, min: -Math.min(...points.map((p) => reach(p, -1))), max: Math.min(...points.map((p) => reach(p, 1))) };
+  }
+
   const samePoints = (a, b) => a.length === b.length && a.every((p, i) => Math.abs(p.x - b[i].x) < 1e-9 && Math.abs(p.y - b[i].y) < 1e-9);
 
   // Values along a profile line, one sample per pixel of length, each averaged
@@ -397,6 +432,7 @@
     profileEndForLength,
     profileDivisor,
     pastedProfiles,
+    sweepRange,
     sampleProfile,
   });
 })((globalThis.Colormeris ??= {}));

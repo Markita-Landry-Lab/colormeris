@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { mapSize, axisFn, axisT, axisEdgePoint, profileAxisKey, profileLength, profileEndForLength, profileDivisor, mapMatrixCsv, mapLongCsv, profileCsv, profilesCsv, formatNumber, safeFileName } = CM;
+  const { mapSize, axisFn, axisT, axisEdgePoint, axisCoords, sweepRange, sampleProfile, profileAxisKey, profileLength, profileEndForLength, profileDivisor, mapMatrixCsv, mapLongCsv, profileCsv, profilesCsv, formatNumber, safeFileName } = CM;
 
   // Map tool, DOM: the sidebar cards (Axes, Profiles, Results), the profile
   // plot and the CSV downloads. Set up by map-tool.js.
@@ -191,6 +191,7 @@
       const once = errors.length === shown.length && new Set(errors.map((e) => e.error)).size === 1;
       $('profile-problem').textContent = once ? errors[0].error : errors.map((e) => `${e.name}: ${e.error}`).join(' ');
       $('profile-csv').disabled = !series.length;
+      renderSweep(panel, sel);
       $('profile-csv').textContent = series.length > 1 ? `Download ${series.length} profiles CSV` : 'Download profile CSV';
       drawProfiles(panel, series);
     }
@@ -250,6 +251,14 @@
       const allY = lines.flatMap((s) => s.ys);
       const [x0, x1] = [Math.min(...allX), Math.max(...allX)];
       let [y0, y1] = [Math.min(...allY), Math.max(...allY)];
+      // While sweeping, the value axis holds still (widened if a frame
+      // goes past it), so heights compare between frames.
+      const fixed = state.sweep?.yRange;
+      if (fixed) {
+        fixed[0] = Math.min(fixed[0], y0);
+        fixed[1] = Math.max(fixed[1], y1);
+        [y0, y1] = fixed;
+      }
       if (y1 - y0 < 1e-12) [y0, y1] = [y0 - 0.5, y1 + 0.5];
       const pad = { l: 44, r: 8, t: 8, b: 30 };
       const W = cssW - pad.l - pad.r;
@@ -359,6 +368,123 @@
       return a !== 0 && (a >= 1e5 || a < 1e-2) ? v.toExponential(2) : String(Number(v.toPrecision(4)));
     };
 
+    // ---------------------------------------------------------------- sweep
+    // state.sweep moves the edited profile along its normal, back and forth
+    // between the edges of the plot area, one animation frame at a time. The
+    // profile really moves; the undo step pushed at the start puts it back.
+
+    const sweepSpeed = () => {
+      const v = Number($('profile-sweep-speed').value);
+      return Number.isFinite(v) && v > 0 ? Math.min(500, v) : 20;
+    };
+    const shifted = (p, n, s) => ({ x: p.x + s * n.x, y: p.y + s * n.y });
+
+    function startSweep() {
+      const panel = ws.activePanel();
+      const l = mctx.selectedProfile();
+      const image = app.pages.get(panel.page)?.imageData;
+      if (!l || !image || app.mode) return;
+      const range = sweepRange(panel.grid.corners, l.a, l.b);
+      if (range.error) return ws.toast(range.error, true);
+      if (range.max - range.min < 1) return ws.toast('The profile has no room to move inside the plot area.', true);
+      ws.pushHistory();
+      state.sweep = {
+        panelId: panel.id,
+        id: l.id,
+        a0: l.a,
+        b0: l.b,
+        ...range,
+        s: 0,
+        dir: range.max >= 1 ? 1 : -1,
+        last: null,
+        yRange: sweepValueRange(image, panel, l, range),
+        set: { a: l.a, b: l.b },
+      };
+      state.sweep.frame = requestAnimationFrame(sweepFrame);
+      ws.changed({ light: true });
+    }
+
+    // The plotted values (after Scale) over 25 positions across the sweep.
+    function sweepValueRange(image, panel, l, { n, min, max }) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let k = 0; k <= 24; k++) {
+        const s = min + ((max - min) * k) / 24;
+        const samples = sampleProfile(image, panel, { ...l, a: shifted(l.a, n, s), b: shifted(l.b, n, s) });
+        if (!Array.isArray(samples) || !samples.length) continue;
+        const { divisor } = profileDivisor(samples, state.profileNorm);
+        if (!divisor) continue;
+        for (const q of samples) {
+          const v = q.value / divisor;
+          if (!Number.isFinite(v)) continue;
+          lo = Math.min(lo, v);
+          hi = Math.max(hi, v);
+        }
+      }
+      return lo <= hi ? [lo, hi] : null;
+    }
+
+    function sweepFrame(now) {
+      const sw = state.sweep;
+      if (!sw) return;
+      const panel = ws.activePanel();
+      const l = panel.map.profiles.find((x) => x.id === sw.id);
+      // Anything else that moved the line (a drag, a typed length, undo),
+      // or leaving it, ends the sweep.
+      if (ws.tool().kind !== 'map' || panel.id !== sw.panelId || !l || state.selectedId !== sw.id || l.a !== sw.set.a || l.b !== sw.set.b) return stopSweep();
+      // A long gap (a hidden tab) does not make the line jump.
+      const dt = sw.last === null ? 0 : Math.min(0.1, (now - sw.last) / 1000);
+      sw.last = now;
+      let s = sw.s + sw.dir * sweepSpeed() * dt;
+      // Bounce off the edges, keeping the overshoot.
+      if (s > sw.max) {
+        s = 2 * sw.max - s;
+        sw.dir = -1;
+      } else if (s < sw.min) {
+        s = 2 * sw.min - s;
+        sw.dir = 1;
+      }
+      sw.s = Math.min(sw.max, Math.max(sw.min, s));
+      l.a = shifted(sw.a0, sw.n, sw.s);
+      l.b = shifted(sw.b0, sw.n, sw.s);
+      sw.set = { a: l.a, b: l.b };
+      ws.changed({ light: true });
+      sw.frame = requestAnimationFrame(sweepFrame);
+    }
+
+    function stopSweep() {
+      if (!state.sweep) return;
+      cancelAnimationFrame(state.sweep.frame);
+      state.sweep = null;
+      // Also when another tool's sidebar is shown, so the button is right on return.
+      ws.setPressed($('profile-sweep'), false);
+      $('profile-sweep').textContent = 'Sweep';
+      ws.changed();
+    }
+
+    function toggleSweep() {
+      if (state.sweep) stopSweep();
+      else startSweep();
+    }
+
+    // The Sweep button, and where the line is across the plot: its midpoint
+    // on the axis it moves along.
+    function renderSweep(panel, sel) {
+      const btn = $('profile-sweep');
+      const on = !!state.sweep;
+      ws.setPressed(btn, on);
+      btn.textContent = on ? 'Pause' : 'Sweep';
+      btn.disabled = !on && !panel.grid.corners;
+      const at = $('profile-sweep-at');
+      if (!panel.grid.corners) {
+        at.textContent = '';
+        return;
+      }
+      const across = Math.abs(sel.b.x - sel.a.x) >= Math.abs(sel.b.y - sel.a.y) ? 'y' : 'x';
+      const c = axisCoords(panel, { x: (sel.a.x + sel.b.x) / 2, y: (sel.a.y + sel.b.y) / 2 });
+      at.textContent = c[across] !== null ? `at ${across} ${formatNumber(c[across])}` : `at ${across} ${c[`p${across}`].toFixed(1)} px`;
+    }
+
     // ---------------------------------------------------------------- results
 
     function renderResults(panel) {
@@ -421,8 +547,16 @@
       const l = mctx.selectedProfile();
       if (l) ws.zoomToPoints([l.a, l.b]);
     });
+    $('profile-sweep').addEventListener('click', toggleSweep);
     $('profile-norm').addEventListener('change', (e) => {
       state.profileNorm = e.target.value;
+      // The fixed value axis was measured in the old scale.
+      if (state.sweep) {
+        const panel = ws.activePanel();
+        const l = mctx.selectedProfile();
+        const image = app.pages.get(panel.page)?.imageData;
+        state.sweep.yRange = l && image ? sweepValueRange(image, panel, { ...l, a: state.sweep.a0, b: state.sweep.b0 }, state.sweep) : null;
+      }
       ws.changed({ light: true });
     });
     $('profile-csv').addEventListener('click', () => {
@@ -464,7 +598,7 @@
       new ResizeObserver(() => app.sourceCanvas && ws.tool().kind === 'map' && renderProfiles(ws.activePanel())).observe($('profile-plot'));
     }
 
-    return { renderSidebar, focusAxisTick, setTrace };
+    return { renderSidebar, focusAxisTick, setTrace, stopSweep, toggleSweep };
   }
 
   Object.assign(CM, { setupMapSidebar });

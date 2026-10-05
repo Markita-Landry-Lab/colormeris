@@ -43,6 +43,7 @@
     overlay: new Set(), // more selected profiles, plotted with it
     profileNorm: 'raw', // profile plot and CSV: 'raw', or divided by each 'max' or 'mean'
     trace: null, // {id, i}: traced sample of a profile (see map-sidebar.js)
+    sweep: null, // the edited profile moving across the plot (see map-sidebar.js)
     showRecon: false,
     showFlags: false,
     field: new Map(), // panel id → {key, image, result}
@@ -74,7 +75,7 @@
   }
 
   const mctx = { ws, state, selectedProfile, selectedProfiles, isSelected, selectProfile, profileColor, AXIS_COLORS };
-  const { renderSidebar, focusAxisTick, setTrace } = setupMapSidebar(mctx);
+  const { renderSidebar, focusAxisTick, setTrace, stopSweep, toggleSweep } = setupMapSidebar(mctx);
 
   // The field is the slow part (every pixel goes through the colorbar), so it
   // is cached apart from the profiles: drawing or dragging a profile must not
@@ -293,6 +294,7 @@
   // ---------------------------------------------------------------- clicks and drags
 
   function onModeChange(type) {
+    if (type) stopSweep();
     ws.setPressed($('axis-x-add'), type === 'xtick');
     ws.setPressed($('axis-y-add'), type === 'ytick');
     ws.setPressed($('profile-add'), type === 'profile');
@@ -367,6 +369,8 @@
   }
 
   function onHandleDrag(handle, p, e) {
+    // The drag takes the line; a sweep would pull it back each frame.
+    stopSweep();
     const panel = ws.activePanel();
     if (handle.kind === 'axisTick') {
       const k = panel.map[handle.key].ticks.find((x) => x.id === handle.id);
@@ -477,6 +481,7 @@
   }
   ws.addHotkey('copyProfiles', copyProfiles, { tool: 'map' });
   ws.addHotkey('pasteProfiles', pasteProfiles, { tool: 'map' });
+  ws.addHotkey('sweepProfile', () => (selectedProfile() && !app.mode ? toggleSweep() : false), { tool: 'map' });
   }
 
   Object.assign(CM, { setupMapTool });

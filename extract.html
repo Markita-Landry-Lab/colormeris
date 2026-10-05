@@ -22,8 +22,8 @@
   <script src="assets/js/extract/viewer.js?v=1" defer></script>
   <script src="assets/js/extract/roi/geometry.js?v=1" defer></script>
   <script src="assets/js/extract/roi/quantify.js?v=2" defer></script>
-  <script src="assets/js/extract/map/field.js?v=6" defer></script>
-  <script src="assets/js/extract/settings.js?v=3" defer></script>
+  <script src="assets/js/extract/map/field.js?v=7" defer></script>
+  <script src="assets/js/extract/settings.js?v=4" defer></script>
   <script src="assets/js/extract/workspace/history.js?v=1" defer></script>
   <script src="assets/js/extract/workspace/overlay.js?v=3" defer></script>
   <script src="assets/js/extract/workspace/interact.js?v=3" defer></script>
@@ -39,8 +39,8 @@
   <script src="assets/js/extract/roi/roi-overlay.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-sidebar.js?v=1" defer></script>
   <script src="assets/js/extract/roi/roi-tool.js?v=1" defer></script>
-  <script src="assets/js/extract/map/map-sidebar.js?v=6" defer></script>
-  <script src="assets/js/extract/map/map-tool.js?v=10" defer></script>
+  <script src="assets/js/extract/map/map-sidebar.js?v=7" defer></script>
+  <script src="assets/js/extract/map/map-tool.js?v=11" defer></script>
   <script src="assets/js/agent/schema.js?v=3" defer></script>
   <script src="assets/js/agent/api.js?v=2" defer></script>
   <script src="assets/js/agent/llm.js?v=1" defer></script>
@@ -357,6 +357,11 @@
               <option value="max">÷ each max</option>
               <option value="mean">÷ each mean</option>
             </select></label>
+            <label class="field" title="How fast the profile moves when swept, in page pixels per second">Speed (px/s) <input id="profile-sweep-speed" type="number" min="1" max="500" step="any" value="20" class="num"></label>
+          </div>
+          <div class="row tight">
+            <button class="btn" id="profile-sweep" aria-pressed="false" title="Move the profile across the plot area, perpendicular to itself, and back (Shortcut: K)" data-hotkey="sweepProfile" data-title="Move the profile across the plot area, perpendicular to itself, and back (Shortcut: {key})">Sweep</button>
+            <span id="profile-sweep-at" class="muted"></span>
           </div>
           <canvas id="profile-plot" class="profile-plot" aria-label="Values along the selected profiles"></canvas>
           <div class="card-actions">

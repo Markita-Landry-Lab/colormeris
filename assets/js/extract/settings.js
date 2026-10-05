@@ -33,6 +33,7 @@
     { id: 'profile', label: 'Draw a line profile (Map)', keys: ['L'], tool: 'map' },
     { id: 'copyProfiles', label: 'Copy selected profiles (Map)', keys: ['Mod+C'], tool: 'map' },
     { id: 'pasteProfiles', label: 'Paste profiles (Map)', keys: ['Mod+V'], tool: 'map' },
+    { id: 'sweepProfile', label: 'Sweep the profile across the plot (Map)', keys: ['K'], tool: 'map' },
   ];
   // Keys with a fixed meaning: cancel, pan, and finishing or editing a polygon.
   const RESERVED_KEYS = ['Escape', 'Space', 'Enter', 'Backspace', 'Delete', 'Tab'];
