@@ -1,6 +1,6 @@
 (function (CM) {
   'use strict';
-  const { rgbToLab, labToRgb, colorDistance, deltaE76, readPixel } = CM;
+  const { rgbToLab, labToRgb, colorDistance, deltaE76, deltaE2000, readPixel } = CM;
 
   // Colorbar calibration: sample the bar's colors along a line, map positions
   // along the bar (t in [0, 1], start → end) to data values via user ticks, and
@@ -104,9 +104,31 @@
     const dist = colorDistance(distance);
     let best = 0;
     let bestD = Infinity;
+    // Exact pruning for CIEDE2000: its lightness term alone is at most
+    // dL / 1 and at least dL / 1.75 (Sl ≤ 1.75), and the other terms never
+    // make the sum smaller than that (the cross term is dominated), so a
+    // sample whose dL / 1.75 already exceeds the best distance cannot win. A
+    // ΔE76 seed (the likely winner) makes the bound tight from the start; ties
+    // still go to the lowest index, as in a plain scan.
+    const prune = dist === deltaE2000 ? 1.75 : 0;
+    if (prune) {
+      let seed = 0;
+      let seedD = Infinity;
+      for (let i = 0; i < samples.length; i++) {
+        const d = deltaE76(lab, samples[i].lab);
+        if (d < seedD) {
+          seedD = d;
+          seed = i;
+        }
+      }
+      best = seed;
+      bestD = dist(lab, samples[seed].lab);
+    }
+    const L = lab[0];
     for (let i = 0; i < samples.length; i++) {
+      if (prune && Math.abs(L - samples[i].lab[0]) > prune * bestD) continue;
       const d = dist(lab, samples[i].lab);
-      if (d < bestD) {
+      if (d < bestD || (d === bestD && i < best)) {
         bestD = d;
         best = i;
       }

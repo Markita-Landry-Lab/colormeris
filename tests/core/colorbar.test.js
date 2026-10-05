@@ -101,3 +101,22 @@ test('snapTick also finds marks drawn into the strip from its edge', () => {
   assert.ok(k, 'mark found');
   close(k.point.y, 150.5, 0.6);
 });
+
+test('labToT pruning gives the same match as a plain scan over all samples', () => {
+  const samples = CM.colormapSamples({ name: 'viridis' }, 256);
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let n = 0; n < 300; n++) {
+    const lab = rgbToLab([rnd() * 255, rnd() * 255, rnd() * 255]);
+    let best = 0;
+    let bestD = Infinity;
+    samples.forEach((s, i) => {
+      const d = CM.deltaE2000(lab, s.lab);
+      if (d < bestD) [bestD, best] = [d, i];
+    });
+    const got = labToT(lab, samples, 'de2000');
+    // Refinement between neighbours only lowers deltaE, so compare against it.
+    assert.ok(got.deltaE <= bestD + 1e-12);
+    assert.ok(Math.abs(got.t - samples[best].t) <= 1 / 255 + 1e-12);
+  }
+});

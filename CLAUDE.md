@@ -96,4 +96,4 @@ Verified with real runs on `example.pdf` page 5 (Fig 2f, 9 × 12): the grid and 
 5. No typed questions yet for tick-label reading or colorbar direction (would need OCR/vision evidence).
 6. The agent only handles heatmaps, not ROI or maps (map panels get a summary in `get_results` and no reviewer questions).
 7. The research plan in [docs/research.md](docs/research.md) (synthetic benchmark, VLM baselines, IVIS validation of the ROI tool, reviewer calibration curves) has not been started.
-8. Map tool: tested on synthetic PNG/JPEG fields, not yet on a real spectroscopy or fluorescence figure. A 600 × 400 map at bin 1 takes about 1.4 s with CIEDE2000 (each new color is matched against 256 samples); a ΔE76 prefilter was tried and dropped because it changed some matches.
+8. Map tool: tested on synthetic PNG/JPEG fields, not yet on a real spectroscopy or fluorescence figure. A 700 × 500 noisy map at bin 1 takes about 0.2 s: `labToT` seeds with the ΔE76 nearest sample and skips samples whose lightness gap alone rules them out (exact, unlike the dropped ΔE76 prefilter).

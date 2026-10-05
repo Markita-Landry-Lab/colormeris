@@ -208,31 +208,36 @@
   // status bar, so a point is read at p − 0.5. (sampleCell in core/grid.js
   // reads pixel i at i; with full-size bins that reaches half a pixel past
   // the plot area.)
-  const bufs = { r: [], g: [], b: [] };
+  // Reused typed buffers (one pass per channel, sorted in place), so reading a
+  // bin allocates nothing per pixel.
+  let binBuf = [new Float64Array(0), new Float64Array(0), new Float64Array(0)];
   function sampleBin(img, corners, u, v, du, dv, nu, nv) {
     if (nu === 1 && nv === 1) {
       const p = bilinear(corners, u, v);
       return readPixel(img, p.x - 0.5, p.y - 0.5);
     }
-    const { r, g, b } = bufs;
-    r.length = g.length = b.length = 0;
+    const n = nu * nv;
+    if (binBuf[0].length < n) binBuf = [new Float64Array(n), new Float64Array(n), new Float64Array(n)];
+    const [r, g, b] = binBuf;
+    let k = 0;
     for (let j = 0; j < nv; j++) {
       const vv = v + ((j + 0.5) / nv - 0.5) * dv;
-      for (let i = 0; i < nu; i++) {
+      for (let i = 0; i < nu; i++, k++) {
         const p = bilinear(corners, u + ((i + 0.5) / nu - 0.5) * du, vv);
-        const [pr, pg, pb] = readPixel(img, p.x - 0.5, p.y - 0.5);
-        r.push(pr);
-        g.push(pg);
-        b.push(pb);
+        const px = readPixel(img, p.x - 0.5, p.y - 0.5);
+        r[k] = px[0];
+        g[k] = px[1];
+        b[k] = px[2];
       }
     }
-    return [median(r), median(g), median(b)];
+    return [median(r, n), median(g, n), median(b, n)];
   }
 
-  function median(values) {
-    values.sort((a, b) => a - b);
-    const m = values.length >> 1;
-    return values.length % 2 ? values[m] : (values[m - 1] + values[m]) / 2;
+  function median(buf, n) {
+    const values = buf.subarray(0, n);
+    values.sort();
+    const m = n >> 1;
+    return n % 2 ? values[m] : (values[m - 1] + values[m]) / 2;
   }
 
   // Axis coordinates of a page point: {x, y}, with null for an uncalibrated
